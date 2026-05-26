@@ -1,0 +1,9 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.19
+pydantic==2.10.4
+pydantic-settings==2.7.0
+docling==2.15.1
+pymupdf4llm==0.0.17
+google-genai==2.6.0
+google-cloud-documentai==3.0.0

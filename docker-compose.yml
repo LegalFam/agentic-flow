@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-n8n}
+      POSTGRES_USER: ${POSTGRES_USER:-n8n}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n} -d ${POSTGRES_DB:-n8n}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      processing-api:
+        condition: service_started
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-n8n}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-n8n}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-change-me-32-chars-minimum-0000}
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE:-true}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-change-me}
+      GENERIC_TIMEZONE: America/Lima
+      TZ: America/Lima
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  processing-api:
+    build:
+      context: ./api
+    restart: unless-stopped
+    ports:
+      - "${PROCESSING_API_PORT:-8000}:8000"
+    environment:
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-75}
+      MIN_TEXT_CHARS_FOR_NATIVE_PDF: ${MIN_TEXT_CHARS_FOR_NATIVE_PDF:-800}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_FILE_SEARCH_STORE: ${GEMINI_FILE_SEARCH_STORE:-}
+      ENABLE_GEMINI_FILE_SEARCH_UPLOAD: ${ENABLE_GEMINI_FILE_SEARCH_UPLOAD:-false}
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
+      DOCUMENT_AI_LOCATION: ${DOCUMENT_AI_LOCATION:-us}
+      DOCUMENT_AI_PROCESSOR_ID: ${DOCUMENT_AI_PROCESSOR_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/run/secrets/google_application_credentials.json}
+    volumes:
+      - ./work:/work
+      - type: bind
+        source: ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-./secrets/google_application_credentials.json}
+        target: /run/secrets/google_application_credentials.json
+        read_only: true
+
+volumes:
+  postgres_data:
+  n8n_data:
