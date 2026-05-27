@@ -390,8 +390,8 @@
             {
               "fieldLabel": "categoriasJSON",
               "fieldType": "textarea",
-              "placeholder": "[{\"categoria\":\"Generales\",\"subcategoria\":\"Otros\"}]",
-              "defaultValue": "={{ JSON.stringify($json.metadata.categorias || [{ categoria: 'Generales', subcategoria: 'Otros' }], null, 2) }}",
+              "placeholder": "[{\"categoria\":\"Generales\",\"subcategorias\":[\"Otros\"]}]",
+              "defaultValue": "={{ JSON.stringify($json.metadata.categorias || [{ categoria: 'Generales', subcategorias: ['Otros'] }], null, 2) }}",
               "requiredField": true
             },
             {

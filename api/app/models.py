@@ -2,19 +2,132 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.categories import validate_category_pair
+from app.categories import canonicalize_category_pair, validate_category_pair
+
+
+class CategoryGroup(BaseModel):
+    categoria: str
+    subcategorias: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_pair_shape(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if "subcategorias" in data:
+            return data
+
+        subcategory = data.get("subcategoria")
+        subcategories = [] if subcategory is None else [subcategory]
+        return {
+            **data,
+            "subcategorias": subcategories,
+        }
+
+    @field_validator("subcategorias", mode="before")
+    @classmethod
+    def normalize_subcategories_input(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value] if value.strip() else []
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def canonicalize_group(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        category = data.get("categoria")
+        subcategories = data.get("subcategorias")
+        if not isinstance(category, str) or not isinstance(subcategories, list):
+            return data
+
+        canonical_subcategories: list[str] = []
+        canonical_category = category
+        for subcategory in subcategories:
+            if not isinstance(subcategory, str) or not subcategory.strip():
+                continue
+            canonical_category, canonical_subcategory = canonicalize_category_pair(category, subcategory)
+            if canonical_subcategory is not None and canonical_subcategory not in canonical_subcategories:
+                canonical_subcategories.append(canonical_subcategory)
+        if not canonical_subcategories:
+            canonical_category, _ = canonicalize_category_pair(category, None)
+
+        return {
+            **data,
+            "categoria": canonical_category,
+            "subcategorias": canonical_subcategories,
+        }
+
+    @model_validator(mode="after")
+    def validate_group(self) -> "CategoryGroup":
+        if not self.subcategorias:
+            if not validate_category_pair(self.categoria, None):
+                raise ValueError("categoria/subcategorias fuera del catalogo permitido")
+            return self
+
+        for subcategory in self.subcategorias:
+            if not validate_category_pair(self.categoria, subcategory):
+                raise ValueError("categoria/subcategorias fuera del catalogo permitido")
+        return self
+
+
+def _group_category_entries(entries: Any) -> Any:
+    if not isinstance(entries, list):
+        return entries
+
+    grouped: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            return entries
+
+        category = entry.get("categoria")
+        if not isinstance(category, str):
+            return entries
+
+        if "subcategorias" in entry:
+            raw_subcategories = entry.get("subcategorias")
+            if raw_subcategories is None:
+                subcategories: list[Any] = []
+            elif isinstance(raw_subcategories, list):
+                subcategories = raw_subcategories
+            else:
+                return entries
+        else:
+            raw_subcategory = entry.get("subcategoria")
+            subcategories = [] if raw_subcategory is None else [raw_subcategory]
+
+        canonical_category, _ = canonicalize_category_pair(category, None)
+        current = grouped.setdefault(canonical_category, {"categoria": canonical_category, "subcategorias": []})
+        for subcategory in subcategories:
+            if not isinstance(subcategory, str) or not subcategory.strip():
+                continue
+            _, canonical_subcategory = canonicalize_category_pair(category, subcategory)
+            if canonical_subcategory is not None and canonical_subcategory not in current["subcategorias"]:
+                current["subcategorias"].append(canonical_subcategory)
+
+    return list(grouped.values())
 
 
 class CategoryAssignment(BaseModel):
     categoria: str
     subcategoria: str | None = None
 
-    @field_validator("subcategoria", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def empty_subcategory_to_none(cls, value: Any) -> Any:
-        if isinstance(value, str) and not value.strip():
-            return None
-        return value
+    def from_group_shape(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        subcategories = data.get("subcategorias")
+        if isinstance(subcategories, list):
+            subcategory = subcategories[0] if subcategories else None
+            return {
+                **data,
+                "subcategoria": subcategory,
+            }
+        return data
 
     @model_validator(mode="after")
     def validate_pair(self) -> "CategoryAssignment":
@@ -59,9 +172,19 @@ class LegalMetadata(BaseModel):
     pleno: str | None = None
     protocolo: str | None = None
     fuente: str | None = None
-    categorias: list[CategoryAssignment] = Field(min_length=1)
+    categorias: list[CategoryGroup] = Field(min_length=1)
     confidence: float = Field(ge=0, le=1)
     observaciones: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def group_duplicate_categories(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or "categorias" not in data:
+            return data
+        return {
+            **data,
+            "categorias": _group_category_entries(data["categorias"]),
+        }
 
     @field_validator("titulo", "identificador", "entidad", "fecha", "materia", "expediente", "articulo", "norma", "pleno", "protocolo", "fuente", "observaciones", mode="before")
     @classmethod

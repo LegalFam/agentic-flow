@@ -44,9 +44,11 @@ Devuelve solamente JSON valido. No incluyas markdown ni explicaciones.
 Reglas:
 - No inventes datos. Si un campo no tiene evidencia clara, usa null.
 - Puede haber una o varias categorias por documento.
+- Cada categoria debe aparecer una sola vez.
+- Si una categoria aplica a varias subcategorias, agrupalas en el arreglo subcategorias de esa categoria.
 - Cada categoria/subcategoria debe salir exactamente del catalogo.
-- Si una categoria no tiene subcategoria, usa null en subcategoria.
-- Devuelve al menos una categoria. Usa Generales > Otros si no hay una clasificacion juridica clara.
+- Si una categoria no tiene subcategoria, usa [] en subcategorias.
+- Devuelve al menos una categoria. Usa Generales con subcategorias ["Otros"] si no hay una clasificacion juridica clara.
 - Mantener fechas como aparecen en el documento o en formato ISO si es inequivoco.
 - confidence debe ser un numero entre 0 y 1.
 
@@ -69,7 +71,7 @@ Schema exacto:
   "categorias": [
     {{
       "categoria": string,
-      "subcategoria": string|null
+      "subcategorias": string[]
     }}
   ],
   "confidence": number,
@@ -247,8 +249,8 @@ def _build_custom_metadata(types, metadata: LegalMetadata) -> list[Any]:
                 types.CustomMetadata(
                     key="categorias_text",
                     string_value="; ".join(
-                        f"{item['categoria']} > {item['subcategoria']}"
-                        if item.get("subcategoria")
+                        f"{item['categoria']} > {', '.join(item['subcategorias'])}"
+                        if item.get("subcategorias")
                         else item["categoria"]
                         for item in value
                     ),
