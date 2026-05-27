@@ -33,6 +33,14 @@ class ConversionResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ConversionJobResponse(BaseModel):
+    job_id: str
+    status: str
+    filename: str
+    result: ConversionResponse | None = None
+    error: str | None = None
+
+
 class MetadataRequest(BaseModel):
     filename: str
     markdown: str

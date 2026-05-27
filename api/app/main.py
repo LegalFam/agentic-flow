@@ -2,8 +2,10 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from app.config import settings
 from app.converter import convert_pdf_to_markdown
+from app.conversion_jobs import get_conversion_job, start_conversion_job
 from app.gemini_client import extract_metadata_with_gemini, resolve_file_search_store, upload_to_file_search_store
 from app.models import (
+    ConversionJobResponse,
     ConversionResponse,
     FileSearchUploadRequest,
     FileSearchUploadResponse,
@@ -35,6 +37,27 @@ async def convert(file: UploadFile = File(...)) -> ConversionResponse:
         return ConversionResponse.model_validate(convert_pdf_to_markdown(file.filename, content))
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/convert-jobs", response_model=ConversionJobResponse)
+async def start_convert_job(file: UploadFile = File(...)) -> ConversionJobResponse:
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos PDF")
+
+    content = await file.read()
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"Archivo supera {settings.max_upload_mb} MB")
+
+    return ConversionJobResponse.model_validate(start_conversion_job(file.filename, content))
+
+
+@app.get("/convert-jobs/{job_id}", response_model=ConversionJobResponse)
+def convert_job_status(job_id: str) -> ConversionJobResponse:
+    job = get_conversion_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Conversion job no existe")
+    return ConversionJobResponse.model_validate(job)
 
 
 @app.post("/extract-metadata", response_model=MetadataResponse)

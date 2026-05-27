@@ -3,12 +3,12 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "23e3c0b6-2041-4368-9ae9-228696a361f6",
+      "id": "5ab30137-9dd9-48a5-b912-bf5730d28a25",
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -1840,
+        -1920,
         240
       ]
     },
@@ -56,12 +56,12 @@
         },
         "options": {}
       },
-      "id": "824f6bbe-abf9-473b-bffd-ad1132981b25",
+      "id": "ff10b516-10d3-4f74-8016-f170706dcac0",
       "name": "Set Drive Folder IDs",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -1600,
+        -1744,
         240
       ]
     },
@@ -80,20 +80,33 @@
         },
         "options": {}
       },
-      "id": "30e67c51-bb7a-4cf5-b57c-2b46ae676f99",
+      "id": "643c1c59-2b44-4a07-99d8-b5772f4e3046",
       "name": "Google Drive - List PDFs",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -1376,
+        -1552,
         240
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "DwEzjuHxQKS8drXl",
+          "id": "euWzPM0tLCL2D9c0",
           "name": "Google Drive account"
         }
       }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "dbd530d4-2f3d-4947-8a8d-07102ed324a1",
+      "name": "Loop Over PDF Files",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1344,
+        240
+      ]
     },
     {
       "parameters": {
@@ -107,17 +120,17 @@
           "binaryPropertyName": "pdf"
         }
       },
-      "id": "498d46ff-bace-4dec-89f5-a235f3cdc763",
+      "id": "5eb5dd77-6491-4dc8-87fb-52476ddaefdd",
       "name": "Google Drive - Download PDF",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -1168,
+        -1136,
         240
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "DwEzjuHxQKS8drXl",
+          "id": "euWzPM0tLCL2D9c0",
           "name": "Google Drive account"
         }
       }
@@ -125,7 +138,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $('Set Drive Folder IDs').item.json.processingApiBaseUrl + '/convert' }}",
+        "url": "={{ $('Set Drive Folder IDs').item.json.processingApiBaseUrl + '/convert-jobs' }}",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
@@ -137,12 +150,10 @@
             }
           ]
         },
-        "options": {
-          "timeout": 300000
-        }
+        "options": {}
       },
-      "id": "8d497117-b4be-41e1-8cbb-977c829cf19f",
-      "name": "API - Convert PDF to Markdown",
+      "id": "44dc27f7-2009-472c-9d9c-0309247b49da",
+      "name": "API - Start PDF Conversion Job",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -153,22 +164,128 @@
     },
     {
       "parameters": {
+        "amount": 30
+      },
+      "id": "dedd2c47-8a81-46b5-8ce7-93c8767e1860",
+      "name": "Wait - Conversion Poll Interval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -704,
+        144
+      ],
+      "webhookId": "conversion-poll-interval"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Set Drive Folder IDs').item.json.processingApiBaseUrl + '/convert-jobs/' + $json.job_id }}",
+        "options": {}
+      },
+      "id": "2e3bac53-2fc9-470c-9b3a-5b39dd54a2e7",
+      "name": "API - Get PDF Conversion Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -496,
+        144
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "conversion-succeeded",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "succeeded",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e9ccf033-c677-43f5-98c7-1042cbdc145d",
+      "name": "IF - Conversion Succeeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -272,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "conversion-failed",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d1e376a7-8354-4c86-af89-50021ed208ae",
+      "name": "IF - Conversion Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -64,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $json;\nif (!job.result) {\n  throw new Error(`Conversion job ${job.job_id} completed without a result`);\n}\nreturn [{ json: job.result }];"
+      },
+      "id": "4795ad90-6b6c-42a5-9f15-9bccd5885199",
+      "name": "API - Convert PDF to Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        112
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "={{ $('Set Drive Folder IDs').item.json.processingApiBaseUrl + '/extract-metadata' }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { filename: $json.filename, markdown: $json.markdown, fuente: $('Google Drive - Download PDF').item.json.webViewLink || $('Google Drive - Download PDF').item.json.name } }}",
-        "options": {
-          "timeout": 300000
-        }
+        "options": {}
       },
-      "id": "b8a65d1e-7cdd-4626-9fde-37ccc6c94b2b",
+      "id": "fa6c8cc9-e824-4a1d-a1d2-8906ee774ad9",
       "name": "API - Extract Metadata",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -704,
-        144
+        336,
+        112
       ],
       "onError": "continueErrorOutput"
     },
@@ -176,26 +293,26 @@
       "parameters": {
         "jsCode": "const converted = $('API - Convert PDF to Markdown').item.json;\nconst extracted = $json;\nconst metadata = extracted.metadata;\nconst baseName = converted.document_id;\nconst mdName = `${baseName}.md`;\nconst jsonName = `${baseName}.metadata.json`;\nreturn [{\n  json: {\n    baseName,\n    mdName,\n    jsonName,\n    reviewName: `${baseName}.review.json`,\n    markdown: converted.markdown,\n    metadata,\n    review: {\n      filename: converted.filename,\n      document_id: converted.document_id,\n      pages: converted.pages,\n      ocr_used: converted.ocr_used,\n      warnings: converted.warnings,\n      metadata\n    }\n  }\n}];"
       },
-      "id": "e80d994c-5aae-4c96-8a56-bb07ef7b23c1",
+      "id": "ff6381fe-1b57-45c8-b3ff-7267c34326bf",
       "name": "Prepare Output Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -464,
-        144
+        544,
+        96
       ]
     },
     {
       "parameters": {
         "jsCode": "const item = $input.item;\nitem.binary = item.binary || {};\nitem.binary.markdown = await this.helpers.prepareBinaryData(Buffer.from(item.json.markdown, 'utf8'), item.json.mdName, 'text/markdown');\nitem.binary.metadata = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(item.json.metadata, null, 2), 'utf8'), item.json.jsonName, 'application/json');\nitem.binary.review = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(item.json.review, null, 2), 'utf8'), item.json.reviewName, 'application/json');\nreturn [item];"
       },
-      "id": "6cbdadbc-7c51-4fe7-8ac4-40e0193fbbf2",
+      "id": "a63d978e-eec5-46fe-8169-32798a5cf803",
       "name": "Create Binary Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -240,
-        144
+        736,
+        96
       ]
     },
     {
@@ -214,17 +331,17 @@
         },
         "options": {}
       },
-      "id": "e2cb4416-0560-4e0b-b742-ec9d48f3bc59",
+      "id": "9fcdcdb2-10f5-4c96-a253-0fa95981f771",
       "name": "Google Drive - Upload Markdown",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        0,
-        0
+        1040,
+        -80
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "DwEzjuHxQKS8drXl",
+          "id": "euWzPM0tLCL2D9c0",
           "name": "Google Drive account"
         }
       }
@@ -245,17 +362,17 @@
         },
         "options": {}
       },
-      "id": "ea5e3937-2059-4a1b-9f80-abd21c458c19",
+      "id": "5df34d60-6562-41e3-811a-4a60e9782193",
       "name": "Google Drive - Upload Metadata",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        0,
-        144
+        1056,
+        96
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "DwEzjuHxQKS8drXl",
+          "id": "euWzPM0tLCL2D9c0",
           "name": "Google Drive account"
         }
       }
@@ -276,17 +393,17 @@
         },
         "options": {}
       },
-      "id": "6cac1ead-73e6-45a7-9ca9-be9d2e9fe590",
+      "id": "14f4e9a0-be14-45b2-b27e-d12a25d572e8",
       "name": "Google Drive - Upload Review",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        0,
+        1056,
         288
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "DwEzjuHxQKS8drXl",
+          "id": "euWzPM0tLCL2D9c0",
           "name": "Google Drive account"
         }
       }
@@ -295,13 +412,13 @@
       "parameters": {
         "jsCode": "const err = $json;\nconst source = $('Google Drive - Download PDF').item?.json || {};\nconst filename = source.name || 'unknown.pdf';\nconst safeName = filename.replace(/[^a-zA-Z0-9_.-]+/g, '-');\nconst record = { filename, error: err, happened_at: new Date().toISOString() };\nconst item = { json: { errorName: `${safeName}.error.json`, record }, binary: {} };\nitem.binary.error = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(record, null, 2), 'utf8'), item.json.errorName, 'application/json');\nreturn [item];"
       },
-      "id": "a0fb2483-e0e0-4ce0-a785-19a738ae3544",
+      "id": "df1d82d0-a00f-4f71-92f2-edd48cb179f4",
       "name": "Prepare Error Record",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -704,
-        448
+        288,
+        528
       ]
     },
     {
@@ -320,17 +437,17 @@
         },
         "options": {}
       },
-      "id": "69d2b49a-0a25-4211-8c7e-d254105e5f0a",
+      "id": "e201ff2a-1c93-46d5-a9f8-2401730753d0",
       "name": "Google Drive - Upload Error",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -464,
-        448
+        480,
+        528
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "DwEzjuHxQKS8drXl",
+          "id": "euWzPM0tLCL2D9c0",
           "name": "Google Drive account"
         }
       }
@@ -364,6 +481,18 @@
       "main": [
         [
           {
+            "node": "Loop Over PDF Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over PDF Files": {
+      "main": [
+        [],
+        [
+          {
             "node": "Google Drive - Download PDF",
             "type": "main",
             "index": 0
@@ -375,7 +504,90 @@
       "main": [
         [
           {
+            "node": "API - Start PDF Conversion Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Start PDF Conversion Job": {
+      "main": [
+        [
+          {
+            "node": "Wait - Conversion Poll Interval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Error Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait - Conversion Poll Interval": {
+      "main": [
+        [
+          {
+            "node": "API - Get PDF Conversion Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Get PDF Conversion Job": {
+      "main": [
+        [
+          {
+            "node": "IF - Conversion Succeeded",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Error Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Conversion Succeeded": {
+      "main": [
+        [
+          {
             "node": "API - Convert PDF to Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF - Conversion Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Conversion Failed": {
+      "main": [
+        [
+          {
+            "node": "Prepare Error Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait - Conversion Poll Interval",
             "type": "main",
             "index": 0
           }
@@ -387,13 +599,6 @@
         [
           {
             "node": "API - Extract Metadata",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Prepare Error Record",
             "type": "main",
             "index": 0
           }
@@ -460,6 +665,33 @@
           }
         ]
       ]
+    },
+    "Google Drive - Upload Review": {
+      "main": [
+        [
+          {
+            "node": "Loop Over PDF Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload Error": {
+      "main": [
+        [
+          {
+            "node": "Loop Over PDF Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload Markdown": {
+      "main": [
+        []
+      ]
     }
   },
   "active": false,
@@ -467,11 +699,11 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "afa79b59-d022-48ee-bdff-3203ffc645a7",
+  "versionId": "d83e3950-d9c6-4012-b54d-cebce624c1c4",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "c3ebc15b418b5953914a1d0c601b9d381fc2349cb726c8eb5f2b4361d15773f2"
+    "instanceId": "b4fe1b7f55c924806604a2431485ada3cf45cd4c8e6a1134735f55424b9bdf63"
   },
-  "id": "Bpwfykasw3KF9rxv",
+  "id": "coN8C6cTPnDMZYeq",
   "tags": []
 }
