@@ -287,6 +287,9 @@
         336,
         112
       ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
       "onError": "continueErrorOutput"
     },
     {
@@ -699,7 +702,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "d83e3950-d9c6-4012-b54d-cebce624c1c4",
+  "versionId": "568ed172-6f8e-4ece-9b55-5f11371beeaf",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "b4fe1b7f55c924806604a2431485ada3cf45cd4c8e6a1134735f55424b9bdf63"

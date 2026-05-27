@@ -1,0 +1,315 @@
+{
+  "name": "Move Reviewed PDFs To Proccessed",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "8d88dbdf-99a0-4825-91f2-fb5fa48ba581",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "input-pdf-folder",
+              "name": "inputPdfFolderId",
+              "value": "1ONxqmPfeMPqi80YkuQNYH4F-GwZFAOJy",
+              "type": "string"
+            },
+            {
+              "id": "review-folder",
+              "name": "reviewFolderId",
+              "value": "1tdFYW4vT3ymEt4AzmpuKxyfAZJZXXYAi",
+              "type": "string"
+            },
+            {
+              "id": "proccessed-pdf-folder",
+              "name": "proccessedPdfFolderId",
+              "value": "REPLACE_WITH_PROCCESSED_PDF_FOLDER_ID",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eeff9584-e7c1-41ce-a187-cf332f0e0eb4",
+      "name": "Edit Folder Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -992,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $json.reviewFolderId }}",
+            "mode": "id",
+            "cachedResultName": "output/review"
+          }
+        },
+        "options": {}
+      },
+      "id": "f2dc15db-cf2c-4f96-a2f7-5b8144fd2a0a",
+      "name": "Google Drive - List Review Files",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -784,
+        160
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all()\n  .filter((item) => String(item.json.name || '').toLowerCase().endsWith('.review.json'))\n  .map((item) => ({\n    json: {\n      reviewFileId: item.json.id,\n      reviewName: item.json.name,\n    },\n  }));"
+      },
+      "id": "1baae8d7-f77e-450a-93eb-40220129a0b5",
+      "name": "Keep Review JSON Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.reviewFileId }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "reviewFile"
+        }
+      },
+      "id": "60306321-5be9-4520-815a-197595f658b1",
+      "name": "Google Drive - Download Review JSON",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -336,
+        160
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const validFilenames = new Set();\nconst invalidReviews = [];\nconst items = $input.all();\n\nfor (let i = 0; i < items.length; i++) {\n  const reviewName = items[i].json.reviewName;\n\n  try {\n    const buffer = await this.helpers.getBinaryDataBuffer(i, 'reviewFile');\n    const review = JSON.parse(buffer.toString('utf8'));\n    const filename = String(review.filename || '').trim();\n\n    if (filename) {\n      validFilenames.add(filename);\n    } else {\n      invalidReviews.push({ reviewName, error: 'Missing filename field' });\n    }\n  } catch (error) {\n    invalidReviews.push({ reviewName, error: error.message });\n  }\n}\n\nreturn [{\n  json: {\n    validFilenames: [...validFilenames],\n    reviewCount: items.length,\n    invalidReviews,\n    inputPdfFolderId: $('Edit Folder Config').item.json.inputPdfFolderId,\n    proccessedPdfFolderId: $('Edit Folder Config').item.json.proccessedPdfFolderId,\n  },\n}];"
+      },
+      "id": "283a0a2e-67b9-49f7-84b6-010ae073e9bd",
+      "name": "Index Valid Review Filenames",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $json.inputPdfFolderId }}",
+            "mode": "id",
+            "cachedResultName": "input/pdf"
+          }
+        },
+        "options": {}
+      },
+      "id": "cf543cc6-345f-476c-bbbd-135d4daf257d",
+      "name": "Google Drive - List Input PDFs",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        112,
+        160
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const indexed = $('Index Valid Review Filenames').first().json;\nconst validFilenames = new Set(indexed.validFilenames || []);\n\nreturn $input.all()\n  .filter((item) => {\n    const name = String(item.json.name || '');\n    return name.toLowerCase().endsWith('.pdf') && validFilenames.has(name);\n  })\n  .map((item) => ({\n    json: {\n      pdfFileId: item.json.id,\n      pdfName: item.json.name,\n      proccessedPdfFolderId: indexed.proccessedPdfFolderId,\n    },\n  }));"
+      },
+      "id": "0966eaaf-ad52-44cb-b3be-0fe7df0df31b",
+      "name": "Select PDFs With Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.pdfFileId }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.proccessedPdfFolderId }}",
+          "mode": "id",
+          "cachedResultName": "proccessed/pdf"
+        }
+      },
+      "id": "9c2f592d-b556-4c9e-9f1c-deb8b105f577",
+      "name": "Google Drive - Move PDF To Proccessed",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        560,
+        160
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Edit Folder Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Folder Config": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - List Review Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - List Review Files": {
+      "main": [
+        [
+          {
+            "node": "Keep Review JSON Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Review JSON Files": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Download Review JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Download Review JSON": {
+      "main": [
+        [
+          {
+            "node": "Index Valid Review Filenames",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Index Valid Review Filenames": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - List Input PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - List Input PDFs": {
+      "main": [
+        [
+          {
+            "node": "Select PDFs With Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select PDFs With Review": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Move PDF To Proccessed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2a010ecc-5ca0-4d44-a79f-ddba4199dc0e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b4fe1b7f55c924806604a2431485ada3cf45cd4c8e6a1134735f55424b9bdf63"
+  },
+  "id": "xG62x2hHpd3aAN1U",
+  "tags": []
+}

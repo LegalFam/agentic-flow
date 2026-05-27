@@ -8,6 +8,7 @@ Implementacion base para procesar PDFs legales desde Google Drive, convertirlos 
 - `api/`: microservicio FastAPI para conversion, OCR, metadata y subida opcional.
 - `n8n/workflows/legal_pdf_to_gemini_file_search.json`: workflow importable para convertir PDF a Markdown + metadata.
 - `n8n/workflows/upload_markdown_metadata_to_gemini_file_search.json`: workflow manual que resuelve/crea el File Search Store, empareja Markdown + metadata, pausa en un formulario de revision y continua con la subida o el log de omitido.
+- `n8n/workflows/Move Reviewed PDFs To Proccessed.json`: workflow manual simple que mueve PDFs de `input/pdf` a `proccessed/pdf` cuando existe un `.review.json` cuyo campo `filename` coincide exactamente con el nombre del PDF.
 - `.env.example`: variables requeridas.
 
 ## Puesta en marcha
@@ -32,6 +33,7 @@ docker compose up --build
 - `output/metadata`: archivos `.metadata.json`.
 - `output/review`: paquete de revision manual del workflow de conversion.
 - `output/errors`: errores por documento.
+- `proccessed/pdf`: PDFs ya revisados y movidos fuera de `input/pdf`.
 
 ## API local
 
