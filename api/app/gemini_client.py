@@ -1,6 +1,7 @@
 import json
 import re
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,36 @@ from app.models import LegalMetadata
 
 
 STORE_REGISTRY_PATH = Path("/work/file_search_stores.json")
+MAX_CUSTOM_METADATA_STRING_LENGTH = 256
+
+CATEGORY_METADATA_CODES = {
+    "Vinculos Conyugales y Patrimoniales": "vcp",
+    "Relaciones Paterno-Filiales y Menores": "rpfm",
+    "Proteccion a Personas Vulnerables": "ppv",
+    "Sucesiones y Herencia": "sh",
+    "Procesos Legales y Resolucion Alternativa": "plra",
+    "Generales": "gen",
+}
+
+SUBCATEGORY_METADATA_CODES = {
+    "Divorcio y Separacion": "divorcio_separacion",
+    "Union de Hecho": "union_hecho",
+    "Sociedad de Gananciales": "sociedad_gananciales",
+    "Filiacion e Identidad": "filiacion_identidad",
+    "Patria Potestad": "patria_potestad",
+    "Tenencia y Custodia": "tenencia_custodia",
+    "Pension de Alimentos": "pension_alimentos",
+    "Adopcion": "adopcion",
+    "Violencia Familiar": "violencia_familiar",
+    "Centro Emergencia Mujer": "centro_emergencia_mujer",
+    "Proteccion de Ninos y Adolescentes": "proteccion_ninos_adolescentes",
+    "Tutela y Curatela": "tutela_curatela",
+    "Capacidad Juridica": "capacidad_juridica",
+    "Conciliacion": "conciliacion",
+    "Procedimiento Civil": "procedimiento_civil",
+    "Derecho de Familia": "derecho_familia",
+    "Otros": "otros",
+}
 
 
 def extract_metadata_with_gemini(filename: str, markdown: str, fuente: str | None) -> LegalMetadata:
@@ -142,15 +173,23 @@ def upload_to_file_search_store(
     with tempfile.TemporaryDirectory() as temp_dir:
         path = Path(temp_dir) / filename
         path.write_text(markdown, encoding="utf-8")
-        operation = client.file_search_stores.upload_to_file_search_store(
-            file_search_store_name=store_name,
-            file=path,
-            config=types.UploadToFileSearchStoreConfig(
-                display_name=filename,
-                mime_type="text/markdown",
-                custom_metadata=_build_custom_metadata(types, metadata),
-            ),
-        )
+        custom_metadata = _build_custom_metadata(types, metadata)
+        _validate_custom_metadata_lengths(custom_metadata)
+        try:
+            operation = client.file_search_stores.upload_to_file_search_store(
+                file_search_store_name=store_name,
+                file=path,
+                config=types.UploadToFileSearchStoreConfig(
+                    display_name=filename,
+                    mime_type="text/markdown",
+                    custom_metadata=custom_metadata,
+                ),
+            )
+        except Exception as exc:
+            debug_metadata = _custom_metadata_debug(custom_metadata)
+            raise RuntimeError(
+                f"{exc}; custom_metadata_sent={json.dumps(debug_metadata, ensure_ascii=False)}"
+            ) from exc
 
     final_operation = _wait_for_operation(client, operation, wait_until_done, max_wait_seconds)
 
@@ -239,26 +278,128 @@ def _build_custom_metadata(types, metadata: LegalMetadata) -> list[Any]:
         if value is None or value == "":
             continue
         if key == "categorias":
-            custom_metadata.append(
-                types.CustomMetadata(
-                    key="categorias_json",
-                    string_value=json.dumps(value, ensure_ascii=False),
-                )
-            )
-            custom_metadata.append(
-                types.CustomMetadata(
-                    key="categorias_text",
-                    string_value="; ".join(
-                        f"{item['categoria']} > {', '.join(item['subcategorias'])}"
-                        if item.get("subcategorias")
-                        else item["categoria"]
-                        for item in value
-                    ),
-                )
-            )
+            custom_metadata.extend(_build_category_custom_metadata(types, value))
             continue
-        custom_metadata.append(types.CustomMetadata(key=key, string_value=str(value)))
+        metadata_key = "observaciones_resumen" if key == "observaciones" else key
+        custom_metadata.append(
+            types.CustomMetadata(
+                key=metadata_key,
+                string_value=_fit_custom_metadata_value(str(value)),
+            )
+        )
     return custom_metadata
+
+
+def _validate_custom_metadata_lengths(custom_metadata: list[Any]) -> None:
+    oversized = [
+        item
+        for item in _custom_metadata_debug(custom_metadata)
+        if item["length"] > MAX_CUSTOM_METADATA_STRING_LENGTH
+    ]
+    if oversized:
+        raise RuntimeError(
+            "custom_metadata contiene string_value mayor a "
+            f"{MAX_CUSTOM_METADATA_STRING_LENGTH} caracteres: "
+            f"{json.dumps(oversized, ensure_ascii=False)}"
+        )
+
+
+def _custom_metadata_debug(custom_metadata: list[Any]) -> list[dict[str, Any]]:
+    debug: list[dict[str, Any]] = []
+    for index, item in enumerate(custom_metadata):
+        key = getattr(item, "key", None)
+        value = getattr(item, "string_value", None)
+        if isinstance(item, dict):
+            key = item.get("key")
+            value = item.get("string_value")
+        value = "" if value is None else str(value)
+        debug.append(
+            {
+                "index": index,
+                "key": key,
+                "length": len(value),
+                "value": value,
+            }
+        )
+    return debug
+
+
+def _build_category_custom_metadata(types, categories: list[dict[str, Any]]) -> list[Any]:
+    entries = [_compact_category_entry(category) for category in categories]
+    entries = [entry for entry in entries if entry]
+    if not entries:
+        return []
+
+    custom_metadata = [
+        types.CustomMetadata(
+            key="categorias_count",
+            string_value=str(len(entries)),
+        )
+    ]
+    chunks = _split_metadata_entries(entries)
+    if len(chunks) == 1:
+        custom_metadata.append(types.CustomMetadata(key="categorias_compact", string_value=chunks[0]))
+        return custom_metadata
+
+    for index, chunk in enumerate(chunks, start=1):
+        custom_metadata.append(types.CustomMetadata(key=f"categorias_compact_{index}", string_value=chunk))
+    return custom_metadata
+
+
+def _compact_category_entry(category: dict[str, Any]) -> str:
+    category_name = str(category.get("categoria") or "").strip()
+    if not category_name:
+        return ""
+
+    category_code = CATEGORY_METADATA_CODES.get(category_name, _metadata_code(category_name))
+    subcategories = category.get("subcategorias") or []
+    subcategory_codes = [
+        SUBCATEGORY_METADATA_CODES.get(str(subcategory), _metadata_code(str(subcategory)))
+        for subcategory in subcategories
+        if str(subcategory).strip()
+    ]
+    if not subcategory_codes:
+        return category_code
+    return f"{category_code}:{','.join(subcategory_codes)}"
+
+
+def _split_metadata_entries(entries: list[str]) -> list[str]:
+    chunks: list[str] = []
+    current = ""
+
+    for entry in entries:
+        entry = _fit_custom_metadata_value(entry)
+        candidate = entry if not current else f"{current}|{entry}"
+        if len(candidate) <= MAX_CUSTOM_METADATA_STRING_LENGTH:
+            current = candidate
+            continue
+
+        if current:
+            chunks.append(current)
+        current = entry
+
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _fit_custom_metadata_value(value: str) -> str:
+    compact = " ".join(value.split())
+    if len(compact) <= MAX_CUSTOM_METADATA_STRING_LENGTH:
+        return compact
+
+    sentence_end = compact.find(". ")
+    if 0 < sentence_end + 1 <= MAX_CUSTOM_METADATA_STRING_LENGTH:
+        return compact[: sentence_end + 1]
+
+    return compact[: MAX_CUSTOM_METADATA_STRING_LENGTH - 3].rstrip() + "..."
+
+
+def _metadata_code(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    without_accents = "".join(char for char in normalized if not unicodedata.combining(char))
+    code = re.sub(r"[^a-z0-9]+", "_", without_accents.casefold()).strip("_")
+    return code or "unknown"
 
 
 def _wait_for_operation(client, operation, wait_until_done: bool, max_wait_seconds: int):
