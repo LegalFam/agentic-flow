@@ -3,13 +3,13 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "9de0c708-4d6e-4090-92f9-a57727b27ea8",
+      "id": "74f86c60-9fe6-40a9-8a01-894bbfc56be6",
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -10800,
-        -304
+        -19104,
+        -928
       ]
     },
     {
@@ -43,13 +43,13 @@
             {
               "id": "processed-markdown-folder",
               "name": "processedMarkdownFolderId",
-              "value": "REPLACE_WITH_PROCESSED_MARKDOWN_FOLDER_ID",
+              "value": "1jzuqeiGSqZJcPvs8Rs3xguSadOX4iiRh",
               "type": "string"
             },
             {
               "id": "processed-metadata-folder",
               "name": "processedMetadataFolderId",
-              "value": "REPLACE_WITH_PROCESSED_METADATA_FOLDER_ID",
+              "value": "1uznXrc5injBILvd1peK8dHGbJpWcZkij",
               "type": "string"
             },
             {
@@ -62,13 +62,13 @@
         },
         "options": {}
       },
-      "id": "6c280548-8aff-436d-86ca-383b0c36416c",
+      "id": "34a64fd2-bef0-4742-ab1b-58afd5e1ab1e",
       "name": "Edit Upload Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -10576,
-        -304
+        -18880,
+        -928
       ]
     },
     {
@@ -80,13 +80,13 @@
         "jsonBody": "={{ { display_name: $json.fileSearchStoreDisplayName, create_if_missing: $json.createStoreIfMissing } }}",
         "options": {}
       },
-      "id": "47053222-d769-4fc8-a3a9-f9c1052852c4",
+      "id": "b3d9b4c3-55a6-4b97-9591-faeed5af1b8d",
       "name": "API - Resolve File Search Store",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -10352,
-        -304
+        -18656,
+        -928
       ],
       "retryOnFail": false
     },
@@ -152,13 +152,13 @@
         },
         "options": {}
       },
-      "id": "b0e1af87-af25-4ea3-ae90-b8d1c75cbab7",
+      "id": "0d557099-467a-46f5-a704-f10d01cacf93",
       "name": "Set Resolved Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -10144,
-        -304
+        -18448,
+        -928
       ]
     },
     {
@@ -178,13 +178,13 @@
         },
         "options": {}
       },
-      "id": "656814ef-8485-4e58-bb74-818443573bde",
+      "id": "e4145e37-e12f-4f09-898b-1efb32a572a3",
       "name": "Google Drive - List Markdown",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -9920,
-        -304
+        -18224,
+        -928
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -197,26 +197,26 @@
       "parameters": {
         "options": {}
       },
-      "id": "962ea932-a882-484a-8d5f-b3656303b63c",
+      "id": "88158307-f36a-441f-bb48-652473d25d0a",
       "name": "Loop Over Markdown Files",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -9712,
-        -304
+        -18016,
+        -928
       ]
     },
     {
       "parameters": {
         "jsCode": "const config = $('Set Resolved Config').item.json;\nconst mdName = $json.name;\nconst baseName = mdName.replace(/\\.md$/i, '');\nreturn [{\n  json: {\n    markdownFileId: $json.id,\n    mdName,\n    baseName,\n    metadataName: `${baseName}.metadata.json`,\n    fileSearchStoreName: config.fileSearchStoreName,\n    fileSearchStoreDisplayName: config.fileSearchStoreDisplayName,\n    metadataFolderId: config.metadataFolderId,\n    uploadedLogFolderId: config.uploadedLogFolderId,\n    errorsFolderId: config.errorsFolderId,\n    processedMarkdownFolderId: config.processedMarkdownFolderId,\n    processedMetadataFolderId: config.processedMetadataFolderId,\n    adminFuenteOverride: config.adminFuenteOverride\n  }\n}];"
       },
-      "id": "9ae99fb8-e9cf-45b6-a5d6-355dc077601a",
+      "id": "13b495a1-c437-42f4-9c43-5c176d1222c4",
       "name": "Derive Metadata Name",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -9392,
-        -304
+        -17696,
+        -928
       ]
     },
     {
@@ -235,13 +235,13 @@
         },
         "options": {}
       },
-      "id": "a7b3e0c2-636a-43d3-863a-96414c747ce1",
+      "id": "ca2b9ff5-fbd0-4f59-b3ed-978271e170d5",
       "name": "Google Drive - Find Metadata",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -9136,
-        -304
+        -17440,
+        -928
       ],
       "alwaysOutputData": true,
       "credentials": {
@@ -257,7 +257,8 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "strict",
+            "version": 2
           },
           "conditions": [
             {
@@ -274,13 +275,13 @@
         },
         "options": {}
       },
-      "id": "a2a54c2d-bd2d-4f55-9a32-6f1cbe0fb09d",
+      "id": "3c06717c-52a6-4761-a37b-843610d2c285",
       "name": "IF - Metadata Found",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -8912,
-        -304
+        -17216,
+        -928
       ]
     },
     {
@@ -295,13 +296,13 @@
           "binaryPropertyName": "metadataFile"
         }
       },
-      "id": "892ebbe2-49f1-4880-9095-4dddf786a21a",
+      "id": "07c040b0-0e17-4bcd-88cc-9f5be7d8f18a",
       "name": "Google Drive - Download Metadata",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -8688,
-        -400
+        -16992,
+        -1024
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -314,26 +315,26 @@
       "parameters": {
         "jsCode": "const pair = $('Derive Metadata Name').item.json;\nconst metadataBuffer = await this.helpers.getBinaryDataBuffer(0, 'metadataFile');\nconst metadata = JSON.parse(metadataBuffer.toString('utf8'));\nif (pair.adminFuenteOverride && String(pair.adminFuenteOverride).trim()) {\n  metadata.fuente = String(pair.adminFuenteOverride).trim();\n}\nreturn [{ json: { ...pair, metadataFileId: $json.id, metadata } }];"
       },
-      "id": "49e18fe1-ff8f-4cf7-b307-c48c77eb0526",
+      "id": "765df151-1afc-4359-8996-9276c16f5d82",
       "name": "Prepare Metadata Review",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -8464,
-        -400
+        -16800,
+        -1024
       ]
     },
     {
       "parameters": {
         "jsCode": "const resumeUrl = typeof $execution !== 'undefined' ? $execution.resumeUrl : undefined;\nconsole.log(`Metadata review form for ${$json.mdName}: ${resumeUrl || 'resumeUrl unavailable in this node context'}`);\nreturn $input.all();"
       },
-      "id": "c438b3d8-51dc-4276-a98f-7ae005a7f6e1",
+      "id": "14f08b0a-d6e0-4b56-8b99-181d8d165db5",
       "name": "Log Review Form URL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -8352,
-        -400
+        -16624,
+        -1024
       ]
     },
     {
@@ -470,13 +471,13 @@
         },
         "options": {}
       },
-      "id": "6a0cc4c1-b91a-4f54-bcca-d51ddc42662b",
+      "id": "35fc6027-3221-4115-a1a2-4d71821bb687",
       "name": "Wait - Metadata Review Form",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -8256,
-        -400
+        -16432,
+        -1024
       ],
       "webhookId": "metadata-review"
     },
@@ -504,13 +505,13 @@
         },
         "options": {}
       },
-      "id": "6c531da0-6350-43cc-a572-751c9a9f1170",
+      "id": "e330f528-010b-4189-b500-6654dddd5075",
       "name": "IF - Upload Decision",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -8032,
-        -400
+        -16256,
+        -1024
       ]
     },
     {
@@ -525,13 +526,13 @@
           "binaryPropertyName": "markdownFile"
         }
       },
-      "id": "15e093dd-16e8-4d85-aef7-123613705ee3",
+      "id": "26aa9770-207f-45f0-8164-c67702b58ba1",
       "name": "Google Drive - Download Markdown",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -7808,
-        -512
+        -16032,
+        -1136
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -544,13 +545,13 @@
       "parameters": {
         "jsCode": "const form = $('Wait - Metadata Review Form').first().json;\nconst reviewed = $('Prepare Metadata Review').first().json.metadata || {};\nconst markdownBuffer = await this.helpers.getBinaryDataBuffer(0, 'markdownFile');\nconst emptyToNull = (value) => value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim();\nconst formValue = (...keys) => {\n  for (const key of keys) {\n    if (form[key] !== undefined && form[key] !== null && String(form[key]).trim() !== '') {\n      return form[key];\n    }\n  }\n  return undefined;\n};\nconst metadataValue = (key, ...aliases) => emptyToNull(formValue(key, ...aliases) ?? reviewed[key]);\nlet categorias;\ntry {\n  const categoriasRaw = formValue('categoriasJSON', 'categoriasJson', 'CategoriasJSON') ?? JSON.stringify(reviewed.categorias || []);\n  categorias = JSON.parse(categoriasRaw || '[]');\n} catch (error) {\n  throw new Error(`Categorias JSON invalido: ${error.message}`);\n}\nif (!Array.isArray(categorias) || categorias.length === 0) {\n  throw new Error('Categorias JSON debe ser un arreglo con al menos una categoria');\n}\nconst confidenceRaw = formValue('confidence', 'Confidence') ?? reviewed.confidence ?? 0.5;\nconst confidence = Number(confidenceRaw);\nif (!Number.isFinite(confidence)) {\n  throw new Error(`confidence debe ser numerico: ${confidenceRaw}`);\n}\nconst metadata = {\n  titulo: metadataValue('titulo', 'Titulo', 'Título'),\n  identificador: metadataValue('identificador', 'Identificador'),\n  entidad: metadataValue('entidad', 'Entidad'),\n  fecha: metadataValue('fecha', 'Fecha'),\n  materia: metadataValue('materia', 'Materia'),\n  expediente: metadataValue('expediente', 'Expediente'),\n  articulo: metadataValue('articulo', 'Articulo', 'Artículo'),\n  norma: metadataValue('norma', 'Norma'),\n  pleno: metadataValue('pleno', 'Pleno'),\n  protocolo: metadataValue('protocolo', 'Protocolo'),\n  fuente: metadataValue('fuente', 'Fuente', 'source'),\n  categorias,\n  confidence,\n  observaciones: metadataValue('observaciones', 'Observaciones')\n};\nreturn [{\n  json: {\n    filename: form.mdName,\n    baseName: form.baseName,\n    markdownFileId: form.markdownFileId,\n    metadataFileId: form.metadataFileId,\n    markdown: markdownBuffer.toString('utf8'),\n    metadata,\n    file_search_store_name: form.fileSearchStoreName,\n    create_store_if_missing: false,\n    wait_until_done: true,\n    max_wait_seconds: 900,\n    uploadedLogFolderId: form.uploadedLogFolderId,\n    errorsFolderId: form.errorsFolderId,\n    processedMarkdownFolderId: form.processedMarkdownFolderId,\n    processedMetadataFolderId: form.processedMetadataFolderId\n  }\n}];"
       },
-      "id": "2162982e-b65b-49fa-9c1d-7635e4010368",
+      "id": "243484c3-b0b6-476b-a2b5-9797f4553dc1",
       "name": "Prepare Upload Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -7584,
-        -512
+        -15808,
+        -1136
       ]
     },
     {
@@ -562,13 +563,13 @@
         "jsonBody": "={{ $json }}",
         "options": {}
       },
-      "id": "a8e6383d-672d-4222-8d5f-20979621dbb6",
+      "id": "c671a335-c28c-4ce8-8624-98076f1f202b",
       "name": "API - Upload Gemini File Search",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -7376,
-        -512
+        -15600,
+        -1136
       ],
       "onError": "continueErrorOutput"
     },
@@ -576,13 +577,13 @@
       "parameters": {
         "jsCode": "const payload = $('Prepare Upload Payload').item.json;\nconst result = { filename: payload.filename, metadata: payload.metadata, upload: $json, uploaded_at: new Date().toISOString() };\nconst item = { json: { logName: `${payload.baseName}.gemini-upload.json`, result, uploadedLogFolderId: payload.uploadedLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(result, null, 2), 'utf8'), item.json.logName, 'application/json');\nreturn [item];"
       },
-      "id": "6e758c2b-4950-4880-99c3-b396e2643b9a",
+      "id": "36af160f-1e98-4151-aff8-87f9827ad98d",
       "name": "Prepare Upload Log",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -7152,
-        -592
+        -15376,
+        -1216
       ]
     },
     {
@@ -601,13 +602,13 @@
         },
         "options": {}
       },
-      "id": "1ef76178-996c-4e1a-a523-43ea1c7d9b5e",
+      "id": "7beb366f-c467-4ef1-bf5a-5c6340254368",
       "name": "Google Drive - Upload Log",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -6928,
-        -592
+        -15152,
+        -1216
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -636,13 +637,13 @@
           "cachedResultName": "processed/markdown"
         }
       },
-      "id": "d621a595-26cf-470c-bc8e-9327062fe5c8",
+      "id": "8fe09795-4613-4129-8dcb-0a65cfc54b89",
       "name": "Google Drive - Move Markdown To Processed",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -6704,
-        -592
+        -14928,
+        -1216
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -671,13 +672,13 @@
           "cachedResultName": "processed/metadata"
         }
       },
-      "id": "f08f136d-a44d-4180-a3d3-d09a7b5fdb23",
+      "id": "3037fff8-224e-484e-9511-8bf9b639236c",
       "name": "Google Drive - Move Metadata To Processed",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -6480,
-        -592
+        -14704,
+        -1216
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -690,18 +691,17 @@
       "parameters": {
         "jsCode": "const source = $('Wait - Metadata Review Form').item?.json || $('Derive Metadata Name').item?.json || {};\nconst record = { filename: source.mdName || 'unknown.md', expected_metadata: source.metadataName || null, error: $json, happened_at: new Date().toISOString() };\nconst safeName = (source.baseName || 'unknown').replace(/[^a-zA-Z0-9_.-]+/g, '-');\nconst item = { json: { errorName: `${safeName}.gemini-upload.error.json`, record, errorsFolderId: source.errorsFolderId || $('Set Resolved Config').item.json.errorsFolderId }, binary: {} };\nitem.binary.error = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(record, null, 2), 'utf8'), item.json.errorName, 'application/json');\nreturn [item];"
       },
-      "id": "cf7e9a32-59b2-4d80-a387-f8303016f064",
+      "id": "5bd94d26-1380-4161-ba07-ad6bc0cf60ec",
       "name": "Prepare Upload Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -7152,
-        -304
+        -15376,
+        -928
       ]
     },
     {
       "parameters": {
-        "inputDataFieldName": "error",
         "name": "={{ $json.errorName }}",
         "driveId": {
           "__rl": true,
@@ -715,13 +715,13 @@
         },
         "options": {}
       },
-      "id": "119ceccf-43fc-426a-a44c-c8d52edd778c",
+      "id": "18b11007-c60b-478c-863c-e5b0484a5867",
       "name": "Google Drive - Upload Error",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -6928,
-        -304
+        -15152,
+        -928
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -734,13 +734,13 @@
       "parameters": {
         "jsCode": "const form = $('Wait - Metadata Review Form').item.json;\nconst result = { filename: form.mdName, decision: 'skip', skipped_at: new Date().toISOString() };\nconst item = { json: { logName: `${form.baseName}.gemini-skip.json`, result, uploadedLogFolderId: form.uploadedLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(result, null, 2), 'utf8'), item.json.logName, 'application/json');\nreturn [item];"
       },
-      "id": "87e42f20-2eb8-4109-ae39-2fcb5cb79328",
+      "id": "b3eafe48-ed57-4311-aada-4043ef7e34b2",
       "name": "Prepare Skip Log",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -7808,
-        -240
+        -16032,
+        -864
       ]
     },
     {
@@ -759,13 +759,13 @@
         },
         "options": {}
       },
-      "id": "4e8a8fdf-9d73-439c-a667-0c52038be146",
+      "id": "bea6089d-b80d-4a49-a913-fc686481dbc1",
       "name": "Google Drive - Upload Skip Log",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -7568,
-        -240
+        -15792,
+        -864
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -778,17 +778,18 @@
       "parameters": {
         "jsCode": "const pair = $('Derive Metadata Name').item?.json || {};\nconst record = { filename: pair.mdName || 'unknown.md', expected_metadata: pair.metadataName || null, error: $json, happened_at: new Date().toISOString() };\nconst safeName = (pair.baseName || 'unknown').replace(/[^a-zA-Z0-9_.-]+/g, '-');\nconst item = { json: { errorName: `${safeName}.gemini-review.error.json`, record, errorsFolderId: pair.errorsFolderId || $('Set Resolved Config').item.json.errorsFolderId }, binary: {} };\nitem.binary.error = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(record, null, 2), 'utf8'), item.json.errorName, 'application/json');\nreturn [item];"
       },
-      "id": "d3c0160d-9c13-49e7-ae17-e761c495d91a",
+      "id": "e9ccb897-67d1-43d7-b644-8c7cf88bbf31",
       "name": "Prepare Missing Metadata Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -8704,
-        -16
+        -17008,
+        -640
       ]
     },
     {
       "parameters": {
+        "inputDataFieldName": "error",
         "name": "={{ $json.errorName }}",
         "driveId": {
           "__rl": true,
@@ -802,13 +803,13 @@
         },
         "options": {}
       },
-      "id": "21f20bad-ead2-4b34-b82f-9610c6344bce",
+      "id": "ee485482-046d-4036-8796-ac31061e86f5",
       "name": "Google Drive - Upload Missing Metadata Error",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        -8480,
-        -16
+        -16784,
+        -640
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
@@ -1145,7 +1146,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "8f8dcd43-ead5-44b4-9635-64324571f546",
+  "versionId": "0e810218-b4fe-494f-988f-2b5a8bfc4ee1",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "b4fe1b7f55c924806604a2431485ada3cf45cd4c8e6a1134735f55424b9bdf63"
