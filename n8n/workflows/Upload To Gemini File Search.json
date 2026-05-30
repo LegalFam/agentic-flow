@@ -29,6 +29,18 @@
               "type": "boolean"
             },
             {
+              "id": "markdown-folder",
+              "name": "markdownFolderId",
+              "value": "16GIhS4LyWlLjo6zHPE6AquP1sWnDDm1e",
+              "type": "string"
+            },
+            {
+              "id": "metadata-folder",
+              "name": "metadataFolderId",
+              "value": "1RKgIVvqg1tIGvp2ta-ElOb3p8F-82oXU",
+              "type": "string"
+            },
+            {
               "id": "upload-log-folder",
               "name": "uploadedLogFolderId",
               "value": "15lNZHYElC11E4OdDf92EEwOyaNNlJfz9",
@@ -164,14 +176,14 @@
     {
       "parameters": {
         "resource": "fileFolder",
-        "searchMethod": "query",
-        "queryString": "=",
+        "searchMethod": "name",
+        "queryString": ".md",
         "returnAll": true,
         "filter": {
           "folderId": {
             "__rl": true,
-            "value": "16GIhS4LyWlLjo6zHPE6AquP1sWnDDm1e",
-            "mode": "list",
+            "value": "={{ $('Set Resolved Config').item.json.markdownFolderId }}",
+            "mode": "id",
             "cachedResultName": "output/markdown",
             "cachedResultUrl": "https://drive.google.com/drive/folders/16GIhS4LyWlLjo6zHPE6AquP1sWnDDm1e"
           }
@@ -222,13 +234,15 @@
     {
       "parameters": {
         "resource": "fileFolder",
-        "queryString": "=",
-        "returnAll": true,
+        "searchMethod": "query",
+        "queryString": "={{ \"name = '\" + $json.metadataName.replace(/\\\\/g, \"\\\\\\\\\").replace(/'/g, \"\\\\'\") + \"'\" }}",
+        "returnAll": false,
+        "limit": 1,
         "filter": {
           "folderId": {
             "__rl": true,
-            "value": "1RKgIVvqg1tIGvp2ta-ElOb3p8F-82oXU",
-            "mode": "list",
+            "value": "={{ $json.metadataFolderId }}",
+            "mode": "id",
             "cachedResultName": "output/metadata",
             "cachedResultUrl": "https://drive.google.com/drive/folders/1RKgIVvqg1tIGvp2ta-ElOb3p8F-82oXU"
           }
@@ -702,6 +716,7 @@
     },
     {
       "parameters": {
+        "inputDataFieldName": "error",
         "name": "={{ $json.errorName }}",
         "driveId": {
           "__rl": true,
