@@ -5,17 +5,17 @@
       "parameters": {
         "options": {}
       },
-      "id": "0b467b2a-7f3b-4c14-8242-bf87129fd1d1",
+      "id": "3e148e01-ea54-4f8d-9179-8a91c2e739f8",
       "name": "Google Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "position": [
-        1056,
-        1280
+        2352,
+        960
       ],
       "typeVersion": 1,
       "credentials": {
         "googlePalmApi": {
-          "id": "oAxJEltYLJkpm8wN",
+          "id": "J5fuQmNyhxq31HfY",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -26,12 +26,12 @@
         "combineBy": "combineAll",
         "options": {}
       },
-      "id": "7203b256-e0e7-406a-87cf-89e6d47b57b7",
+      "id": "78b67650-d1a0-42f9-bff8-04d814d77af2",
       "name": "Merge1",
       "type": "n8n-nodes-base.merge",
       "position": [
-        1008,
-        960
+        2304,
+        640
       ],
       "typeVersion": 3.2
     },
@@ -52,20 +52,20 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\":\"Consulta del usuario: {{ $('Merge1').item.json.output.original_message }}\\nCategoria legal: {{ $('Merge1').item.json.output.category }}\\nCategoria canonica: {{ $('Merge1').item.json.retrieval.canonicalCategory }}\\nSubcategorias canonicas: {{ $('Merge1').item.json.retrieval.canonicalSubcategories.join(', ') }}\\nMetadata preferida: {{ $('Merge1').item.json.retrieval.metadataHints.join(' ') }}\\nTerminos de busqueda: {{ $('Merge1').item.json.retrieval.searchTerms.join(', ') }}\\nConsulta refinada: {{ $fromAI(\"query\",\"category-aware legal retrieval query that preserves the user question and includes the provided legal category, canonical subcategories, and metadata hints\") }}\"\n        }\n      ]\n    }\n  ],\n  \"tools\": [\n    {\n      \"file_search\": {\n        \"file_search_store_names\": [\n          \"{{ $('Merge1').item.json['Search Store'] }}\"\n        ]\n      }\n    }\n  ]\n}",
+        "jsonBody": "={{ { contents: [{ parts: [{ text: ['Consulta del usuario: ' + ($('Merge1').item.json.output.original_message ?? ''), 'Categoria legal: ' + ($('Merge1').item.json.output.category ?? ''), 'Categoria canonica: ' + ($('Merge1').item.json.retrieval.canonicalCategory ?? ''), 'Subcategorias canonicas: ' + (($('Merge1').item.json.retrieval.canonicalSubcategories || []).join(', ')), 'Metadata preferida: ' + (($('Merge1').item.json.retrieval.metadataHints || []).join(' ')), 'Terminos de busqueda: ' + (($('Merge1').item.json.retrieval.searchTerms || []).join(', ')), 'Consulta refinada: ' + $fromAI('query', 'category-aware legal retrieval query that preserves the user question and includes the provided legal category, canonical subcategories, and metadata hints')].join('\\n') }] }], tools: [{ file_search: { file_search_store_names: [ $('Merge1').item.json['Search Store'] ] } }] } }}",
         "options": {}
       },
-      "id": "e23e2c21-7522-4612-ad14-1c8cbb22d50d",
+      "id": "a537caf7-af68-45a2-a543-4a37f7ef0320",
       "name": "SearchStore",
       "type": "n8n-nodes-base.httpRequestTool",
       "position": [
-        1376,
-        1280
+        2672,
+        960
       ],
       "typeVersion": 4.3,
       "credentials": {
         "googlePalmApi": {
-          "id": "oAxJEltYLJkpm8wN",
+          "id": "J5fuQmNyhxq31HfY",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -75,12 +75,12 @@
         "sessionIdType": "customKey",
         "sessionKey": "={{ $('Parser Agent').item.json.output.session_id }}"
       },
-      "id": "350a7de5-c1ad-46ea-9f2c-eb6fe6efdd41",
+      "id": "7bcc08e0-3753-45fe-bce9-dc24770be7db",
       "name": "Simple Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "position": [
-        1216,
-        1280
+        2512,
+        960
       ],
       "typeVersion": 1.3
     },
@@ -93,27 +93,27 @@
           "systemMessage": "Eres un asistente legal de Derecho de Familia peruano. Para cada consulta relevante, siempre usa SearchStore antes de responder. Al llamar SearchStore, conserva la pregunta original e incluye la categoria legal, las subcategorias canonicas, los terminos de busqueda y la metadata preferida. Prioriza fuentes recuperadas que coincidan con la categoria o metadata preferida, pero permite fallback si no hay coincidencia exacta. Responde solo con informacion sustentada por el contexto recuperado y devuelve citas cuando esten disponibles."
         }
       },
-      "id": "812cdfa7-0221-45fc-a455-23a8a57d5ca3",
+      "id": "54a7cbf5-3484-4f9e-8b55-46d2fece87a8",
       "name": "RAG Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "position": [
-        1216,
-        928
+        2512,
+        608
       ],
       "typeVersion": 3
     },
     {
       "parameters": {
         "schemaType": "manual",
-        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"MessageObject\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"session_id\": {\n      \"type\": \"string\",\n      \"format\": \"uuid\",\n      \"description\": \"A unique identifier for the current chat session.\"\n    },\n    \"original_message\": {\n      \"type\": \"string\",\n      \"description\": \"The raw input message.\"\n    },\n    \"message\": {\n      \"type\": \"string\",\n      \"description\": \"The processed response message.\"\n    },\n    \"category\": {\n      \"type\": \"string\",\n      \"description\": \"The classification category.\"\n    }\n  },\n  \"required\": [\n    \"session_id\",\n    \"original_message\",\n    \"category\"\n  ]\n}"
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"MessageObject\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"session_id\": {\n      \"type\": \"string\",\n      \"format\": \"uuid\",\n      \"description\": \"A unique identifier for the current chat session.\"\n    },\n    \"original_message\": {\n      \"type\": \"string\",\n      \"description\": \"The raw input message.\"\n    },\n    \"message\": {\n      \"type\": \"string\",\n      \"description\": \"The processed response message. Required when category is error.\"\n    },\n    \"category\": {\n      \"type\": \"string\",\n      \"description\": \"The classification category.\"\n    }\n  },\n  \"required\": [\n    \"session_id\",\n    \"original_message\",\n    \"category\"\n  ],\n  \"additionalProperties\": false\n}"
       },
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        448,
-        1232
+        1744,
+        912
       ],
-      "id": "a5d6364b-96f0-4206-b5b9-5d9f3552ab95",
+      "id": "7d1ccce8-45d4-41c9-9ce1-7185911a964b",
       "name": "Structured Output Parser"
     },
     {
@@ -123,14 +123,14 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        240,
-        1232
+        1536,
+        912
       ],
-      "id": "6ba0964e-5dcc-4fc8-9f3c-3d4496132148",
+      "id": "c39df7f3-1837-4a04-a528-0f7f1c56b153",
       "name": "Google Gemini Chat Model1",
       "credentials": {
         "googlePalmApi": {
-          "id": "oAxJEltYLJkpm8wN",
+          "id": "J5fuQmNyhxq31HfY",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -142,12 +142,12 @@
         "width": 656,
         "color": 7
       },
-      "id": "604f6b77-854b-48d4-bc0c-8a00a2ceb061",
+      "id": "aaa252ef-ef5a-4622-91ea-90de508e961a",
       "name": "Sticky Note5",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        992,
-        784
+        2288,
+        464
       ],
       "typeVersion": 1
     },
@@ -158,12 +158,12 @@
         "width": 976,
         "color": 7
       },
-      "id": "f86a5b46-c694-49ff-994f-9a2ed4cfcfb6",
+      "id": "2c537502-8570-469a-ad48-3dcedc2f8c95",
       "name": "Sticky Note4",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        0,
-        784
+        1296,
+        464
       ],
       "typeVersion": 1
     },
@@ -173,16 +173,16 @@
         "text": "=Chat Session: {{ $json.body.session_id }}\nUser message: {{ $json.body.message }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Actúa como clasificador legal de Derecho de Familia en Perú. Analiza el mensaje del usuario y responde **solo** con el nombre de la categoría o el mensaje de advertencia.\n\n**Categorías:**\n1. **Pensión de Alimentos** (Fijación, aumento o reducción).\n2. **Tenencia y Custodia** (Cuidado de hijos y visitas).\n3. **Patria Potestad** (Derechos/deberes sobre hijos).\n4. **Violencia Familiar** (Medidas de protección).\n5. **Divorcio y Separación** (Fin del matrimonio o bienes).\n6. **Filiación y Paternidad** (ADN y reconocimiento).\n7. **Adopción** (Procesos judiciales/administrativos).\n8. **Sucesiones y Herencias** (Herederos y testamentos).\n9. **Sociedad de Gananciales** (Bienes del matrimonio).\n10. **Unión de Hecho** (Convivencia).\n11. **Tutela y Curatela** (Protección de menores o incapaces).\n12. **Procedimientos Administrativos** (Conciliación y DEMUNA).\n13. **Otros** (No aplica ninguna de las otras categorías).\n\n**Regla de Seguridad:**\nSi el mensaje no es una consulta sino un mensaje de saludo o parecido llamar, el \"category\" sería \"error\" y generaras un mensaje de respuesta.\nSi la mensaje es una consulta pero no es sobre Derecho de Familia, responde exactamente:\n*\"Su consulta está fuera del alcance de nuestro alcance. Por favor, realiza una pregunta sobre Derecho de Familia.\"*\n\n"
+          "systemMessage": "Actúa como clasificador legal de Derecho de Familia en Perú. Analiza el mensaje del usuario y devuelve un objeto que cumpla exactamente con el esquema del parser estructurado.\n\nReglas de salida:\n- Copia el Chat Session recibido en session_id como texto.\n- Copia el User message recibido en original_message.\n- Usa category para una sola categoría de la lista o \"error\".\n- No envuelvas la respuesta dentro de otra propiedad como output.\n- Solo incluye message cuando category sea \"error\" o cuando la consulta esté fuera de alcance.\n\nCategorías permitidas:\n1. Pensión de Alimentos (Fijación, aumento o reducción).\n2. Tenencia y Custodia (Cuidado de hijos y visitas).\n3. Patria Potestad (Derechos/deberes sobre hijos).\n4. Violencia Familiar (Medidas de protección).\n5. Divorcio y Separación (Fin del matrimonio o bienes).\n6. Filiación y Paternidad (ADN y reconocimiento).\n7. Adopción (Procesos judiciales/administrativos).\n8. Sucesiones y Herencias (Herederos y testamentos).\n9. Sociedad de Gananciales (Bienes del matrimonio).\n10. Unión de Hecho (Convivencia).\n11. Tutela y Curatela (Protección de menores o incapaces).\n12. Procedimientos Administrativos (Conciliación y DEMUNA).\n13. Otros (No aplica ninguna de las otras categorías, pero sigue siendo Derecho de Familia).\n\nRegla de seguridad:\n- Si el mensaje no es una consulta sino un saludo o un intento de llamar/contactar, usa category \"error\" y agrega un message breve pidiendo que formule una consulta de Derecho de Familia.\n- Si el mensaje es una consulta pero no trata sobre Derecho de Familia, usa category \"error\" y message \"Su consulta está fuera del alcance de nuestro alcance. Por favor, realiza una pregunta sobre Derecho de Familia.\"\n\n"
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        272,
-        1008
+        1568,
+        688
       ],
-      "id": "2649bec3-a88d-41eb-b9fa-3f5f7f562470",
+      "id": "0321f96f-3622-488c-a57b-ee83d634cdaa",
       "name": "Parser Agent",
       "alwaysOutputData": false
     },
@@ -193,12 +193,12 @@
         "width": 656,
         "color": 7
       },
-      "id": "2f7069a9-6eb7-4335-b6db-3e6ed8bc2dd3",
+      "id": "4f71057b-cb35-4f60-b25b-cbc779e26544",
       "name": "Sticky Note6",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        1664,
-        784
+        2960,
+        464
       ],
       "typeVersion": 1
     },
@@ -213,16 +213,16 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        32,
-        1008
+        1328,
+        688
       ],
-      "id": "6fecf5e4-c6d2-4ee5-983e-837f69ea434b",
+      "id": "336d18c5-e891-4edd-8cb8-443c813ba60f",
       "name": "Webhook",
       "webhookId": "e4f21899-c504-4373-a3ef-6eddf35d655b",
       "alwaysOutputData": false,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "9ijeVEdY2HH4S3iZ",
+          "id": "aKmM8QvCCJMhQZFQ",
           "name": "Header Auth account"
         }
       }
@@ -235,18 +235,18 @@
               "id": "612266b5-c5c0-4091-875e-50cd729cda11",
               "name": "Search Store",
               "type": "string",
-              "value": "fileSearchStores/family-law-documents-9088cqspva81"
+              "value": "fileSearchStores/familylaw-k3uggnk7czvu"
             }
           ]
         },
         "options": {}
       },
-      "id": "c0b950a4-fa35-4485-89b4-af8923b0b424",
+      "id": "5e41ceb9-f1e0-4764-880a-5c080893ebab",
       "name": "Get FileStore Name1",
       "type": "n8n-nodes-base.set",
       "position": [
-        800,
-        848
+        2096,
+        528
       ],
       "typeVersion": 3.4
     },
@@ -257,10 +257,10 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        1520,
-        1280
+        2816,
+        960
       ],
-      "id": "33506366-f2a7-45ba-a15e-3c12e8c931c9",
+      "id": "647cc64a-455a-4cf1-a2c4-df9f71d2cf0a",
       "name": "Structured Output Parser1"
     },
     {
@@ -290,10 +290,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        560,
-        1008
+        1856,
+        688
       ],
-      "id": "727a8f93-c9be-4457-bebd-d8c429280025",
+      "id": "e5bddf91-8bcd-4fb9-bd60-09d56ed777bb",
       "name": "If Relevant"
     },
     {
@@ -303,10 +303,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        800,
-        1008
+        2096,
+        688
       ],
-      "id": "96943733-dfb8-47bc-a2b0-d6a2edc39f0d",
+      "id": "44df3d61-5974-4d77-aee4-42f5658f702d",
       "name": "Map Retrieval Metadata"
     },
     {
@@ -318,10 +318,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        800,
-        1120
+        2096,
+        864
       ],
-      "id": "59d70dbe-7548-4a30-a8aa-a789441dd70e",
+      "id": "dce6ad35-6515-4f71-a403-2e7788d0660b",
       "name": "Respond without RAG"
     },
     {
@@ -333,10 +333,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        1904,
-        928
+        3200,
+        608
       ],
-      "id": "9867925b-f36b-45c7-8e79-287f56dd4702",
+      "id": "53c961e4-16fd-4638-86a4-0e5c13c568ce",
       "name": "Respond with XAI"
     },
     {
@@ -345,11 +345,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        1344,
-        1456
+        2640,
+        1136
       ],
       "typeVersion": 1,
-      "id": "27199409-0fff-4fe8-913a-a63737592fa5",
+      "id": "443d1b05-ab88-42bf-8ed6-d299ae96936f",
       "name": "Sticky Note3"
     },
     {
@@ -358,11 +358,11 @@
       },
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        1840,
-        1456
+        3136,
+        1136
       ],
       "typeVersion": 1,
-      "id": "a18fef51-7dfe-4709-9ecb-468c9a047ce1",
+      "id": "9d689058-bbbc-4218-8c45-f9ba6a0f04c5",
       "name": "Sticky Note7"
     }
   ],
@@ -529,11 +529,11 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "218344ed-0f21-4492-9737-285ed892114a",
+  "versionId": "47b5853e-9f9e-407f-9152-eba9af71a070",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "c03166cd464efec0979336a390da267a77d29a911939787f41cbd8af0d4b7869"
+    "instanceId": "b4fe1b7f55c924806604a2431485ada3cf45cd4c8e6a1134735f55424b9bdf63"
   },
-  "id": "5edVGDge4JfzXIaQ",
+  "id": "zrMqCWRq1V6lsI7i",
   "tags": []
 }
