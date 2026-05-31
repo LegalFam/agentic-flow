@@ -47,6 +47,12 @@
               "type": "string"
             },
             {
+              "id": "processed-pdf-folder",
+              "name": "processedPdfFolderId",
+              "value": "REPLACE_WITH_PROCESSED_PDF_FOLDER_ID",
+              "type": "string"
+            },
+            {
               "id": "api-base-url",
               "name": "processingApiBaseUrl",
               "value": "http://processing-api:8000",
@@ -413,6 +419,67 @@
     },
     {
       "parameters": {
+        "jsCode": "const source = $('Prepare Output Files').first().json;\nconst item = { json: source, binary: {} };\nitem.binary.metadata = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(source.metadata, null, 2), 'utf8'), source.jsonName, 'application/json');\nreturn [item];"
+      },
+      "id": "c6adf86f-b0eb-43a4-b68e-97b5f84c0011",
+      "name": "Create Metadata Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Prepare Output Files').first().json;\nconst item = { json: source, binary: {} };\nitem.binary.review = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(source.review, null, 2), 'utf8'), source.reviewName, 'application/json');\nreturn [item];"
+      },
+      "id": "a5cc3977-f690-4899-998d-7a1f6596c20f",
+      "name": "Create Review Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Drive - Download PDF').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Set Drive Folder IDs').item.json.processedPdfFolderId }}",
+          "mode": "id",
+          "cachedResultName": "processed/pdf"
+        }
+      },
+      "id": "0bc9c404-a238-4f7f-949b-5c69484376ec",
+      "name": "Google Drive - Move PDF To Processed",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1696,
+        288
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
         "jsCode": "const err = $json;\nconst source = $('Google Drive - Download PDF').item?.json || {};\nconst filename = source.name || 'unknown.pdf';\nconst safeName = filename.replace(/[^a-zA-Z0-9_.-]+/g, '-');\nconst record = { filename, error: err, happened_at: new Date().toISOString() };\nconst item = { json: { errorName: `${safeName}.error.json`, record }, binary: {} };\nitem.binary.error = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(record, null, 2), 'utf8'), item.json.errorName, 'application/json');\nreturn [item];"
       },
       "id": "df1d82d0-a00f-4f71-92f2-edd48cb179f4",
@@ -644,16 +711,6 @@
             "node": "Google Drive - Upload Markdown",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Google Drive - Upload Metadata",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Google Drive - Upload Review",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -673,7 +730,7 @@
       "main": [
         [
           {
-            "node": "Loop Over PDF Files",
+            "node": "Google Drive - Move PDF To Processed",
             "type": "main",
             "index": 0
           }
@@ -693,7 +750,57 @@
     },
     "Google Drive - Upload Markdown": {
       "main": [
-        []
+        [
+          {
+            "node": "Create Metadata Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Metadata Binary": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Upload Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload Metadata": {
+      "main": [
+        [
+          {
+            "node": "Create Review Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Review Binary": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Upload Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Move PDF To Processed": {
+      "main": [
+        [
+          {
+            "node": "Loop Over PDF Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
