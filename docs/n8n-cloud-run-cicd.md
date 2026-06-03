@@ -312,11 +312,19 @@ Inside n8n workflows, the processing API is reached through:
 http://127.0.0.1:8000
 ```
 
-The CI/CD workflow sets:
+The CI/CD workflow also sets:
 
 ```text
 PROCESSING_API_BASE_URL=http://127.0.0.1:8000
 ```
+
+The workflow JSON reads this value using `$env.PROCESSING_API_BASE_URL`. The deployment explicitly enables this with:
+
+```text
+N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+```
+
+This is required for these workflows, but it means workflow expressions and nodes can read environment variables available to n8n. Keep sensitive values in n8n credentials or Secret Manager references where possible, and avoid giving untrusted users workflow-edit access.
 
 Local Docker Compose still works because the workflow JSON falls back to:
 
@@ -417,3 +425,43 @@ https://your-n8n-url/home/workflows
 ```
 
 If those routes also return `Cannot GET`, read Cloud Run logs and verify the request is reaching the `n8n` container, not the `processing-api` sidecar.
+
+### `access to env vars denied`
+
+n8n 2.x blocks `$env` access inside workflow expressions by default. This deployment enables it because the workflows use `$env.PROCESSING_API_BASE_URL`.
+
+Confirm the n8n container has:
+
+```text
+N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+```
+
+The processing API variable should be:
+
+```text
+PROCESSING_API_BASE_URL=http://127.0.0.1:8000
+```
+
+If this error appears, commit the GitHub Actions workflow change and rerun deployment so n8n starts with env access enabled.
+
+### `No network connection. Workflow changes will be saved once the connection is restored.`
+
+This is an n8n editor connectivity warning. It usually means the browser temporarily lost connection to the n8n backend, or n8n could not persist editor changes because the database connection dropped.
+
+For n8n 2.x on Cloud Run, also set:
+
+```text
+N8N_ENDPOINT_HEALTH=health
+```
+
+This avoids a known Cloud Run/n8n 2.x health endpoint issue that can make workflow editing appear offline even when the service is otherwise running.
+
+Check Cloud Run logs for nearby:
+
+```text
+Database connection timed out
+GET 503
+Received SIGTERM
+```
+
+If those appear, treat it as a Cloud SQL/Cloud Run stability issue, not a workflow-node issue.
