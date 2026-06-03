@@ -91,15 +91,19 @@ jobs:
             --service-account "$N8N_RUNTIME_SERVICE_ACCOUNT" \
             --execution-environment gen2 \
             --min-instances 1 \
+            --max-instances 1 \
+            --no-cpu-throttling \
+            --timeout 300 \
+            --concurrency 20 \
             --set-cloudsql-instances "$CLOUD_SQL_CONNECTION_NAME" \
             --allow-unauthenticated \
             --container n8n \
             --image "$N8N_IMAGE_URI" \
             --port 5678 \
-            --memory 1Gi \
+            --memory 2Gi \
             --cpu 1 \
             --depends-on processing-api \
-            --set-env-vars "DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=/cloudsql/$CLOUD_SQL_CONNECTION_NAME,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=$N8N_DB_NAME,DB_POSTGRESDB_USER=$N8N_DB_USER,DB_POSTGRESDB_CONNECTION_TIMEOUT=60000,DB_PING_INTERVAL_SECONDS=10,N8N_PROTOCOL=https,N8N_HOST=$PUBLIC_HOST,WEBHOOK_URL=$PUBLIC_URL/,N8N_EDITOR_BASE_URL=$PUBLIC_URL/,N8N_RUNNERS_GRANT_TOKEN_TTL=120,GENERIC_TIMEZONE=America/Lima,TZ=America/Lima" \
+            --set-env-vars "DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=/cloudsql/$CLOUD_SQL_CONNECTION_NAME,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=$N8N_DB_NAME,DB_POSTGRESDB_USER=$N8N_DB_USER,DB_POSTGRESDB_POOL_SIZE=2,DB_POSTGRESDB_CONNECTION_TIMEOUT=60000,DB_POSTGRESDB_IDLE_CONNECTION_TIMEOUT=120000,DB_PING_INTERVAL_SECONDS=10,N8N_PROTOCOL=https,N8N_HOST=$PUBLIC_HOST,WEBHOOK_URL=$PUBLIC_URL/,N8N_EDITOR_BASE_URL=$PUBLIC_URL/,N8N_RUNNERS_GRANT_TOKEN_TTL=120,GENERIC_TIMEZONE=America/Lima,TZ=America/Lima" \
             --set-env-vars "PROCESSING_API_BASE_URL=http://127.0.0.1:8000" \
             --set-secrets "DB_POSTGRESDB_PASSWORD=n8n-db-password:latest,N8N_ENCRYPTION_KEY=n8n-encryption-key:latest" \
             --container processing-api \
@@ -117,7 +121,7 @@ jobs:
             --region "$REGION" \
             --service-account "$N8N_RUNTIME_SERVICE_ACCOUNT" \
             --set-cloudsql-instances "$CLOUD_SQL_CONNECTION_NAME" \
-            --set-env-vars "DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=/cloudsql/$CLOUD_SQL_CONNECTION_NAME,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=$N8N_DB_NAME,DB_POSTGRESDB_USER=$N8N_DB_USER,DB_POSTGRESDB_CONNECTION_TIMEOUT=60000,DB_PING_INTERVAL_SECONDS=10,N8N_PUBLISH_WORKFLOW_IDS=$N8N_PUBLISH_WORKFLOW_IDS,GENERIC_TIMEZONE=America/Lima,TZ=America/Lima" \
+            --set-env-vars "DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=/cloudsql/$CLOUD_SQL_CONNECTION_NAME,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=$N8N_DB_NAME,DB_POSTGRESDB_USER=$N8N_DB_USER,DB_POSTGRESDB_POOL_SIZE=2,DB_POSTGRESDB_CONNECTION_TIMEOUT=60000,DB_POSTGRESDB_IDLE_CONNECTION_TIMEOUT=120000,DB_PING_INTERVAL_SECONDS=10,N8N_PUBLISH_WORKFLOW_IDS=$N8N_PUBLISH_WORKFLOW_IDS,GENERIC_TIMEZONE=America/Lima,TZ=America/Lima" \
             --set-secrets "DB_POSTGRESDB_PASSWORD=n8n-db-password:latest,N8N_ENCRYPTION_KEY=n8n-encryption-key:latest" \
             --command "/bin/sh" \
             --args "/opt/legalfam/bin/sync-n8n-workflows.sh"

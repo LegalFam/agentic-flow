@@ -375,7 +375,11 @@ This means n8n reached the Cloud SQL connector but PostgreSQL did not answer fas
 The deployment sets:
 
 ```text
+Cloud Run max instances=1
+Cloud Run CPU always allocated
 DB_POSTGRESDB_CONNECTION_TIMEOUT=60000
+DB_POSTGRESDB_POOL_SIZE=2
+DB_POSTGRESDB_IDLE_CONNECTION_TIMEOUT=120000
 DB_PING_INTERVAL_SECONDS=10
 ```
 
@@ -394,6 +398,8 @@ roles/secretmanager.secretAccessor
 ```
 
 If credentials and IAM are correct but timeouts continue, the Cloud SQL tier may be too small for n8n startup/migrations. Upgrade the Cloud SQL instance tier before debugging application code.
+
+n8n is intentionally deployed with `max-instances=1` in this setup. Running multiple main n8n instances without queue-mode workers can create unnecessary database contention and duplicated background work. For higher scale, move to n8n queue mode instead of simply increasing Cloud Run instances.
 
 ### `Cannot GET /`
 
