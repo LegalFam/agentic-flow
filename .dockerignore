@@ -1,0 +1,8 @@
+*
+
+!Dockerfile.n8n
+!n8n/
+!n8n/workflows/
+!n8n/workflows/*.json
+!scripts/
+!scripts/sync-n8n-workflows.sh

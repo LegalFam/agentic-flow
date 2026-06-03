@@ -86,7 +86,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://processing-api:8000/file-search-stores/resolve",
+        "url": "={{ ($env.PROCESSING_API_BASE_URL || 'http://processing-api:8000') + '/file-search-stores/resolve' }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { display_name: $json.fileSearchStoreDisplayName, create_if_missing: $json.createStoreIfMissing } }}",
@@ -569,7 +569,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://processing-api:8000/upload-gemini-file-search",
+        "url": "={{ ($env.PROCESSING_API_BASE_URL || 'http://processing-api:8000') + '/upload-gemini-file-search' }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",

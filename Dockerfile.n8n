@@ -1,0 +1,15 @@
+ARG N8N_IMAGE=n8nio/n8n:latest
+FROM ${N8N_IMAGE}
+
+LABEL org.opencontainers.image.title="LegalFam n8n"
+LABEL org.opencontainers.image.description="n8n runtime with LegalFam workflows bundled for Cloud Run import/publish jobs"
+
+USER root
+
+COPY n8n/workflows /opt/legalfam/workflows
+COPY scripts/sync-n8n-workflows.sh /opt/legalfam/bin/sync-n8n-workflows.sh
+
+RUN chown -R node:node /opt/legalfam \
+  && chmod 0555 /opt/legalfam/bin/sync-n8n-workflows.sh
+
+USER node

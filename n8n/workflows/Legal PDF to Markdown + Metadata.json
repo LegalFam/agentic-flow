@@ -55,7 +55,7 @@
             {
               "id": "api-base-url",
               "name": "processingApiBaseUrl",
-              "value": "http://processing-api:8000",
+              "value": "={{ $env.PROCESSING_API_BASE_URL || 'http://processing-api:8000' }}",
               "type": "string"
             }
           ]

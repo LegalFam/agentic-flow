@@ -1,0 +1,125 @@
+name: Deploy n8n to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - Dockerfile.n8n
+      - api/**
+      - n8n/workflows/**
+      - scripts/sync-n8n-workflows.sh
+      - .github/workflows/deploy-n8n.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+  N8N_SERVICE: ${{ vars.N8N_CLOUD_RUN_SERVICE }}
+  N8N_SYNC_JOB: ${{ vars.N8N_SYNC_JOB }}
+  N8N_PUBLIC_URL: ${{ vars.N8N_PUBLIC_URL }}
+  N8N_PUBLISH_WORKFLOW_IDS: ${{ vars.N8N_PUBLISH_WORKFLOW_IDS }}
+  CLOUD_SQL_CONNECTION_NAME: ${{ vars.CLOUD_SQL_CONNECTION_NAME }}
+  N8N_DB_NAME: ${{ vars.N8N_DB_NAME }}
+  N8N_DB_USER: ${{ vars.N8N_DB_USER }}
+  N8N_RUNTIME_SERVICE_ACCOUNT: ${{ vars.N8N_RUNTIME_SERVICE_ACCOUNT }}
+  GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+  GEMINI_FILE_SEARCH_STORE: ${{ vars.GEMINI_FILE_SEARCH_STORE }}
+  ENABLE_GEMINI_FILE_SEARCH_UPLOAD: ${{ vars.ENABLE_GEMINI_FILE_SEARCH_UPLOAD }}
+  MAX_UPLOAD_MB: ${{ vars.MAX_UPLOAD_MB }}
+  MIN_TEXT_CHARS_FOR_NATIVE_PDF: ${{ vars.MIN_TEXT_CHARS_FOR_NATIVE_PDF }}
+  GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+  DOCUMENT_AI_LOCATION: ${{ vars.DOCUMENT_AI_LOCATION }}
+  DOCUMENT_AI_PROCESSOR_ID: ${{ vars.DOCUMENT_AI_PROCESSOR_ID }}
+  N8N_IMAGE_NAME: legalfam-n8n
+  API_IMAGE_NAME: legalfam-processing-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+      - name: Build and push images
+        run: |
+          N8N_IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$ARTIFACT_REPOSITORY/$N8N_IMAGE_NAME:${{ github.sha }}"
+          API_IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$ARTIFACT_REPOSITORY/$API_IMAGE_NAME:${{ github.sha }}"
+
+          docker build -f Dockerfile.n8n -t "$N8N_IMAGE_URI" .
+          docker build -f api/Dockerfile -t "$API_IMAGE_URI" api
+
+          docker push "$N8N_IMAGE_URI"
+          docker push "$API_IMAGE_URI"
+
+          echo "N8N_IMAGE_URI=$N8N_IMAGE_URI" >> "$GITHUB_ENV"
+          echo "API_IMAGE_URI=$API_IMAGE_URI" >> "$GITHUB_ENV"
+
+      - name: Deploy n8n service with processing sidecar
+        run: |
+          PUBLIC_URL="${N8N_PUBLIC_URL%/}"
+          PUBLIC_HOST="${PUBLIC_URL#https://}"
+          PUBLIC_HOST="${PUBLIC_HOST#http://}"
+          PUBLIC_HOST="${PUBLIC_HOST%/}"
+          GEMINI_MODEL_VALUE="${GEMINI_MODEL:-gemini-2.5-flash}"
+          ENABLE_UPLOAD_VALUE="${ENABLE_GEMINI_FILE_SEARCH_UPLOAD:-false}"
+          MAX_UPLOAD_VALUE="${MAX_UPLOAD_MB:-75}"
+          MIN_TEXT_VALUE="${MIN_TEXT_CHARS_FOR_NATIVE_PDF:-800}"
+          GOOGLE_PROJECT_VALUE="${GOOGLE_CLOUD_PROJECT:-$PROJECT_ID}"
+          DOCUMENT_AI_LOCATION_VALUE="${DOCUMENT_AI_LOCATION:-us}"
+
+          gcloud run deploy "$N8N_SERVICE" \
+            --region "$REGION" \
+            --service-account "$N8N_RUNTIME_SERVICE_ACCOUNT" \
+            --execution-environment gen2 \
+            --min-instances 1 \
+            --set-cloudsql-instances "$CLOUD_SQL_CONNECTION_NAME" \
+            --allow-unauthenticated \
+            --container n8n \
+            --image "$N8N_IMAGE_URI" \
+            --port 5678 \
+            --memory 1Gi \
+            --cpu 1 \
+            --depends-on processing-api \
+            --set-env-vars "DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=/cloudsql/$CLOUD_SQL_CONNECTION_NAME,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=$N8N_DB_NAME,DB_POSTGRESDB_USER=$N8N_DB_USER,N8N_PROTOCOL=https,N8N_HOST=$PUBLIC_HOST,WEBHOOK_URL=$PUBLIC_URL/,N8N_EDITOR_BASE_URL=$PUBLIC_URL/,GENERIC_TIMEZONE=America/Lima,TZ=America/Lima" \
+            --set-env-vars "PROCESSING_API_BASE_URL=http://127.0.0.1:8000" \
+            --set-secrets "DB_POSTGRESDB_PASSWORD=n8n-db-password:latest,N8N_ENCRYPTION_KEY=n8n-encryption-key:latest" \
+            --container processing-api \
+            --image "$API_IMAGE_URI" \
+            --memory 2Gi \
+            --cpu 1 \
+            --set-env-vars "MAX_UPLOAD_MB=$MAX_UPLOAD_VALUE,MIN_TEXT_CHARS_FOR_NATIVE_PDF=$MIN_TEXT_VALUE,GEMINI_MODEL=$GEMINI_MODEL_VALUE,ENABLE_GEMINI_FILE_SEARCH_UPLOAD=$ENABLE_UPLOAD_VALUE,GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT_VALUE,DOCUMENT_AI_LOCATION=$DOCUMENT_AI_LOCATION_VALUE,DOCUMENT_AI_PROCESSOR_ID=$DOCUMENT_AI_PROCESSOR_ID,GEMINI_FILE_SEARCH_STORE=$GEMINI_FILE_SEARCH_STORE" \
+            --set-secrets "GEMINI_API_KEY=gemini-api-key:latest"
+
+      - name: Deploy workflow sync job
+        run: |
+          gcloud run jobs deploy "$N8N_SYNC_JOB" \
+            --image "$N8N_IMAGE_URI" \
+            --region "$REGION" \
+            --service-account "$N8N_RUNTIME_SERVICE_ACCOUNT" \
+            --set-cloudsql-instances "$CLOUD_SQL_CONNECTION_NAME" \
+            --set-env-vars "DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=/cloudsql/$CLOUD_SQL_CONNECTION_NAME,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=$N8N_DB_NAME,DB_POSTGRESDB_USER=$N8N_DB_USER,N8N_PUBLISH_WORKFLOW_IDS=$N8N_PUBLISH_WORKFLOW_IDS,GENERIC_TIMEZONE=America/Lima,TZ=America/Lima" \
+            --set-secrets "DB_POSTGRESDB_PASSWORD=n8n-db-password:latest,N8N_ENCRYPTION_KEY=n8n-encryption-key:latest" \
+            --command "/bin/sh" \
+            --args "/opt/legalfam/bin/sync-n8n-workflows.sh"
+
+      - name: Import and publish workflows
+        run: gcloud run jobs execute "$N8N_SYNC_JOB" --region "$REGION" --wait
