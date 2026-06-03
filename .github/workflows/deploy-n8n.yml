@@ -106,6 +106,7 @@ jobs:
             --image "$API_IMAGE_URI" \
             --memory 2Gi \
             --cpu 1 \
+            --startup-probe "httpGet.path=/health,httpGet.port=8000,initialDelaySeconds=0,periodSeconds=10,timeoutSeconds=5,failureThreshold=12" \
             --set-env-vars "MAX_UPLOAD_MB=$MAX_UPLOAD_VALUE,MIN_TEXT_CHARS_FOR_NATIVE_PDF=$MIN_TEXT_VALUE,GEMINI_MODEL=$GEMINI_MODEL_VALUE,ENABLE_GEMINI_FILE_SEARCH_UPLOAD=$ENABLE_UPLOAD_VALUE,GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT_VALUE,DOCUMENT_AI_LOCATION=$DOCUMENT_AI_LOCATION_VALUE,DOCUMENT_AI_PROCESSOR_ID=$DOCUMENT_AI_PROCESSOR_ID,GEMINI_FILE_SEARCH_STORE=$GEMINI_FILE_SEARCH_STORE" \
             --set-secrets "GEMINI_API_KEY=gemini-api-key:latest"
 

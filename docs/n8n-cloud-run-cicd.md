@@ -337,3 +337,33 @@ scripts/sync-n8n-workflows.sh
 ```
 
 Python changes rebuild the processing sidecar. Workflow changes are imported and the configured workflow IDs are published again.
+
+## 17. Troubleshooting
+
+### `Dependent container 'processing-api' must have startup probe specified`
+
+This means Cloud Run accepted the multi-container shape, but rejected the deployment because `n8n` depends on `processing-api` and the dependent container needs a startup probe.
+
+The GitHub Actions workflow must include this flag under the `processing-api` container:
+
+```sh
+--startup-probe "httpGet.path=/health,httpGet.port=8000,initialDelaySeconds=0,periodSeconds=10,timeoutSeconds=5,failureThreshold=12"
+```
+
+The FastAPI service already exposes:
+
+```text
+GET /health
+```
+
+If this error appears, commit the workflow fix and rerun GitHub Actions. You do not need to manually create the Cloud Run service.
+
+### `Skipped validating Cloud SQL API...`
+
+This warning can appear when `gcloud` cannot contact the Service Usage API during validation. It is not the failure shown above. Still confirm these APIs are enabled in GCP:
+
+```text
+Cloud SQL Admin API
+Cloud Run Admin API
+Service Usage API
+```
