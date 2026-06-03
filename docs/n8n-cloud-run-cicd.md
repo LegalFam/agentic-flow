@@ -367,3 +367,47 @@ Cloud SQL Admin API
 Cloud Run Admin API
 Service Usage API
 ```
+
+### `Database connection timed out`
+
+This means n8n reached the Cloud SQL connector but PostgreSQL did not answer fast enough or the connection was interrupted.
+
+The deployment sets:
+
+```text
+DB_POSTGRESDB_CONNECTION_TIMEOUT=60000
+DB_PING_INTERVAL_SECONDS=10
+```
+
+If the error continues after redeploying, check:
+
+```sh
+gcloud sql databases list --instance=legalfam --project=legalfam-497502
+gcloud sql users list --instance=legalfam --project=legalfam-497502
+```
+
+Also confirm the runtime service account has:
+
+```text
+roles/cloudsql.client
+roles/secretmanager.secretAccessor
+```
+
+If credentials and IAM are correct but timeouts continue, the Cloud SQL tier may be too small for n8n startup/migrations. Upgrade the Cloud SQL instance tier before debugging application code.
+
+### `Cannot GET /`
+
+If `/` returns `Cannot GET /` after a deploy:
+
+1. Confirm GitHub variable `N8N_PUBLIC_URL` is the real Cloud Run URL, not `https://temporary-placeholder`.
+2. Rerun the GitHub Actions workflow after changing `N8N_PUBLIC_URL`.
+3. Try an incognito browser session or clear cookies for the Cloud Run domain.
+4. Try direct n8n routes:
+
+```text
+https://your-n8n-url/signin
+https://your-n8n-url/setup
+https://your-n8n-url/home/workflows
+```
+
+If those routes also return `Cannot GET`, read Cloud Run logs and verify the request is reaching the `n8n` container, not the `processing-api` sidecar.
