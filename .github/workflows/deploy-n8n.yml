@@ -25,6 +25,9 @@ env:
   N8N_PUBLIC_URL: ${{ vars.N8N_PUBLIC_URL }}
   N8N_PUBLISH_WORKFLOW_IDS: ${{ vars.N8N_PUBLISH_WORKFLOW_IDS }}
   CLOUD_SQL_CONNECTION_NAME: ${{ vars.CLOUD_SQL_CONNECTION_NAME }}
+  CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+  CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+  CLOUD_RUN_VPC_EGRESS: ${{ vars.CLOUD_RUN_VPC_EGRESS }}
   N8N_DB_NAME: ${{ vars.N8N_DB_NAME }}
   N8N_DB_USER: ${{ vars.N8N_DB_USER }}
   N8N_RUNTIME_SERVICE_ACCOUNT: ${{ vars.N8N_RUNTIME_SERVICE_ACCOUNT }}
@@ -85,6 +88,17 @@ jobs:
           MIN_TEXT_VALUE="${MIN_TEXT_CHARS_FOR_NATIVE_PDF:-800}"
           GOOGLE_PROJECT_VALUE="${GOOGLE_CLOUD_PROJECT:-$PROJECT_ID}"
           DOCUMENT_AI_LOCATION_VALUE="${DOCUMENT_AI_LOCATION:-us}"
+          VPC_FLAGS=()
+
+          if [[ -n "${CLOUD_RUN_VPC_NETWORK:-}" ]]; then
+            VPC_FLAGS+=(--network "$CLOUD_RUN_VPC_NETWORK")
+
+            if [[ -n "${CLOUD_RUN_VPC_SUBNET:-}" ]]; then
+              VPC_FLAGS+=(--subnet "$CLOUD_RUN_VPC_SUBNET")
+            fi
+
+            VPC_FLAGS+=(--vpc-egress "${CLOUD_RUN_VPC_EGRESS:-private-ranges-only}")
+          fi
 
           gcloud run deploy "$N8N_SERVICE" \
             --region "$REGION" \
@@ -96,6 +110,7 @@ jobs:
             --timeout 300 \
             --concurrency 20 \
             --set-cloudsql-instances "$CLOUD_SQL_CONNECTION_NAME" \
+            "${VPC_FLAGS[@]}" \
             --allow-unauthenticated \
             --container n8n \
             --image "$N8N_IMAGE_URI" \
@@ -117,11 +132,24 @@ jobs:
 
       - name: Deploy workflow sync job
         run: |
+          VPC_FLAGS=()
+
+          if [[ -n "${CLOUD_RUN_VPC_NETWORK:-}" ]]; then
+            VPC_FLAGS+=(--network "$CLOUD_RUN_VPC_NETWORK")
+
+            if [[ -n "${CLOUD_RUN_VPC_SUBNET:-}" ]]; then
+              VPC_FLAGS+=(--subnet "$CLOUD_RUN_VPC_SUBNET")
+            fi
+
+            VPC_FLAGS+=(--vpc-egress "${CLOUD_RUN_VPC_EGRESS:-private-ranges-only}")
+          fi
+
           gcloud run jobs deploy "$N8N_SYNC_JOB" \
             --image "$N8N_IMAGE_URI" \
             --region "$REGION" \
             --service-account "$N8N_RUNTIME_SERVICE_ACCOUNT" \
             --set-cloudsql-instances "$CLOUD_SQL_CONNECTION_NAME" \
+            "${VPC_FLAGS[@]}" \
             --set-env-vars "DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=/cloudsql/$CLOUD_SQL_CONNECTION_NAME,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=$N8N_DB_NAME,DB_POSTGRESDB_USER=$N8N_DB_USER,DB_POSTGRESDB_POOL_SIZE=2,DB_POSTGRESDB_CONNECTION_TIMEOUT=60000,DB_POSTGRESDB_IDLE_CONNECTION_TIMEOUT=120000,DB_PING_INTERVAL_SECONDS=10,N8N_PUBLISH_WORKFLOW_IDS=$N8N_PUBLISH_WORKFLOW_IDS,GENERIC_TIMEZONE=America/Lima,TZ=America/Lima" \
             --set-secrets "DB_POSTGRESDB_PASSWORD=n8n-db-password:latest,N8N_ENCRYPTION_KEY=n8n-encryption-key:latest" \
             --command "/bin/sh" \

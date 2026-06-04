@@ -181,10 +181,18 @@ N8N_SYNC_JOB=legalfam-n8n-sync
 N8N_PUBLIC_URL=https://your-n8n-domain-or-temporary-placeholder
 N8N_PUBLISH_WORKFLOW_IDS=zrMqCWRq1V6lsI7i
 CLOUD_SQL_CONNECTION_NAME=your-gcp-project-id:us-central1:your-cloud-sql-instance-id
+CLOUD_RUN_VPC_NETWORK=default
+CLOUD_RUN_VPC_SUBNET=default
+CLOUD_RUN_VPC_EGRESS=private-ranges-only
 N8N_DB_NAME=n8n
 N8N_DB_USER=n8n
 N8N_RUNTIME_SERVICE_ACCOUNT=legalfam-n8n-runtime@your-gcp-project-id.iam.gserviceaccount.com
 ```
+
+If your Cloud SQL instance uses private IP, set `CLOUD_RUN_VPC_NETWORK` and
+`CLOUD_RUN_VPC_SUBNET` to the VPC and subnet connected to the Cloud SQL private
+IP. Leave `CLOUD_RUN_VPC_EGRESS=private-ranges-only` unless you intentionally
+want all outbound traffic routed through the VPC.
 
 Add these Python sidecar variables:
 
@@ -361,6 +369,26 @@ scripts/sync-n8n-workflows.sh
 Python changes rebuild the processing sidecar. Workflow changes are imported and the configured workflow IDs are published again.
 
 ## 17. Troubleshooting
+
+### `dial tcp 10.x.x.x:3307: i/o timeout`
+
+This means Cloud Run is trying to reach Cloud SQL through a private IP, but the
+revision has no working route to the VPC that contains the Cloud SQL private IP.
+
+Fix the GitHub Actions repository variables:
+
+```text
+CLOUD_RUN_VPC_NETWORK=default
+CLOUD_RUN_VPC_SUBNET=default
+CLOUD_RUN_VPC_EGRESS=private-ranges-only
+```
+
+Use the actual network and subnet attached to your Cloud SQL instance if they
+are not `default`. Then rerun `Deploy n8n to Cloud Run`.
+
+The workflow applies these VPC settings to both `legalfam-n8n` and
+`legalfam-n8n-sync`. The sync job also connects to the n8n database when it
+imports and publishes workflows.
 
 ### `Dependent container 'processing-api' must have startup probe specified`
 
