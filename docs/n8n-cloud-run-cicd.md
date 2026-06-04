@@ -202,6 +202,20 @@ DOCUMENT_AI_PROCESSOR_ID=your-document-ai-processor-id
 
 If you do not know the final Cloud Run URL yet, set `N8N_PUBLIC_URL` to a temporary value for the first run, then update it after Cloud Run creates the service URL and rerun the workflow.
 
+## 8.1 Cloud Run Runtime Behavior
+
+The GitHub Actions deployment keeps n8n serverless while avoiding cold-start traffic before the database is ready:
+
+```text
+Cloud Run min instances=0
+Cloud Run max instances=1
+Cloud Run CPU always allocated while an instance is running
+n8n startup probe=/health/readiness
+N8N_ENDPOINT_HEALTH=health
+```
+
+`min instances=0` allows Cloud Run to scale the service down when idle. The n8n startup probe calls the readiness endpoint, so Cloud Run waits for n8n to connect to Cloud SQL before routing requests to a cold-started container.
+
 ## 9. Add GitHub Actions Repository Secrets
 
 In GitHub:
@@ -383,8 +397,10 @@ This means n8n reached the Cloud SQL connector but PostgreSQL did not answer fas
 The deployment sets:
 
 ```text
+Cloud Run min instances=0
 Cloud Run max instances=1
-Cloud Run CPU always allocated
+Cloud Run CPU always allocated while an instance is running
+n8n startup probe=/health/readiness
 DB_POSTGRESDB_CONNECTION_TIMEOUT=60000
 DB_POSTGRESDB_POOL_SIZE=2
 DB_POSTGRESDB_IDLE_CONNECTION_TIMEOUT=120000
