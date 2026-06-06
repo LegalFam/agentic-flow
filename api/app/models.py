@@ -227,3 +227,28 @@ class FileSearchStoreResolveResponse(BaseModel):
     name: str
     created: bool
     saved: bool
+
+
+class RagSearchRequest(BaseModel):
+    query: str
+    original_message: str | None = None
+    legal_category: str | None = None
+    canonical_category: str | None = None
+    canonical_subcategories: list[str] = Field(default_factory=list)
+    metadata_hints: list[str] = Field(default_factory=list)
+    search_terms: list[str] = Field(default_factory=list)
+    file_search_store_name: str | None = None
+
+
+class RagCitation(BaseModel):
+    file_id: str = ""
+    file_name: str = "Fuente legal"
+    snippet: str = ""
+    file_url: str = ""
+
+
+class RagSearchResponse(BaseModel):
+    answer: str
+    citations: list[RagCitation] = Field(default_factory=list)
+    valid: bool
+    retry_suggestion: str | None = None

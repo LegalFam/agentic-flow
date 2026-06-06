@@ -3,7 +3,12 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from app.config import settings
 from app.converter import convert_pdf_to_markdown
 from app.conversion_jobs import get_conversion_job, start_conversion_job
-from app.gemini_client import extract_metadata_with_gemini, resolve_file_search_store, upload_to_file_search_store
+from app.gemini_client import (
+    extract_metadata_with_gemini,
+    resolve_file_search_store,
+    search_legal_rag,
+    upload_to_file_search_store,
+)
 from app.models import (
     ConversionJobResponse,
     ConversionResponse,
@@ -13,6 +18,8 @@ from app.models import (
     FileSearchStoreResolveResponse,
     MetadataRequest,
     MetadataResponse,
+    RagSearchRequest,
+    RagSearchResponse,
 )
 
 app = FastAPI(title="Legal PDF Processing API", version="0.1.0")
@@ -98,6 +105,25 @@ async def resolve_store(payload: FileSearchStoreResolveRequest) -> FileSearchSto
             resolve_file_search_store(
                 display_name=payload.display_name,
                 create_if_missing=payload.create_if_missing,
+            )
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/rag-search", response_model=RagSearchResponse)
+async def rag_search(payload: RagSearchRequest) -> RagSearchResponse:
+    try:
+        return RagSearchResponse.model_validate(
+            search_legal_rag(
+                query=payload.query,
+                original_message=payload.original_message,
+                legal_category=payload.legal_category,
+                canonical_category=payload.canonical_category,
+                canonical_subcategories=payload.canonical_subcategories,
+                metadata_hints=payload.metadata_hints,
+                search_terms=payload.search_terms,
+                file_search_store_name=payload.file_search_store_name,
             )
         )
     except Exception as exc:

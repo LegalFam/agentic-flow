@@ -272,6 +272,145 @@ def resolve_file_search_store(display_name: str, create_if_missing: bool) -> dic
     }
 
 
+def search_legal_rag(
+    query: str,
+    original_message: str | None,
+    legal_category: str | None,
+    canonical_category: str | None,
+    canonical_subcategories: list[str],
+    metadata_hints: list[str],
+    search_terms: list[str],
+    file_search_store_name: str | None,
+) -> dict[str, Any]:
+    if not settings.gemini_api_key:
+        raise RuntimeError("GEMINI_API_KEY no esta configurado")
+
+    store_name = file_search_store_name or settings.gemini_file_search_store
+    if not store_name:
+        raise RuntimeError("file_search_store_name o GEMINI_FILE_SEARCH_STORE no esta configurado")
+
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=settings.gemini_api_key)
+    prompt = build_rag_search_prompt(
+        query=query,
+        original_message=original_message,
+        legal_category=legal_category,
+        canonical_category=canonical_category,
+        canonical_subcategories=canonical_subcategories,
+        metadata_hints=metadata_hints,
+        search_terms=search_terms,
+    )
+    response = client.models.generate_content(
+        model=settings.gemini_model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0,
+            tools=[types.Tool(file_search=types.FileSearch(file_search_store_names=[store_name]))],
+        ),
+    )
+
+    answer = _extract_response_text(response)
+    citations = _extract_grounding_citations(response)
+    valid = bool(answer and citations)
+    retry_suggestion = None
+    if not valid:
+        retry_suggestion = (
+            "Reintenta con una consulta mas amplia que incluya la pregunta original, "
+            "la categoria canonica y terminos juridicos alternativos."
+        )
+        if not answer:
+            answer = (
+                "No encontre suficiente respaldo legal en el corpus para responder con seguridad."
+            )
+
+    return {
+        "answer": answer,
+        "citations": citations,
+        "valid": valid,
+        "retry_suggestion": retry_suggestion,
+    }
+
+
+def build_rag_search_prompt(
+    query: str,
+    original_message: str | None,
+    legal_category: str | None,
+    canonical_category: str | None,
+    canonical_subcategories: list[str],
+    metadata_hints: list[str],
+    search_terms: list[str],
+) -> str:
+    return f"""
+Consulta del usuario: {original_message or query}
+Consulta de busqueda: {query}
+Categoria legal: {legal_category or ""}
+Categoria canonica: {canonical_category or ""}
+Subcategorias canonicas: {", ".join(canonical_subcategories)}
+Metadata preferida: {" ".join(metadata_hints)}
+Terminos de busqueda: {", ".join(search_terms)}
+
+Usa File Search para recuperar contexto legal peruano relevante.
+Responde solo con informacion sustentada por el contexto recuperado.
+Si el contexto recuperado no responde la pregunta, dilo claramente.
+No inventes articulos, fuentes ni enlaces.
+""".strip()
+
+
+def _extract_response_text(response: Any) -> str:
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+
+    chunks: list[str] = []
+    for candidate in getattr(response, "candidates", None) or []:
+        content = getattr(candidate, "content", None)
+        for part in getattr(content, "parts", None) or []:
+            part_text = getattr(part, "text", None)
+            if isinstance(part_text, str) and part_text.strip():
+                chunks.append(part_text.strip())
+    return "\n\n".join(chunks).strip()
+
+
+def _extract_grounding_citations(response: Any) -> list[dict[str, str]]:
+    citations: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    for candidate in getattr(response, "candidates", None) or []:
+        grounding_metadata = getattr(candidate, "grounding_metadata", None)
+        chunks = getattr(grounding_metadata, "grounding_chunks", None) or []
+        for chunk in chunks:
+            context = getattr(chunk, "retrieved_context", None)
+            if context is None:
+                continue
+
+            custom_metadata = getattr(context, "custom_metadata", None) or []
+            metadata = {
+                str(getattr(item, "key", "")): str(getattr(item, "string_value", ""))
+                for item in custom_metadata
+                if getattr(item, "key", None)
+            }
+            file_name = metadata.get("titulo") or getattr(context, "title", None) or "Fuente legal"
+            file_url = metadata.get("fuente") or ""
+            snippet = getattr(context, "text", None) or ""
+            file_id = getattr(context, "title", None) or metadata.get("identificador") or ""
+            key = "|".join([file_name, file_url, snippet[:120]])
+            if key in seen:
+                continue
+            seen.add(key)
+            citations.append(
+                {
+                    "file_id": file_id,
+                    "file_name": file_name,
+                    "snippet": snippet,
+                    "file_url": file_url,
+                }
+            )
+
+    return citations
+
+
 def _build_custom_metadata(types, metadata: LegalMetadata) -> list[Any]:
     custom_metadata: list[Any] = []
     for key, value in metadata.model_dump().items():
