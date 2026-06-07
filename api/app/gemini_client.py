@@ -391,10 +391,11 @@ def _extract_grounding_citations(response: Any) -> list[dict[str, str]]:
                 for item in custom_metadata
                 if getattr(item, "key", None)
             }
-            file_name = metadata.get("titulo") or getattr(context, "title", None) or "Fuente legal"
-            file_url = metadata.get("fuente") or ""
-            snippet = getattr(context, "text", None) or ""
-            file_id = getattr(context, "title", None) or metadata.get("identificador") or ""
+            context_title = _clean_user_text(getattr(context, "title", None))
+            file_name = _clean_user_text(metadata.get("titulo")) or context_title or "Fuente legal"
+            file_url = _clean_user_text(metadata.get("fuente"))
+            snippet = _clean_user_text(getattr(context, "text", None))
+            file_id = _clean_user_text(metadata.get("identificador")) or context_title
             key = "|".join([file_name, file_url, snippet[:120]])
             if key in seen:
                 continue
@@ -423,10 +424,40 @@ def _build_custom_metadata(types, metadata: LegalMetadata) -> list[Any]:
         custom_metadata.append(
             types.CustomMetadata(
                 key=metadata_key,
-                string_value=_fit_custom_metadata_value(str(value)),
+                string_value=_fit_custom_metadata_value(_clean_user_text(value)),
             )
         )
     return custom_metadata
+
+
+def _clean_user_text(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value)
+    text = _repair_mojibake(text)
+    text = unicodedata.normalize("NFC", text)
+    text = text.replace("\u00a0", " ")
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _repair_mojibake(text: str) -> str:
+    if "Ã" not in text and "Â" not in text and "â" not in text:
+        return text
+    try:
+        repaired = text.encode("latin1").decode("utf-8")
+    except UnicodeError:
+        repaired = text
+    return (
+        repaired
+        .replace("�", "")
+        .replace("â€œ", "\"")
+        .replace("â€", "\"")
+        .replace("â€˜", "'")
+        .replace("â€™", "'")
+        .replace("â€“", "-")
+        .replace("â€”", "-")
+    )
 
 
 def _validate_custom_metadata_lengths(custom_metadata: list[Any]) -> None:

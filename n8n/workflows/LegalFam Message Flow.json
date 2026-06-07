@@ -3,6 +3,7 @@
   "nodes": [
     {
       "parameters": {
+        "modelName": "models/gemini-3.1-pro-preview",
         "options": {}
       },
       "id": "3e148e01-ea54-4f8d-9179-8a91c2e739f8",
@@ -41,7 +42,7 @@
         "url": "http://processing-api:8000/rag-search",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ {\n  query: $fromAI('query', 'A legal retrieval query. If the first result is invalid, retry once with broader legal synonyms and the canonical category.'),\n  original_message: $('Merge1').item.json.output?.original_message || '',\n  legal_category: $('Merge1').item.json.output?.category || '',\n  canonical_category: $('Merge1').item.json.retrieval?.canonicalCategory || '',\n  canonical_subcategories: $('Merge1').item.json.retrieval?.canonicalSubcategories || [],\n  metadata_hints: $('Merge1').item.json.retrieval?.metadataHints || [],\n  search_terms: $('Merge1').item.json.retrieval?.searchTerms || [],\n  file_search_store_name: $('Merge1').item.json['Search Store']\n} }}",
+        "jsonBody": "={{ {\n  query: $fromAI('query', 'A legal retrieval query. If the first result is invalid, retry once with broader legal synonyms and the canonical category.'),\n  original_message: $('Prepare RAG Agent Input').item.json.rag.original_message,\n  legal_category: $('Prepare RAG Agent Input').item.json.rag.legal_category,\n  canonical_category: $('Prepare RAG Agent Input').item.json.rag.canonical_category,\n  canonical_subcategories: $('Prepare RAG Agent Input').item.json.rag.canonical_subcategories,\n  metadata_hints: $('Prepare RAG Agent Input').item.json.rag.metadata_hints,\n  search_terms: $('Prepare RAG Agent Input').item.json.rag.search_terms,\n  file_search_store_name: $('Prepare RAG Agent Input').item.json.rag.file_search_store_name\n} }}",
         "options": {}
       },
       "id": "a537caf7-af68-45a2-a543-4a37f7ef0320",
@@ -70,10 +71,10 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=Mensaje del usuario: \"{{ $json.output.original_message }}\"\nCategoria: \"{{ $json.output.category }}\"\nCategoria canonica: \"{{ $json.retrieval.canonicalCategory }}\"\nSubcategorias canonicas: \"{{ $json.retrieval.canonicalSubcategories.join(', ') }}\"\nMetadata preferida: \"{{ $json.retrieval.metadataHints.join(' ') }}\"\nTerminos de busqueda: \"{{ $json.retrieval.searchTerms.join(', ') }}\"",
+        "text": "={{ $json.rag_prompt }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Eres un agente RAG legal de Derecho de Familia peruano.\n\nDebes usar siempre la herramienta SearchStore antes de responder.\n\nProceso obligatorio:\n1. Llama SearchStore con una consulta que conserve la pregunta original e incluya categoria canonica, subcategorias, terminos de busqueda y metadata preferida.\n2. Revisa el resultado de SearchStore.\n3. Considera valido el resultado solo si valid=true, answer responde directamente la pregunta del usuario, y citations contiene fuentes relacionadas con la categoria consultada.\n4. Si el primer resultado no es valido, no responde todavia: llama SearchStore una segunda vez con una consulta reformulada, mas amplia, usando sinonimos juridicos, categoria canonica y terminos alternativos.\n5. Despues del segundo intento, devuelve el mejor resultado disponible. Si sigue sin ser valido, explica que no hay suficiente respaldo en el corpus y pide al usuario reformular con mas detalles generales.\n\nContrato de salida obligatorio:\n- Devuelve siempre un objeto con answer y citations.\n- answer debe estar en espanol claro y no debe mencionar detalles tecnicos.\n- citations debe ser exactamente el arreglo de citas validas devuelto por SearchStore, o [] si no hay fuentes utiles.\n- No inventes articulos, enlaces, nombres de documentos ni citas."
+          "systemMessage": "Eres un agente RAG legal de Derecho de Familia peruano.\n\nDebes usar siempre la herramienta SearchStore antes de responder.\n\nProceso obligatorio:\n1. Llama SearchStore con una consulta que conserve la pregunta original e incluya categoria canonica, subcategorias, terminos de busqueda y metadata preferida.\n2. Revisa el resultado de SearchStore.\n3. Considera valido el resultado solo si valid=true, answer responde directamente la pregunta del usuario, y citations contiene fuentes relacionadas con la categoria consultada.\n4. Si el primer resultado no es valido, no responde todavia: llama SearchStore una segunda vez con una consulta reformulada, mas amplia, usando sinonimos juridicos, categoria canonica y terminos alternativos.\n5. Despues del segundo intento, devuelve el mejor resultado disponible. Si sigue sin ser valido, explica que no hay suficiente respaldo en el corpus y pide al usuario reformular con mas detalles generales.\n\nContrato de salida obligatorio:\n- Devuelve exclusivamente JSON valido, sin Markdown, sin bloque ```json, sin texto antes ni despues.\n- El JSON debe tener exactamente esta forma: {\"answer\":\"texto en espanol\",\"citations\":[]}.\n- answer debe ser un string en espanol claro y no debe mencionar detalles tecnicos.\n- citations debe ser exactamente el arreglo de citas validas devuelto por SearchStore, o [] si no hay fuentes utiles.\n- Si SearchStore devuelve texto plano, extrae su respuesta a answer y usa citations: [].\n- No inventes articulos, enlaces, nombres de documentos ni citas."
         }
       },
       "id": "54a7cbf5-3484-4f9e-8b55-46d2fece87a8",
@@ -83,8 +84,21 @@
         2512,
         608
       ],
-      "typeVersion": 3,
+      "typeVersion": 3.1,
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $json.output || {};\nconst retrieval = $json.retrieval || {};\nconst stringArray = (value) => Array.isArray(value)\n  ? value.map((item) => String(item || '').trim()).filter(Boolean)\n  : [];\nconst rag = {\n  original_message: String(output.original_message || '').trim(),\n  legal_category: String(output.category || '').trim(),\n  canonical_category: String(retrieval.canonicalCategory || '').trim(),\n  canonical_subcategories: stringArray(retrieval.canonicalSubcategories),\n  metadata_hints: stringArray(retrieval.metadataHints),\n  search_terms: stringArray(retrieval.searchTerms),\n  file_search_store_name: String($json['Search Store'] || '').trim()\n};\nconst rag_prompt = [\n  `Mensaje del usuario: \"${rag.original_message}\"`,\n  `Categoria: \"${rag.legal_category}\"`,\n  `Categoria canonica: \"${rag.canonical_category}\"`,\n  `Subcategorias canonicas: \"${rag.canonical_subcategories.join(', ')}\"`,\n  `Metadata preferida: \"${rag.metadata_hints.join(' ')}\"`,\n  `Terminos de busqueda: \"${rag.search_terms.join(', ')}\"`\n].join('\\n');\nreturn [{ json: { ...$json, rag, rag_prompt } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2368,
+        608
+      ],
+      "id": "5bad79e2-6a6e-411f-9ad2-e4cfe856d51a",
+      "name": "Prepare RAG Agent Input"
     },
     {
       "parameters": {
@@ -236,7 +250,8 @@
     },
     {
       "parameters": {
-        "jsonSchemaExample": "{\n  \"answer\": \"De acuerdo con el Código Civil, la pensión de alimentos se calcula en base a...\",\n  \"citations\": [\n    {\n      \"file_id\": \"doc_001\",\n      \"file_name\": \"Codigo_Civil_Peru.pdf\",\n      \"snippet\": \"Artículo 472.- Se entiende por alimentos lo que es indispensable para el sustento...\",\n      \"file_url\": \"https://url-al-archivo.com/doc_001\"\n    }\n  ]\n}"
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"RagAnswer\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"answer\": {\n      \"type\": \"string\"\n    },\n    \"citations\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"file_id\": {\n            \"type\": \"string\"\n          },\n          \"file_name\": {\n            \"type\": \"string\"\n          },\n          \"snippet\": {\n            \"type\": \"string\"\n          },\n          \"file_url\": {\n            \"type\": \"string\"\n          }\n        },\n        \"additionalProperties\": true\n      }\n    }\n  },\n  \"required\": [\n    \"answer\",\n    \"citations\"\n  ],\n  \"additionalProperties\": false\n}"
       },
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
@@ -388,7 +403,7 @@
         "text": "=Pregunta original: \"{{ $('Merge1').item.json.output.original_message }}\"\nCategoria legal: \"{{ $('Merge1').item.json.output.category }}\"\nCategoria canonica: \"{{ $('Merge1').item.json.retrieval.canonicalCategory }}\"\nSubcategorias canonicas: \"{{ $('Merge1').item.json.retrieval.canonicalSubcategories.join(', ') }}\"\nMetadata preferida: \"{{ $('Merge1').item.json.retrieval.metadataHints.join(' ') }}\"\nTerminos de busqueda: \"{{ $('Merge1').item.json.retrieval.searchTerms.join(', ') }}\"\nRespuesta validada del RAG Agent: {{ JSON.stringify($json.output || $json) }}",
         "hasOutputParser": true,
         "options": {
-          "systemMessage": "Eres el agente XAI de LegalFam. Tu tarea es transformar la respuesta RAG en una orientacion legal clara, amable y explicable para usuarios en Peru. Usa la memoria conversacional de esta misma session para recordar solicitudes previas, hechos generales ya mencionados y continuidad del caso.\n\nDevuelve siempre un objeto con answer y citations.\n\nFormato obligatorio de answer en Markdown seguro:\n### Resumen de tu situacion\n- Resume solo los hechos generales que el usuario dio en este mensaje y en la memoria de esta misma session.\n- Si faltan datos, dilo con frases como \"Con lo que cuentas hasta ahora...\".\n- No pidas datos personales sensibles; pide solo datos generales utiles.\n- Si usas informacion recordada, tratala como contexto probable y no como hecho absoluto cuando haya duda.\n\n### Orientacion legal clara\n- Explica la orientacion en lenguaje simple.\n- Manten respaldo legal y no inventes normas.\n- Si la evidencia recuperada es insuficiente, indicalo y sugiere como reformular la consulta.\n\n### Pasos sugeridos\n- Da pasos preliminares y prudentes, no instrucciones absolutas.\n- Recomienda apoyo especializado cuando pueda haber riesgo, violencia, menores, urgencia o plazos.\n\n### Glosario breve\n- Incluye solo terminos juridicos usados en la respuesta.\n- Explica cada termino en una frase corta y simple.\n\nReglas de seguridad:\n- Si la entrada RAG tiene error, esta vacia, no tiene answer, o menciona problemas con parts/candidates/content, responde de forma controlada: explica que no se encontro suficiente respaldo para responder con seguridad y pide una consulta mas concreta con ejemplos amigables.\n- No menciones detalles tecnicos como RAG, parser, metadata, parts, candidates, modelo, flujo o webhook al usuario.\n- No incluyas una seccion de fuentes, bibliografia, enlaces, documentos usados ni citas dentro de answer. Las fuentes se muestran fuera del mensaje en la interfaz.\n- citations debe conservar exactamente las citas validas recibidas desde el RAG Agent. Si no hay citas validas, usa [].\n- No inventes file_url, file_name ni snippets."
+          "systemMessage": "Eres el agente XAI de LegalFam. Tu tarea es transformar la respuesta RAG en una orientacion legal clara, amable y explicable para usuarios en Peru. Usa la memoria conversacional de esta misma session para recordar solicitudes previas, hechos generales ya mencionados y continuidad del caso.\n\nDevuelve siempre un objeto con answer y citations.\n\nFormato obligatorio de answer en Markdown seguro:\n### Resumen de tu situacion\n- Resume solo los hechos generales que el usuario dio en este mensaje y en la memoria de esta misma session.\n- Si faltan datos, dilo con frases como \"Con lo que cuentas hasta ahora...\".\n- No pidas datos personales sensibles; pide solo datos generales utiles.\n- Si usas informacion recordada, tratala como contexto probable y no como hecho absoluto cuando haya duda.\n\n### Orientacion legal clara\n- Explica la orientacion en lenguaje simple.\n- Manten respaldo legal y no inventes normas.\n- Si la evidencia recuperada es insuficiente, indicalo y sugiere como reformular la consulta.\n\n### Pasos sugeridos\n- Da pasos preliminares y prudentes, no instrucciones absolutas.\n- Recomienda apoyo especializado cuando pueda haber riesgo, violencia, menores, urgencia o plazos.\n\n### Glosario breve\n- Incluye solo terminos juridicos usados en la respuesta.\n- Explica cada termino en una frase corta y simple.\n\nReglas de seguridad:\n- Si la entrada RAG tiene error, esta vacia, no tiene answer, o menciona problemas con parts/candidates/content, responde de forma controlada: explica que no se encontro suficiente respaldo para responder con seguridad y pide una consulta mas concreta con ejemplos amigables.\n- No menciones detalles tecnicos como RAG, parser, metadata, parts, candidates, modelo, flujo o webhook al usuario.\n- No incluyas una seccion de fuentes, bibliografia, enlaces, documentos usados ni citas dentro de answer. Las fuentes se muestran fuera del mensaje en la interfaz.\n- citations debe conservar las citas validas recibidas desde el RAG Agent, pero puede limpiar file_name y snippet para corregir caracteres rotos de espanol como CÃ³digo -> Código, pensiÃ³n -> pensión, niÃ±o -> niño, y comillas/guiones mojibake.\n- No cambies file_url ni inventes file_name, file_url o snippets. Si no hay citas validas, usa []."
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -408,7 +423,7 @@
       "main": [
         [
           {
-            "node": "RAG Agent",
+            "node": "Prepare RAG Agent Input",
             "type": "main",
             "index": 0
           }
@@ -576,6 +591,17 @@
           {
             "node": "RAG Agent",
             "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare RAG Agent Input": {
+      "main": [
+        [
+          {
+            "node": "RAG Agent",
+            "type": "main",
             "index": 0
           }
         ]
