@@ -322,7 +322,7 @@ def search_legal_rag(
         )
         if not answer:
             answer = (
-                "No encontre suficiente respaldo legal en el corpus para responder con seguridad."
+                "La busqueda no devolvio una respuesta sustantiva; orienta con prudencia usando la categoria legal y la pregunta original."
             )
 
     return {
@@ -353,7 +353,7 @@ Terminos de busqueda: {", ".join(search_terms)}
 
 Usa File Search para recuperar contexto legal peruano relevante.
 Responde solo con informacion sustentada por el contexto recuperado.
-Si el contexto recuperado no responde la pregunta, dilo claramente.
+Si el contexto recuperado es debil o incompleto, responde la pregunta de Derecho de Familia con la mejor orientacion general prudente que puedas dar, aclarando los limites sin solicitar mas detalles solo por falta de respaldo.
 No inventes articulos, fuentes ni enlaces.
 """.strip()
 
