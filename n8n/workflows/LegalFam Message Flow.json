@@ -6,12 +6,12 @@
         "modelName": "models/gemini-3.1-pro-preview",
         "options": {}
       },
-      "id": "3e148e01-ea54-4f8d-9179-8a91c2e739f8",
+      "id": "d8cc00b8-eaec-4b24-9c76-79372e7a316e",
       "name": "Google Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "position": [
-        2352,
-        960
+        480,
+        2112
       ],
       "typeVersion": 1,
       "credentials": {
@@ -27,12 +27,12 @@
         "combineBy": "combineAll",
         "options": {}
       },
-      "id": "78b67650-d1a0-42f9-bff8-04d814d77af2",
+      "id": "5076fac4-ce41-4bef-8e50-2d5801874684",
       "name": "Merge1",
       "type": "n8n-nodes-base.merge",
       "position": [
-        2304,
-        640
+        304,
+        1792
       ],
       "typeVersion": 3.2
     },
@@ -45,12 +45,12 @@
         "jsonBody": "={{ {\n  query: $fromAI('query', 'A legal retrieval query. If the first result is invalid, retry once with broader legal synonyms and the canonical category.'),\n  original_message: $('Prepare RAG Agent Input').item.json.rag.original_message,\n  legal_category: $('Prepare RAG Agent Input').item.json.rag.legal_category,\n  canonical_category: $('Prepare RAG Agent Input').item.json.rag.canonical_category,\n  canonical_subcategories: $('Prepare RAG Agent Input').item.json.rag.canonical_subcategories,\n  metadata_hints: $('Prepare RAG Agent Input').item.json.rag.metadata_hints,\n  search_terms: $('Prepare RAG Agent Input').item.json.rag.search_terms,\n  file_search_store_name: $('Prepare RAG Agent Input').item.json.rag.file_search_store_name\n} }}",
         "options": {}
       },
-      "id": "a537caf7-af68-45a2-a543-4a37f7ef0320",
+      "id": "3563a8e1-4a68-424e-b244-32d66ab2ef8d",
       "name": "SearchStore",
       "type": "n8n-nodes-base.httpRequestTool",
       "position": [
-        2672,
-        960
+        672,
+        2112
       ],
       "typeVersion": 4.3
     },
@@ -59,12 +59,12 @@
         "sessionIdType": "customKey",
         "sessionKey": "={{ $('Parser Agent').item.json.output.session_id }}"
       },
-      "id": "7bcc08e0-3753-45fe-bce9-dc24770be7db",
+      "id": "3bb0c74e-6522-4af0-9f8f-4b7c29b52294",
       "name": "Simple Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "position": [
-        3104,
-        960
+        1216,
+        2112
       ],
       "typeVersion": 1.3
     },
@@ -77,12 +77,12 @@
           "systemMessage": "Eres un agente RAG legal de Derecho de Familia peruano.\n\nDebes usar siempre la herramienta SearchStore antes de responder.\n\nProceso obligatorio:\n1. Llama SearchStore con una consulta que conserve la pregunta original e incluya categoria canonica, subcategorias, terminos de busqueda y metadata preferida.\n2. Revisa el resultado de SearchStore.\n3. Considera valido el resultado solo si valid=true, answer responde directamente la pregunta del usuario, y citations contiene fuentes relacionadas con la categoria consultada.\n4. Si el primer resultado no es valido, no responde todavia: llama SearchStore una segunda vez con una consulta reformulada, mas amplia, usando sinonimos juridicos, categoria canonica y terminos alternativos.\n5. Despues del segundo intento, devuelve el mejor resultado disponible para orientar la consulta de Derecho de Familia. Si las citas son debiles o no hay citas utiles, responde de forma prudente con la mejor orientacion legal general disponible y usa citations: [].\n\nContrato de salida obligatorio:\n- Devuelve exclusivamente JSON valido, sin Markdown, sin bloque ```json, sin texto antes ni despues.\n- El JSON debe tener exactamente esta forma: {\"answer\":\"texto en espanol\",\"citations\":[]}.\n- answer debe ser un string en espanol claro y no debe mencionar detalles tecnicos.\n- citations debe ser exactamente el arreglo de citas validas devuelto por SearchStore, o [] si no hay fuentes utiles.\n- Si SearchStore devuelve texto plano, extrae su respuesta a answer y usa citations: [].\n- No inventes articulos, enlaces, nombres de documentos ni citas."
         }
       },
-      "id": "54a7cbf5-3484-4f9e-8b55-46d2fece87a8",
+      "id": "722b91ab-1130-49e7-957e-e447e1d5199f",
       "name": "RAG Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "position": [
-        2512,
-        608
+        592,
+        1792
       ],
       "typeVersion": 3.1,
       "onError": "continueRegularOutput"
@@ -94,10 +94,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2368,
-        608
+        448,
+        1792
       ],
-      "id": "5bad79e2-6a6e-411f-9ad2-e4cfe856d51a",
+      "id": "eab080c9-61b8-4901-9260-615ad7cf4e42",
       "name": "Prepare RAG Agent Input"
     },
     {
@@ -108,10 +108,10 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        1744,
-        912
+        -272,
+        2064
       ],
-      "id": "7d1ccce8-45d4-41c9-9ce1-7185911a964b",
+      "id": "e1fb94f4-6d04-4114-a6f8-f53a023cc119",
       "name": "Structured Output Parser"
     },
     {
@@ -121,10 +121,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1536,
-        912
+        -480,
+        2064
       ],
-      "id": "c39df7f3-1837-4a04-a528-0f7f1c56b153",
+      "id": "afe2e2d7-6894-48ad-aa51-668a27d629ee",
       "name": "Google Gemini Chat Model1",
       "credentials": {
         "googlePalmApi": {
@@ -140,12 +140,12 @@
         "width": 656,
         "color": 7
       },
-      "id": "aaa252ef-ef5a-4622-91ea-90de508e961a",
+      "id": "6aca7cc5-58de-41af-8240-ee790fae4fd1",
       "name": "Sticky Note5",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        2288,
-        464
+        288,
+        1616
       ],
       "typeVersion": 1
     },
@@ -156,12 +156,12 @@
         "width": 976,
         "color": 7
       },
-      "id": "2c537502-8570-469a-ad48-3dcedc2f8c95",
+      "id": "f79e6d8d-daa3-4fe3-8567-eb00d17e2757",
       "name": "Sticky Note4",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        1296,
-        464
+        -720,
+        1616
       ],
       "typeVersion": 1
     },
@@ -177,10 +177,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1568,
-        688
+        -448,
+        1840
       ],
-      "id": "0321f96f-3622-488c-a57b-ee83d634cdaa",
+      "id": "51f858bf-6f77-4741-8b0b-5b2bb6b99715",
       "name": "Parser Agent",
       "alwaysOutputData": false
     },
@@ -191,12 +191,12 @@
         "width": 656,
         "color": 7
       },
-      "id": "4f71057b-cb35-4f60-b25b-cbc779e26544",
+      "id": "1d4a77ec-3d4a-4f18-a34d-089b8d615f8a",
       "name": "Sticky Note6",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        2960,
-        464
+        960,
+        1616
       ],
       "typeVersion": 1
     },
@@ -211,10 +211,10 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        1328,
-        688
+        -688,
+        1840
       ],
-      "id": "336d18c5-e891-4edd-8cb8-443c813ba60f",
+      "id": "71aaf36d-afd6-454c-9a88-5bf48dcf1288",
       "name": "Webhook",
       "webhookId": "e4f21899-c504-4373-a3ef-6eddf35d655b",
       "alwaysOutputData": false,
@@ -239,12 +239,12 @@
         },
         "options": {}
       },
-      "id": "5e41ceb9-f1e0-4764-880a-5c080893ebab",
+      "id": "e7456645-969c-43da-a729-5477c0c383a4",
       "name": "Get FileStore Name1",
       "type": "n8n-nodes-base.set",
       "position": [
-        2096,
-        528
+        96,
+        1680
       ],
       "typeVersion": 3.4
     },
@@ -256,10 +256,10 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        2816,
-        960
+        816,
+        2112
       ],
-      "id": "647cc64a-455a-4cf1-a2c4-df9f71d2cf0a",
+      "id": "ee8d3a47-dc1a-48df-a279-c4a24171a5c7",
       "name": "Structured Output Parser1"
     },
     {
@@ -289,10 +289,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1856,
-        688
+        -160,
+        1840
       ],
-      "id": "e5bddf91-8bcd-4fb9-bd60-09d56ed777bb",
+      "id": "3e8cc168-c04d-472f-9586-1d37043ca1ee",
       "name": "If Relevant"
     },
     {
@@ -302,10 +302,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2096,
-        688
+        96,
+        1840
       ],
-      "id": "44df3d61-5974-4d77-aee4-42f5658f702d",
+      "id": "e201b2c8-451a-4369-8c41-15da16b4b9d1",
       "name": "Map Retrieval Metadata"
     },
     {
@@ -317,10 +317,10 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        2096,
-        864
+        96,
+        2016
       ],
-      "id": "dce6ad35-6515-4f71-a403-2e7788d0660b",
+      "id": "e3cfe24c-f72f-4006-9441-fef65a10d912",
       "name": "Respond without RAG"
     },
     {
@@ -332,37 +332,11 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        3504,
-        608
+        1504,
+        1760
       ],
-      "id": "53c961e4-16fd-4638-86a4-0e5c13c568ce",
+      "id": "7f506e58-f65e-47be-a754-da7973899e3f",
       "name": "Respond with XAI"
-    },
-    {
-      "parameters": {
-        "content": "## Done\nLa busqueda RAG ahora usa la categoria clasificada, terminos canonicos y metadata compacta como hints de recuperacion."
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "position": [
-        2640,
-        1136
-      ],
-      "typeVersion": 1,
-      "id": "443d1b05-ab88-42bf-8ed6-d299ae96936f",
-      "name": "Sticky Note3"
-    },
-    {
-      "parameters": {
-        "content": "## TODO\nIncluir memoria + posible llamada a endpoint backend para recuperar conversacion previa"
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "position": [
-        3136,
-        1136
-      ],
-      "typeVersion": 1,
-      "id": "9d689058-bbbc-4218-8c45-f9ba6a0f04c5",
-      "name": "Sticky Note7"
     },
     {
       "parameters": {
@@ -371,10 +345,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        3072,
-        960
+        1056,
+        2112
       ],
-      "id": "2b7f4d9e-7de4-4b79-80b4-13ecf76031e5",
+      "id": "f0a3e89c-9e77-4c93-a29e-aa91634fb338",
       "name": "Google Gemini Chat Model XAI",
       "credentials": {
         "googlePalmApi": {
@@ -391,10 +365,10 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        3344,
-        960
+        1392,
+        2112
       ],
-      "id": "4fb6d1d2-9e21-44eb-8c7d-e39f07683a40",
+      "id": "bc789afe-f3f4-4838-949d-b38b82d89aad",
       "name": "XAI Output Parser"
     },
     {
@@ -409,10 +383,10 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        3104,
-        608
+        1152,
+        1760
       ],
-      "id": "c5140e3d-b5b6-481f-bf1a-a830d812d99b",
+      "id": "c1450c8f-870f-4749-97be-0f3e12c154f7",
       "name": "XAI Agent",
       "alwaysOutputData": true
     }
@@ -624,7 +598,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "47b5853e-9f9e-407f-9152-eba9af71a070",
+  "versionId": "e967c09d-9108-4dbb-8400-0f91c4d41c46",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "b4fe1b7f55c924806604a2431485ada3cf45cd4c8e6a1134735f55424b9bdf63"
