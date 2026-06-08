@@ -311,7 +311,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.message || \"Puedo ayudarte mejor si me cuentas un poco mas sobre tu situacion familiar y que necesitas decidir. Por ejemplo: **Quiero saber como pedir pension de alimentos para mi hijo**, **Necesito orientacion sobre tenencia y visitas** o **Quiero saber que hacer ante violencia familiar**.\") }},\n  \"citations\": [],\n  \"confidenceStatus\": \"LOW\",\n  \"confidenceReason\": \"La consulta necesita una descripcion familiar general antes de orientar con seguridad.\",\n  \"clarifyingQuestions\": [\"Cuenta de forma general que ocurre y que necesitas decidir, sin nombres, DNI, telefonos ni direcciones.\"],\n  \"preliminaryActions\": [\"Formula la consulta con hechos generales y el objetivo que quieres resolver.\"],\n  \"specialistSupportRecommended\": false\n}",
+        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.message || \"Hola. Soy LegalFam y oriento sobre Derecho de Familia en Peru. Cuentame de forma general tu situacion familiar y que necesitas decidir, sin incluir datos personales.\") }},\n  \"citations\": [],\n  \"confidenceStatus\": null,\n  \"confidenceReason\": null,\n  \"clarifyingQuestions\": [],\n  \"preliminaryActions\": [],\n  \"specialistSupportRecommended\": false\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
