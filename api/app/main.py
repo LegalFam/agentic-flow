@@ -1,4 +1,7 @@
+from json import JSONDecodeError
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from pydantic import ValidationError
 
 from app.config import settings
 from app.converter import convert_pdf_to_markdown
@@ -25,6 +28,27 @@ from app.models import (
 app = FastAPI(title="Legal PDF Processing API", version="0.1.0")
 
 
+def error_detail(code: str, message: str) -> dict[str, str]:
+    return {"code": code, "message": message}
+
+
+def classify_processing_error(exc: Exception) -> tuple[int, dict[str, str]]:
+    text = str(exc)
+    normalized = text.lower()
+
+    if isinstance(exc, TimeoutError) or "timeout" in normalized or "no termino" in normalized:
+        return 504, error_detail("UPSTREAM_TIMEOUT", "El procesamiento tardo mas de lo esperado.")
+    if isinstance(exc, (JSONDecodeError, ValidationError)) or "json" in normalized or "valid" in normalized:
+        return 422, error_detail("AGENT_VALIDATION_FAILED", "No se pudo validar la respuesta generada.")
+    if "api_key" in normalized or "no esta configurado" in normalized or "no está configurado" in normalized:
+        return 503, error_detail("UPSTREAM_NOT_CONFIGURED", "El servicio de IA no esta configurado.")
+    if "file search" in normalized or "store" in normalized:
+        return 503, error_detail("UPSTREAM_UNAVAILABLE", "No se pudo consultar la base de conocimiento.")
+    if "gemini" in normalized:
+        return 503, error_detail("UPSTREAM_UNAVAILABLE", "El servicio de IA no esta disponible en este momento.")
+    return 422, error_detail("PROCESSING_FAILED", "No se pudo completar el procesamiento.")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -33,28 +57,29 @@ def health() -> dict[str, str]:
 @app.post("/convert", response_model=ConversionResponse)
 async def convert(file: UploadFile = File(...)) -> ConversionResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Solo se aceptan archivos PDF")
+        raise HTTPException(status_code=400, detail=error_detail("INVALID_FILE_TYPE", "Solo se aceptan archivos PDF."))
 
     content = await file.read()
     max_bytes = settings.max_upload_mb * 1024 * 1024
     if len(content) > max_bytes:
-        raise HTTPException(status_code=413, detail=f"Archivo supera {settings.max_upload_mb} MB")
+        raise HTTPException(status_code=413, detail=error_detail("FILE_TOO_LARGE", f"Archivo supera {settings.max_upload_mb} MB."))
 
     try:
         return ConversionResponse.model_validate(convert_pdf_to_markdown(file.filename, content))
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @app.post("/convert-jobs", response_model=ConversionJobResponse)
 async def start_convert_job(file: UploadFile = File(...)) -> ConversionJobResponse:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Solo se aceptan archivos PDF")
+        raise HTTPException(status_code=400, detail=error_detail("INVALID_FILE_TYPE", "Solo se aceptan archivos PDF."))
 
     content = await file.read()
     max_bytes = settings.max_upload_mb * 1024 * 1024
     if len(content) > max_bytes:
-        raise HTTPException(status_code=413, detail=f"Archivo supera {settings.max_upload_mb} MB")
+        raise HTTPException(status_code=413, detail=error_detail("FILE_TOO_LARGE", f"Archivo supera {settings.max_upload_mb} MB."))
 
     return ConversionJobResponse.model_validate(start_conversion_job(file.filename, content))
 
@@ -63,7 +88,7 @@ async def start_convert_job(file: UploadFile = File(...)) -> ConversionJobRespon
 def convert_job_status(job_id: str) -> ConversionJobResponse:
     job = get_conversion_job(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Conversion job no existe")
+        raise HTTPException(status_code=404, detail=error_detail("JOB_NOT_FOUND", "Conversion job no existe."))
     return ConversionJobResponse.model_validate(job)
 
 
@@ -77,7 +102,8 @@ async def extract_metadata(payload: MetadataRequest) -> MetadataResponse:
         )
         return MetadataResponse(filename=payload.filename, metadata=metadata)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @app.post("/upload-gemini-file-search", response_model=FileSearchUploadResponse)
@@ -95,7 +121,8 @@ async def upload_file_search(payload: FileSearchUploadRequest) -> FileSearchUplo
             )
         )
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @app.post("/file-search-stores/resolve", response_model=FileSearchStoreResolveResponse)
@@ -108,7 +135,8 @@ async def resolve_store(payload: FileSearchStoreResolveRequest) -> FileSearchSto
             )
         )
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @app.post("/rag-search", response_model=RagSearchResponse)
@@ -127,7 +155,8 @@ async def rag_search(payload: RagSearchRequest) -> RagSearchResponse:
             )
         )
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @app.post("/metadata-from-form", response_model=MetadataResponse)
