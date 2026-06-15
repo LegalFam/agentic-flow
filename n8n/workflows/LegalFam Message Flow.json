@@ -306,7 +306,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.message || \"Puedo orientar sobre Derecho de Familia en Peru. Cuentame de forma general tu situacion familiar y que necesitas decidir, sin incluir datos personales.\") }},\n  \"citations\": [],\n  \"confidenceStatus\": null,\n  \"confidenceReason\": null,\n  \"nextSteps\": [],\n  \"specialistSupportRecommended\": false,\n  \"citationSupportStatus\": \"NONE\"\n}",
+        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.message || \"Puedo orientar sobre Derecho de Familia en Peru. Cuentame de forma general tu situacion familiar y que necesitas decidir, sin incluir datos personales.\") }},\n  \"citations\": [],\n  \"confidenceStatus\": null,\n  \"confidenceReason\": null,\n  \"nextSteps\": [],\n  \"specialistSupportRecommended\": false,\n  \"citationSupportStatus\": null\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
