@@ -306,7 +306,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.message || \"Puedo orientar sobre Derecho de Familia en Peru. Cuentame de forma general tu situacion familiar y que necesitas decidir, sin incluir datos personales.\") }},\n  \"citations\": [],\n  \"confidenceStatus\": null,\n  \"confidenceReason\": null,\n  \"nextSteps\": [],\n  \"specialistSupportRecommended\": false,\n  \"citationSupportStatus\": null\n}",
+        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.message || \"Puedo orientar sobre Derecho de Familia en Peru. Cuentame de forma general tu situacion familiar y que necesitas decidir, sin incluir datos personales.\") }},\n  \"citations\": [],\n  \"confidenceStatus\": null,\n  \"confidenceReason\": null,\n  \"nextSteps\": [],\n  \"specialistSupportRecommended\": false,\n  \"citationSupportStatus\": null,\n  \"agentTokenCost\": 1\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
@@ -321,7 +321,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.answer || $json.answer || \"Con lo que cuentas hasta ahora, puedo darte una orientacion general de Derecho de Familia. Describe de forma general la situacion familiar y que necesitas decidir, sin incluir datos personales sensibles.\") }},\n  \"citations\": {{ JSON.stringify($json.output?.citations || $json.citations || []) }},\n  \"confidenceStatus\": {{ JSON.stringify($json.output?.confidenceStatus || (($json.output?.citations || $json.citations || []).length ? \"MEDIUM\" : \"LOW\")) }},\n  \"confidenceReason\": {{ JSON.stringify($json.output?.confidenceReason || null) }},\n  \"nextSteps\": {{ JSON.stringify($json.output?.nextSteps || []) }},\n  \"specialistSupportRecommended\": {{ JSON.stringify(Boolean($json.output?.specialistSupportRecommended)) }},\n  \"citationSupportStatus\": {{ JSON.stringify($('RAG Agent').item.json.output?.citationSupportStatus || $json.output?.citationSupportStatus || $json.citationSupportStatus || (($json.output?.citations || $json.citations || []).length ? \"GOOD\" : \"NONE\")) }}\n}",
+        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.answer || $json.answer || \"Con lo que cuentas hasta ahora, puedo darte una orientacion general de Derecho de Familia. Describe de forma general la situacion familiar y que necesitas decidir, sin incluir datos personales sensibles.\") }},\n  \"citations\": {{ JSON.stringify($json.output?.citations || $json.citations || []) }},\n  \"confidenceStatus\": {{ JSON.stringify($json.output?.confidenceStatus || (($json.output?.citations || $json.citations || []).length ? \"MEDIUM\" : \"LOW\")) }},\n  \"confidenceReason\": {{ JSON.stringify($json.output?.confidenceReason || null) }},\n  \"nextSteps\": {{ JSON.stringify($json.output?.nextSteps || []) }},\n  \"specialistSupportRecommended\": {{ JSON.stringify(Boolean($json.output?.specialistSupportRecommended)) }},\n  \"citationSupportStatus\": {{ JSON.stringify($('RAG Agent').item.json.output?.citationSupportStatus || $json.output?.citationSupportStatus || $json.citationSupportStatus || (($json.output?.citations || $json.citations || []).length ? \"GOOD\" : \"NONE\")) }},\n  \"agentTokenCost\": 3\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
