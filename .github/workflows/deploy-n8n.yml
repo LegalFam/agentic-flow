@@ -39,6 +39,7 @@ env:
   GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
   DOCUMENT_AI_LOCATION: ${{ vars.DOCUMENT_AI_LOCATION }}
   DOCUMENT_AI_PROCESSOR_ID: ${{ vars.DOCUMENT_AI_PROCESSOR_ID }}
+  CORPUS_BUCKET: ${{ vars.CORPUS_BUCKET }}
   N8N_IMAGE_NAME: legalfam-n8n
   API_IMAGE_NAME: legalfam-processing-api
 
@@ -90,6 +91,20 @@ jobs:
           DOCUMENT_AI_LOCATION_VALUE="${DOCUMENT_AI_LOCATION:-us}"
           VPC_FLAGS=()
 
+          # Corpus de markdowns para el citation locator, montado como carpeta desde GCS.
+          # Sin CORPUS_BUCKET el deploy queda identico a antes y el locator cae al
+          # fallback por regex sobre el snippet.
+          CORPUS_VOLUME_FLAGS=()
+          CORPUS_MOUNT_FLAGS=()
+
+          if [[ -n "${CORPUS_BUCKET:-}" ]]; then
+            CORPUS_VOLUME_FLAGS+=(--add-volume "name=corpus,type=cloud-storage,bucket=$CORPUS_BUCKET,readonly=true")
+            # --add-volume-mount es por contenedor: va despues de --container processing-api.
+            CORPUS_MOUNT_FLAGS+=(--add-volume-mount "volume=corpus,mount-path=/corpus")
+            # Los --set-env-vars repetidos se acumulan (UpdateAction), no se reemplazan.
+            CORPUS_MOUNT_FLAGS+=(--set-env-vars "CORPUS_DIR=/corpus")
+          fi
+
           if [[ -n "${CLOUD_RUN_VPC_NETWORK:-}" ]]; then
             VPC_FLAGS+=(--network "$CLOUD_RUN_VPC_NETWORK")
 
@@ -111,6 +126,7 @@ jobs:
             --concurrency 20 \
             --set-cloudsql-instances "$CLOUD_SQL_CONNECTION_NAME" \
             "${VPC_FLAGS[@]}" \
+            "${CORPUS_VOLUME_FLAGS[@]}" \
             --allow-unauthenticated \
             --container n8n \
             --image "$N8N_IMAGE_URI" \
@@ -128,6 +144,7 @@ jobs:
             --cpu 1 \
             --startup-probe "httpGet.path=/health,httpGet.port=8000,initialDelaySeconds=0,periodSeconds=10,timeoutSeconds=5,failureThreshold=12" \
             --set-env-vars "MAX_UPLOAD_MB=$MAX_UPLOAD_VALUE,MIN_TEXT_CHARS_FOR_NATIVE_PDF=$MIN_TEXT_VALUE,GEMINI_MODEL=$GEMINI_MODEL_VALUE,ENABLE_GEMINI_FILE_SEARCH_UPLOAD=$ENABLE_UPLOAD_VALUE,GOOGLE_CLOUD_PROJECT=$GOOGLE_PROJECT_VALUE,DOCUMENT_AI_LOCATION=$DOCUMENT_AI_LOCATION_VALUE,DOCUMENT_AI_PROCESSOR_ID=$DOCUMENT_AI_PROCESSOR_ID,GEMINI_FILE_SEARCH_STORE=$GEMINI_FILE_SEARCH_STORE" \
+            "${CORPUS_MOUNT_FLAGS[@]}" \
             --set-secrets "GEMINI_API_KEY=gemini-api-key:latest"
 
       - name: Deploy workflow sync job

@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     document_ai_location: str = "us"
     document_ai_processor_id: str | None = None
 
+    corpus_dir: str = "/work/corpus"
+    corpus_manifest_filename: str = "corpus_manifest.json"
+    enable_citation_locator: bool = True
+    locator_fuzzy_threshold: float = 0.82
+    locator_max_article_span: int = 20000
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

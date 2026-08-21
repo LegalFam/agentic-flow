@@ -32,7 +32,7 @@ Use the same region as your Cloud SQL instance when possible.
 Run this in Google Cloud Shell or a local terminal authenticated with `gcloud auth login`.
 
 ```sh
-export PROJECT_ID="legalfam-497502"
+export PROJECT_ID="project-658b2274-6d76-4e7c-860"
 export PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 export REGION="us-central1"
 export ARTIFACT_REPOSITORY="legalfam"
@@ -208,7 +208,58 @@ DOCUMENT_AI_PROCESSOR_ID=your-document-ai-processor-id
 
 `GEMINI_FILE_SEARCH_STORE` can be left empty unless you want a default store at the API level.
 
+Optionally add the citation locator corpus bucket:
+
+```text
+CORPUS_BUCKET=legalfam-corpus
+```
+
+Leave `CORPUS_BUCKET` unset until the bucket exists (see section 8.0). The deploy then runs
+exactly as before and citations fall back to a regex over the snippet.
+
 If you do not know the final Cloud Run URL yet, set `N8N_PUBLIC_URL` to a temporary value for the first run, then update it after Cloud Run creates the service URL and rerun the workflow.
+
+## 8.0 Citation Locator Corpus Bucket (Optional)
+
+The citation locator needs the original markdown of each document already indexed in the
+File Search Store, so it can report which article a retrieved snippet came from. Cloud Run
+has an ephemeral filesystem, so the corpus is mounted from Cloud Storage as a plain folder.
+No SDK and no extra Python dependency is involved.
+
+This section reuses `$REGION` and `$RUNTIME_SA` from section 2. If you did not run
+section 2 in this shell, set them first:
+
+```sh
+export REGION="us-central1"
+export RUNTIME_SA="legalfam-n8n-runtime@$(gcloud config get-value project).iam.gserviceaccount.com"
+```
+
+Create the bucket once and grant the runtime service account read access.
+Keep it in the same region as the Cloud Run service to avoid cross-region reads:
+
+```sh
+export CORPUS_BUCKET="legalfam-corpus"
+
+gcloud storage buckets create "gs://$CORPUS_BUCKET" --location="$REGION"
+
+gcloud storage buckets add-iam-policy-binding "gs://$CORPUS_BUCKET" \
+  --member="serviceAccount:$RUNTIME_SA" \
+  --role="roles/storage.objectViewer"
+```
+
+Upload the markdown files. Their names must match the `display_name` used when they were
+indexed (the API uploads with `display_name=filename`):
+
+```sh
+gcloud storage rsync ./corpus "gs://$CORPUS_BUCKET" --recursive
+```
+
+Then set the `CORPUS_BUCKET` repository variable and rerun the workflow. The deploy adds a
+read-only `cloud-storage` volume at `/corpus` on the `processing-api` container and sets
+`CORPUS_DIR=/corpus`. Adding documents later only requires uploading to the bucket, not
+redeploying.
+
+Requires `--execution-environment gen2`, which the deploy already uses.
 
 ## 8.1 Cloud Run Runtime Behavior
 
@@ -353,6 +404,16 @@ Local Docker Compose still works because the workflow JSON falls back to:
 ```text
 http://processing-api:8000
 ```
+
+Because the sidecar has no public ingress and Cloud Run has no `exec`, the only way to
+inspect it in production is from n8n. To confirm the corpus bucket is mounted, run a manual
+HTTP Request node in the n8n editor against:
+
+```text
+http://127.0.0.1:8000/corpus/status
+```
+
+It should report `exists: true` and the document count from the bucket.
 
 ## 16. Future Updates
 

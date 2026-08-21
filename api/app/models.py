@@ -245,6 +245,10 @@ class RagCitation(BaseModel):
     file_name: str = "Fuente legal"
     snippet: str = ""
     file_url: str = ""
+    locator: str = ""
+    breadcrumb: str = ""
+    page: int | None = None
+    locator_source: str = ""
 
 
 class RagSearchResponse(BaseModel):
@@ -252,3 +256,33 @@ class RagSearchResponse(BaseModel):
     citations: list[RagCitation] = Field(default_factory=list)
     valid: bool
     retry_suggestion: str | None = None
+
+
+class CorpusStatusResponse(BaseModel):
+    corpus_dir: str
+    exists: bool
+    documents: int
+    indexed_cached: int
+    manifest_present: bool
+    manifest_entries: int
+    locator_enabled: bool
+    sample: list[str] = Field(default_factory=list)
+
+
+class CorpusReloadResponse(BaseModel):
+    cleared: int
+    documents: int
+
+
+class LocatorProbeRequest(BaseModel):
+    snippet: str
+    title: str | None = None
+    file_id: str | None = None
+
+
+class LocatorProbeResponse(BaseModel):
+    matched_document: str | None = None
+    locator: str = ""
+    breadcrumb: str = ""
+    page: int | None = None
+    locator_source: str = ""

@@ -5,9 +5,11 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+from app import corpus, locator
 from app.categories import category_catalog_text
 from app.config import settings
 from app.models import LegalMetadata
+from app.text_utils import clean_user_text as _clean_user_text
 
 
 STORE_REGISTRY_PATH = Path("/work/file_search_stores.json")
@@ -373,8 +375,32 @@ def _extract_response_text(response: Any) -> str:
     return "\n\n".join(chunks).strip()
 
 
-def _extract_grounding_citations(response: Any) -> list[dict[str, str]]:
-    citations: list[dict[str, str]] = []
+def resolve_citation_locator(context_title: str, file_id: str, snippet: str) -> dict[str, Any]:
+    """Ubica el snippet dentro del documento. Nunca lanza: una cita sin locator es
+    aceptable, una busqueda legal caida no lo es."""
+    empty = {"locator": "", "breadcrumb": "", "page": None, "locator_source": ""}
+    if not settings.enable_citation_locator or not snippet:
+        return empty
+
+    try:
+        index = corpus.get_index(context_title, file_id)
+        found = locator.resolve(index, snippet)
+    except Exception:
+        return empty
+
+    if found.is_empty():
+        return empty
+
+    return {
+        "locator": found.label,
+        "breadcrumb": found.breadcrumb,
+        "page": found.page,
+        "locator_source": found.source,
+    }
+
+
+def _extract_grounding_citations(response: Any) -> list[dict[str, Any]]:
+    citations: list[dict[str, Any]] = []
     seen: set[str] = set()
 
     for candidate in getattr(response, "candidates", None) or []:
@@ -406,6 +432,7 @@ def _extract_grounding_citations(response: Any) -> list[dict[str, str]]:
                     "file_name": file_name,
                     "snippet": snippet,
                     "file_url": file_url,
+                    **resolve_citation_locator(context_title, file_id, snippet),
                 }
             )
 
@@ -428,36 +455,6 @@ def _build_custom_metadata(types, metadata: LegalMetadata) -> list[Any]:
             )
         )
     return custom_metadata
-
-
-def _clean_user_text(value: Any) -> str:
-    if value is None:
-        return ""
-    text = str(value)
-    text = _repair_mojibake(text)
-    text = unicodedata.normalize("NFC", text)
-    text = text.replace("\u00a0", " ")
-    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _repair_mojibake(text: str) -> str:
-    if "Ã" not in text and "Â" not in text and "â" not in text:
-        return text
-    try:
-        repaired = text.encode("latin1").decode("utf-8")
-    except UnicodeError:
-        repaired = text
-    return (
-        repaired
-        .replace("�", "")
-        .replace("â€œ", "\"")
-        .replace("â€", "\"")
-        .replace("â€˜", "'")
-        .replace("â€™", "'")
-        .replace("â€“", "-")
-        .replace("â€”", "-")
-    )
 
 
 def _validate_custom_metadata_lengths(custom_metadata: list[Any]) -> None:

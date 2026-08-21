@@ -1,5 +1,11 @@
 .env
-work/
+# work/* en vez de work/: git no desciende a un directorio excluido, y sin descender
+# las negaciones de abajo nunca se evaluan.
+work/*
+# El corpus de markdowns nunca se commitea, pero la carpeta si existe tras clonar.
+!work/corpus/
+work/corpus/*
+!work/corpus/.gitkeep
 secrets/*
 !secrets/.gitkeep
 __pycache__/

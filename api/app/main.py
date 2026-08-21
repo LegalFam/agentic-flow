@@ -3,6 +3,7 @@ from json import JSONDecodeError
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 
+from app import corpus, locator
 from app.config import settings
 from app.converter import convert_pdf_to_markdown
 from app.conversion_jobs import get_conversion_job, start_conversion_job
@@ -15,6 +16,10 @@ from app.gemini_client import (
 from app.models import (
     ConversionJobResponse,
     ConversionResponse,
+    CorpusReloadResponse,
+    CorpusStatusResponse,
+    LocatorProbeRequest,
+    LocatorProbeResponse,
     FileSearchUploadRequest,
     FileSearchUploadResponse,
     FileSearchStoreResolveRequest,
@@ -157,6 +162,32 @@ async def rag_search(payload: RagSearchRequest) -> RagSearchResponse:
     except Exception as exc:
         status_code, detail = classify_processing_error(exc)
         raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@app.get("/corpus/status", response_model=CorpusStatusResponse)
+def corpus_status() -> CorpusStatusResponse:
+    return CorpusStatusResponse.model_validate(corpus.status())
+
+
+@app.post("/corpus/reload", response_model=CorpusReloadResponse)
+def corpus_reload() -> CorpusReloadResponse:
+    cleared = corpus.clear_cache()
+    return CorpusReloadResponse(cleared=cleared, documents=len(corpus.iter_corpus_files()))
+
+
+@app.post("/locator/probe", response_model=LocatorProbeResponse)
+def locator_probe(payload: LocatorProbeRequest) -> LocatorProbeResponse:
+    """Diagnostico: muestra que documento caso y con que estrategia se resolvio."""
+    path = corpus.resolve_document_path(payload.title, payload.file_id)
+    index = corpus.load_index(path) if path is not None else None
+    found = locator.resolve(index, payload.snippet)
+    return LocatorProbeResponse(
+        matched_document=path.name if path is not None else None,
+        locator=found.label,
+        breadcrumb=found.breadcrumb,
+        page=found.page,
+        locator_source=found.source,
+    )
 
 
 @app.post("/metadata-from-form", response_model=MetadataResponse)
