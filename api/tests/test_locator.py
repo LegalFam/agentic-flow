@@ -231,3 +231,36 @@ def test_legal_hierarchy_keeps_its_own_source(index):
     # Un documento con articulado conserva la estrategia de busqueda como source.
     found = L.resolve(index, "Son causas de separacion de cuerpos: 1. El adulterio.")
     assert found.source == "exact"
+
+
+def test_bold_italic_article_heading_is_detected():
+    """El Codigo Civil real usa "**_Articulo 333.- ...". Cuando el patron solo aceptaba
+    asteriscos, 223 articulos quedaban invisibles y su texto se atribuia al articulo
+    anterior: un error de una unidad, con total confianza."""
+    doc = (
+        "**Artículo 332.-**\n\n"
+        "La separación de cuerpos suspende los deberes relativos al lecho y habitación.\n\n"
+        "**_Artículo 333.- Son causas de separación de cuerpos:_**\n\n"
+        "_1. El adulterio._\n"
+    )
+    index = L.build_index(doc)
+    assert L.resolve(index, "El adulterio").label == "Art. 333"
+    assert L.resolve(index, "suspende los deberes relativos al lecho").label == "Art. 332"
+
+
+def test_article_number_with_spaced_letter_suffix():
+    doc = "**Artículo 659 F.- Designación de apoyos a futuro**\n\nEl apoyo se designa por escritura.\n"
+    index = L.build_index(doc)
+    found = L.resolve(index, "El apoyo se designa por escritura")
+    assert found.label == "Art. 659 F"
+
+
+def test_prose_reference_to_an_article_is_still_not_a_heading():
+    """Ampliar el enfasis no debe convertir una cita en prosa en un encabezado."""
+    for prose in (
+        "Artículo 326 del Código Civil.",
+        "_artículo 402, inciso 4, cuando fueren varios los autores._",
+        "**Artículo 2 de la Resolución N°**",
+        "artículo 44 en los numerales 4 al 7 sin declaración judicial.",
+    ):
+        assert L._ARTICULO_RE.match(prose) is None, prose

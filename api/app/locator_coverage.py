@@ -9,6 +9,7 @@ conviene propagar el locator hasta el usuario o si primero hay que ajustar el co
 """
 
 import argparse
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -64,6 +65,24 @@ def format_row(name: str, counts: Counter, headings: int | None = None) -> str:
     if headings is not None:
         parts.append(f"headings={headings}")
     return " ".join(parts)
+
+
+# Una linea que "parece" encabezado de articulo, sin importar el enfasis que traiga.
+# La cobertura por si sola no detecta un encabezado perdido: el fragmento igual resuelve,
+# solo que al articulo anterior. Este chequeo es el que ve ese error.
+ARTICLE_LIKE = re.compile(r"^[\s*_#>]{0,10}art[ií]culo\s+\d", re.IGNORECASE)
+
+
+def undetected_article_headings(path: Path) -> list[str]:
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").split("\n")
+    except OSError:
+        return []
+    return [
+        line.strip()
+        for line in lines
+        if ARTICLE_LIKE.match(line) and not locator._ARTICULO_RE.match(line)
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -126,6 +145,18 @@ def main(argv: list[str] | None = None) -> int:
         for name in sin_headings[: args.worst]:
             print(f"  {name}")
         print("  -> revisar si el markdown perdio la estructura al convertir el PDF.")
+
+    suspects: list[tuple[str, str]] = []
+    for path in files:
+        for line in undetected_article_headings(path):
+            suspects.append((path.name, line))
+
+    if suspects:
+        print(f"\nLineas tipo 'Articulo N' que NO se toman como encabezado ({len(suspects)}):")
+        for name, line in suspects[: args.worst]:
+            print(f"  {name[:34]:34} {line[:60]}")
+        print("  -> revisar una por una: las referencias en prosa deben quedar fuera, pero")
+        print("     un encabezado real perdido atribuye su texto al articulo anterior.")
 
     return 0 if strong * 100 / grand_total >= 80 else 2
 

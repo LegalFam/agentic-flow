@@ -47,7 +47,7 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 # "Articulo 333.-", "Articulo 12°", "Articulo 4-A:". Exige separador o fin de linea para no
 # capturar prosa como "conforme al articulo 333 del codigo".
 _ARTICULO_RE = re.compile(
-    r"^\s{0,8}(?:#{1,6}\s*)?(?:\*{1,2})?art[ií]culo\s+(\d+[\-–]?[a-z]?[°º]?)\s*(?:[.\-–—:)º°]|$)",
+    r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}art[ií]culo\s+(\d+(?:[\s\-–]?[a-z])?[°º]?)\s*(?:[.\-–—:)º°]|$)",
     re.IGNORECASE,
 )
 
@@ -58,12 +58,12 @@ _MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*$")
 # Encabezados de linea completa. El limite de largo evita capturar prosa que empieza con
 # la palabra clave ("Titulo que acredita la propiedad ...").
 _WHOLE_LINE_PATTERNS = (
-    (LEVEL_LIBRO, "libro", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?(?:\*{1,2})?libro\s+(.{1,60}?)[\s*]*$", re.IGNORECASE)),
-    (LEVEL_SECCION, "seccion", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?(?:\*{1,2})?secci[óo]n\s+(.{1,60}?)[\s*]*$", re.IGNORECASE)),
-    (LEVEL_SUBCAPITULO, "subcapitulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?(?:\*{1,2})?sub\s?-?\s?cap[ií]tulo\s+(.{1,60}?)[\s*]*$", re.IGNORECASE)),
-    (LEVEL_CAPITULO, "capitulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?(?:\*{1,2})?cap[ií]tulo\s+(.{1,60}?)[\s*]*$", re.IGNORECASE)),
-    (LEVEL_TITULO, "titulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?(?:\*{1,2})?t[ií]tulo\s+(.{1,60}?)[\s*]*$", re.IGNORECASE)),
-    (LEVEL_TITULO, "disposiciones", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?(?:\*{1,2})?(disposici[óo]n(?:es)?\s+.{1,60}?)[\s*]*$", re.IGNORECASE)),
+    (LEVEL_LIBRO, "libro", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}libro\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
+    (LEVEL_SECCION, "seccion", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}secci[óo]n\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
+    (LEVEL_SUBCAPITULO, "subcapitulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}sub\s?-?\s?cap[ií]tulo\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
+    (LEVEL_CAPITULO, "capitulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}cap[ií]tulo\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
+    (LEVEL_TITULO, "titulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}t[ií]tulo\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
+    (LEVEL_TITULO, "disposiciones", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}(disposici[óo]n(?:es)?\s+.{1,60}?)[\s*_]*$", re.IGNORECASE)),
 )
 
 # Niveles estructurales cuyo nombre suele venir en la linea siguiente.
@@ -171,9 +171,10 @@ def _pretty_tail(raw: str) -> str:
 
 
 def _build_label(kind: str, level: int, raw: str) -> str:
-    tail = _pretty_tail(raw)
     if kind == "articulo":
-        return f"Art. {tail}"
+        # Sin _pretty_tail: bajaria a minuscula el sufijo de "Art. 659 F".
+        return "Art. " + " ".join(raw.strip("*_# ").split()).upper()
+    tail = _pretty_tail(raw)
     if kind == "disposiciones":
         return tail
     return f"{LEVEL_NAMES.get(level, '')} {tail}".strip()
