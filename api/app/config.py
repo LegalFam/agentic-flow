@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     corpus_dir: str = "/work/corpus"
     corpus_manifest_filename: str = "corpus_manifest.json"
     enable_citation_locator: bool = True
+    locator_registry_ttl_seconds: int = 900
+    locator_registry_max_entries: int = 5000
     locator_fuzzy_threshold: float = 0.82
     locator_max_article_span: int = 20000
 

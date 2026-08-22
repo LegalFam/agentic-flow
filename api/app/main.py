@@ -3,7 +3,7 @@ from json import JSONDecodeError
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 
-from app import corpus, locator
+from app import corpus, locator, locator_registry
 from app.config import settings
 from app.converter import convert_pdf_to_markdown
 from app.conversion_jobs import get_conversion_job, start_conversion_job
@@ -20,6 +20,9 @@ from app.models import (
     CorpusStatusResponse,
     LocatorProbeRequest,
     LocatorProbeResponse,
+    LocatorResolveRequest,
+    LocatorResolveResponse,
+    LocatorResolveResponseCitation,
     FileSearchUploadRequest,
     FileSearchUploadResponse,
     FileSearchStoreResolveRequest,
@@ -173,6 +176,39 @@ def corpus_status() -> CorpusStatusResponse:
 def corpus_reload() -> CorpusReloadResponse:
     cleared = corpus.clear_cache()
     return CorpusReloadResponse(cleared=cleared, documents=len(corpus.iter_corpus_files()))
+
+
+@app.post("/resolve-locators", response_model=LocatorResolveResponse)
+def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
+    """Cambia los `citation_id` que trajeron los agentes por el locator autoritativo.
+
+    Un id desconocido devuelve campos vacios, nunca un error: si el modelo altero el id o
+    la entrada vencio, la cita debe salir sin ubicacion en vez de tumbar la respuesta del
+    chat. Y nunca con la ubicacion que el modelo haya podido inventar.
+    """
+    citations = []
+    resolved = 0
+
+    for requested in payload.citations:
+        fields = locator_registry.resolve(requested.citation_id)
+        found = fields is not None
+        if found:
+            resolved += 1
+        else:
+            fields = locator_registry.EMPTY
+        citations.append(
+            LocatorResolveResponseCitation(
+                citation_id=requested.citation_id,
+                resolved=found,
+                **fields,
+            )
+        )
+
+    return LocatorResolveResponse(
+        citations=citations,
+        resolved=resolved,
+        unknown=len(citations) - resolved,
+    )
 
 
 @app.post("/locator/probe", response_model=LocatorProbeResponse)

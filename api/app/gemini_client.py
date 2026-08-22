@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import time
@@ -5,7 +6,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-from app import corpus, locator
+from app import corpus, locator, locator_registry
 from app.categories import category_catalog_text
 from app.config import settings
 from app.models import LegalMetadata
@@ -399,6 +400,27 @@ def resolve_citation_locator(context_title: str, file_id: str, snippet: str) -> 
     }
 
 
+def citation_identity(file_url: str, locator_label: str, snippet: str) -> str:
+    """Que hace unica a una cita.
+
+    Con ubicacion, la unidad es el articulo: dos fragmentos del mismo Art. 333 son una
+    sola cita, y su identidad no depende de cual de los dos se recupero primero. Sin
+    ubicacion —las resoluciones, que no tienen articulado— se vuelve al fragmento.
+    """
+    if locator_label:
+        return f"{file_url}|{locator_label}"
+    return f"{file_url}|{snippet[:200]}"
+
+
+def citation_id(identity: str) -> str:
+    """Id opaco y corto que los agentes copian sin interpretarlo.
+
+    Derivado y no aleatorio para que el mismo articulo recuperado en dos busquedas
+    distintas —el RAG Agent reintenta con sinonimos mas amplios— produzca el mismo id.
+    """
+    return hashlib.blake2s(identity.encode("utf-8"), digest_size=5).hexdigest()
+
+
 def _extract_grounding_citations(response: Any) -> list[dict[str, Any]]:
     citations: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -422,17 +444,25 @@ def _extract_grounding_citations(response: Any) -> list[dict[str, Any]]:
             file_url = _clean_user_text(metadata.get("fuente"))
             snippet = _clean_user_text(getattr(context, "text", None))
             file_id = _clean_user_text(metadata.get("identificador")) or context_title
-            key = "|".join([file_name, file_url, snippet[:120]])
-            if key in seen:
+
+            locator_fields = resolve_citation_locator(context_title, file_id, snippet)
+            identity = citation_identity(file_url, locator_fields["locator"], snippet)
+            if identity in seen:
                 continue
-            seen.add(key)
+            seen.add(identity)
+
+            cid = citation_id(identity)
+            # El locator autoritativo se guarda aca, no viaja por el prompt.
+            locator_registry.register(cid, locator_fields)
+
             citations.append(
                 {
+                    "citation_id": cid,
                     "file_id": file_id,
                     "file_name": file_name,
                     "snippet": snippet,
                     "file_url": file_url,
-                    **resolve_citation_locator(context_title, file_id, snippet),
+                    **locator_fields,
                 }
             )
 

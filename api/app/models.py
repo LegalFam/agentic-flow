@@ -241,6 +241,7 @@ class RagSearchRequest(BaseModel):
 
 
 class RagCitation(BaseModel):
+    citation_id: str = ""
     file_id: str = ""
     file_name: str = "Fuente legal"
     snippet: str = ""
@@ -256,6 +257,29 @@ class RagSearchResponse(BaseModel):
     citations: list[RagCitation] = Field(default_factory=list)
     valid: bool
     retry_suggestion: str | None = None
+
+
+class LocatorResolveRequestCitation(BaseModel):
+    citation_id: str = ""
+
+
+class LocatorResolveRequest(BaseModel):
+    citations: list[LocatorResolveRequestCitation] = Field(default_factory=list)
+
+
+class LocatorResolveResponseCitation(BaseModel):
+    citation_id: str = ""
+    locator: str = ""
+    breadcrumb: str = ""
+    page: int | None = None
+    locator_source: str = ""
+    resolved: bool = False
+
+
+class LocatorResolveResponse(BaseModel):
+    citations: list[LocatorResolveResponseCitation] = Field(default_factory=list)
+    resolved: int = 0
+    unknown: int = 0
 
 
 class CorpusStatusResponse(BaseModel):
