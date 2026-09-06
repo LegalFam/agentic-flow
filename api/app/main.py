@@ -277,14 +277,17 @@ def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
         context = entry["context"]
         articles = context.get("articles") or []
 
-        excerpt_fields = _locator_from_excerpt(context, requested.original_snippet)
+        excerpt_fields, excerpt_articles = _locator_from_excerpt(context, requested.original_snippet)
         if excerpt_fields is not None:
             fields = excerpt_fields
-            scope = "excerpt"
+            scope = "excerpt_multi" if len(excerpt_articles) > 1 else "excerpt"
             from_excerpt += 1
-        elif len(articles) > 1 and settings.locator_require_excerpt_when_ambiguous:
-            # El chunk cruza varios articulos y el agente no dejo verificable cual uso:
-            # el primero es una moneda al aire y una atribucion falsa es peor que ninguna.
+        elif len(excerpt_articles) > 1 or (
+            len(articles) > 1 and settings.locator_require_excerpt_when_ambiguous
+        ):
+            # El fragmento cruza varios articulos y no se pudieron combinar, o el agente
+            # no dejo verificable cual uso: el primero es una moneda al aire y una
+            # atribucion falsa es peor que ninguna.
             fields = locator_registry.EMPTY
             scope = "ambiguous"
             ambiguous += 1
@@ -297,6 +300,11 @@ def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
                 resolved=True,
                 locator_scope=scope,
                 chunk_articles=articles,
+                excerpt_articles=excerpt_articles,
+                # El documento tampoco se acepta del modelo: viaja con el id opaco igual
+                # que el locator, para que el backend no dependa de que el agente lo copie.
+                file_name=context.get("file_name") or "",
+                file_url=context.get("file_url") or "",
                 **fields,
             )
         )
@@ -310,26 +318,32 @@ def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
     )
 
 
-def _locator_from_excerpt(context: dict, excerpt: str) -> dict | None:
-    """Reancla la cita sobre el fragmento citado. `None` si no se pudo verificar."""
+def _locator_from_excerpt(context: dict, excerpt: str) -> tuple[dict | None, list[str]]:
+    """Reancla la cita sobre el fragmento citado.
+
+    Devuelve `(campos, articulos que cubre el fragmento)`. Los campos son `None` cuando no
+    se pudo verificar el fragmento, y tambien cuando cubre varios articulos que no se
+    pudieron combinar: ahi la lista de articulos es lo que le dice al caller que la cita
+    es ambigua y no que simplemente no hubo excerpt.
+    """
     if not settings.enable_citation_locator or not excerpt or not context.get("snippet"):
-        return None
+        return None, []
 
     try:
         index = corpus.get_index(context.get("title"), context.get("file_id"))
-        found = locator.resolve_excerpt(index, context["snippet"], excerpt)
+        found, articles = locator.resolve_excerpt_span(index, context["snippet"], excerpt)
     except Exception:
-        return None
+        return None, []
 
     if found.is_empty():
-        return None
+        return None, articles
 
     return {
         "locator": found.label,
         "breadcrumb": found.breadcrumb,
         "page": found.page,
         "locator_source": found.source,
-    }
+    }, articles
 
 
 @app.post("/locator/probe", response_model=LocatorProbeResponse)

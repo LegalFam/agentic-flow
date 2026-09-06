@@ -436,11 +436,17 @@ def locator_from_snippet(snippet: str) -> Locator:
     if not text:
         return EMPTY_LOCATOR
 
-    match = _SNIPPET_ARTICULO_RE.search(text)
-    if not match:
+    numbers = [found.group(1) for found in _SNIPPET_ARTICULO_RE.finditer(text)]
+    if not numbers:
         return EMPTY_LOCATOR
 
-    label = f"Art. {match.group(1)}"
+    # Sin indice no hay forma de saber donde termina un articulo y empieza el siguiente,
+    # asi que un texto que nombra varios no se puede repartir: elegir el primero seria
+    # adivinar, y una atribucion falsa es peor que una cita sin ubicacion.
+    if len({number.upper() for number in numbers}) > 1:
+        return EMPTY_LOCATOR
+
+    label = f"Art. {numbers[0]}"
 
     # Solo se adjunta el inciso cuando es inequivoco: si el snippet cita varios, elegir
     # uno seria enganoso.
@@ -451,15 +457,9 @@ def locator_from_snippet(snippet: str) -> Locator:
     return Locator(label=label, breadcrumb=label, page=None, source="snippet_regex")
 
 
-def articles_in_span(index: DocumentIndex, start: int, end: int) -> list[str]:
-    """Articulos que cubre el tramo `[start, end)` en coordenadas base.
-
-    Un chunk de File Search no respeta el articulado: puede arrancar a media frase del
-    Art. 561 y terminar dentro del 563. Saber cuantos articulos abarca es lo que permite
-    distinguir un chunk cuya ubicacion es inequivoca de uno donde quedarse con el primero
-    seria adivinar.
-    """
-    labels: list[str] = []
+def headings_in_span(index: DocumentIndex, start: int, end: int) -> list[Heading]:
+    """Encabezados de articulo que cubren el tramo `[start, end)` en coordenadas base."""
+    spanned: list[Heading] = []
     current: Heading | None = None
 
     for heading in index.headings:
@@ -470,14 +470,74 @@ def articles_in_span(index: DocumentIndex, start: int, end: int) -> list[str]:
             continue
         if heading.offset >= end:
             break
-        labels.append(heading.label)
+        spanned.append(heading)
 
-    # El articulo abierto antes del chunk tambien lo cubre, salvo que quede tan lejos que
+    # El articulo abierto antes del tramo tambien lo cubre, salvo que quede tan lejos que
     # ya no lo gobierne (mismo criterio que build_locator).
     if current is not None and start - current.offset <= settings.locator_max_article_span:
-        labels.insert(0, current.label)
+        spanned.insert(0, current)
 
-    return labels
+    return spanned
+
+
+def articles_in_span(index: DocumentIndex, start: int, end: int) -> list[str]:
+    """Articulos que cubre el tramo `[start, end)` en coordenadas base.
+
+    Un chunk de File Search no respeta el articulado: puede arrancar a media frase del
+    Art. 561 y terminar dentro del 563. Saber cuantos articulos abarca es lo que permite
+    distinguir un tramo cuya ubicacion es inequivoca de uno donde quedarse con el primero
+    seria adivinar.
+    """
+    return [heading.label for heading in headings_in_span(index, start, end)]
+
+
+def _parent_chain(breadcrumb: str, label: str) -> str:
+    """El breadcrumb sin su ultimo eslabon, que es el articulo."""
+    if breadcrumb == label:
+        return ""
+    suffix = f" > {label}"
+    return breadcrumb[: -len(suffix)] if breadcrumb.endswith(suffix) else breadcrumb
+
+
+def _combined_label(labels: list[str]) -> str:
+    """`["Art. 562", "Art. 563"]` -> `"Arts. 562 y 563"`."""
+    numbers = [label[len("Art. ") :] if label.startswith("Art. ") else label for label in labels]
+    if len(numbers) == 1:
+        return f"Art. {numbers[0]}"
+    return "Arts. " + ", ".join(numbers[:-1]) + f" y {numbers[-1]}"
+
+
+def combine_locator(index: DocumentIndex, headings: list[Heading], source: str) -> Locator:
+    """Un tramo que cruza articulos se ubica con todos ellos, o con ninguno.
+
+    Atribuirlo al primero es lo que producia citas bien redactadas y mal ubicadas. Citar
+    los dos solo es honesto si cuelgan del mismo padre: un tramo que cruza de un titulo a
+    otro ya no ubica nada, y ahi es mejor una cita sin ubicacion.
+    """
+    if not headings or len(headings) > max(1, settings.locator_max_combined_articles):
+        return EMPTY_LOCATOR
+
+    parents = set()
+    page: int | None = None
+    for heading in headings:
+        found = build_locator(index, heading.offset, source)
+        if found.is_empty():
+            return EMPTY_LOCATOR
+        parents.add(_parent_chain(found.breadcrumb, heading.label))
+        if page is None:
+            page = found.page
+
+    if len(parents) != 1:
+        return EMPTY_LOCATOR
+
+    parent = parents.pop()
+    label = _combined_label([heading.label for heading in headings])
+    return Locator(
+        label=label,
+        breadcrumb=f"{parent} > {label}" if parent else label,
+        page=page,
+        source=source,
+    )
 
 
 def resolve_chunk(index: DocumentIndex | None, snippet: str) -> tuple[Locator, list[str]]:
@@ -502,36 +562,49 @@ def resolve_chunk(index: DocumentIndex | None, snippet: str) -> tuple[Locator, l
 
 
 def resolve_excerpt(index: DocumentIndex | None, chunk: str, excerpt: str) -> Locator:
+    """Ubicacion del fragmento citado, sin el detalle de que articulos abarca."""
+    return resolve_excerpt_span(index, chunk, excerpt)[0]
+
+
+def resolve_excerpt_span(
+    index: DocumentIndex | None, chunk: str, excerpt: str
+) -> tuple[Locator, list[str]]:
     """Ubica el fragmento que el agente dice haber usado, exigiendo que salga del chunk.
 
     El locator del chunk se queda con el primer articulo que aparece, que no tiene por que
     ser el que sustenta la respuesta cuando el chunk abarca varios. Reanclando sobre el
     texto citado, la ubicacion corresponde a lo que el agente realmente uso.
 
-    Devuelve `EMPTY_LOCATOR` cuando el excerpt no se puede verificar contra el chunk: el
-    caller decide como degradar, pero nunca se ubica texto que el modelo pudo inventar.
+    El excerpt tampoco tiene por que caer dentro de un solo articulo: un fragmento que
+    arranca en el 562 y sigue dentro del 563 se cita con los dos, y si no se pueden
+    combinar sale sin ubicacion. Quedarse con el primero reintroduce exactamente la
+    atribucion falsa que este modulo existe para evitar.
+
+    Devuelve `(EMPTY_LOCATOR, articulos)` cuando el excerpt no se puede verificar contra
+    el chunk o cruza articulos incombinables: el caller decide como degradar, pero nunca
+    se ubica texto que el modelo pudo inventar ni se elige un articulo a ciegas.
     """
     chunk_text = clean_user_text(chunk)
     excerpt_text = clean_user_text(excerpt)
     if not chunk_text or not excerpt_text:
-        return EMPTY_LOCATOR
+        return EMPTY_LOCATOR, []
 
     # Un excerpt muy corto ("El demandante") casa en cualquier parte y no discrimina un
     # articulo de otro, que es justo lo que se quiere resolver.
     if len(excerpt_text) < settings.locator_min_excerpt_chars:
-        return EMPTY_LOCATOR
+        return EMPTY_LOCATOR, []
 
     folded_chunk = fold(chunk_text)
     inner, strategy = find_in_folded(folded_chunk, excerpt_text)
     if inner is None:
-        return EMPTY_LOCATOR
+        return EMPTY_LOCATOR, []
 
     if index is None:
-        return locator_from_snippet(excerpt_text)
+        return locator_from_snippet(excerpt_text), []
 
     chunk_start, _ = find_in_folded(index.folded, chunk_text)
     if chunk_start is None:
-        return locator_from_snippet(excerpt_text)
+        return locator_from_snippet(excerpt_text), []
 
     # Buscar el excerpt directamente dentro de la ventana del chunk es lo mas preciso;
     # la suma de posiciones es el respaldo cuando el chunk solo caso por prefijo o difuso
@@ -543,10 +616,20 @@ def resolve_excerpt(index: DocumentIndex | None, chunk: str, excerpt: str) -> Lo
     else:
         position = min(chunk_start + inner, len(index.offset_map) - 1)
 
-    found = build_locator(index, index.offset_map[position], strategy)
+    start = index.offset_map[position]
+    end_position = min(position + len(excerpt_text), len(index.offset_map) - 1)
+    end = index.offset_map[end_position]
+
+    spanned = headings_in_span(index, start, end + 1)
+    articles = [heading.label for heading in spanned]
+
+    if len(spanned) > 1:
+        return combine_locator(index, spanned, strategy), articles
+
+    found = build_locator(index, start, strategy)
     if found.is_empty():
-        return locator_from_snippet(excerpt_text)
-    return found
+        return locator_from_snippet(excerpt_text), articles
+    return found, articles
 
 
 def resolve(index: DocumentIndex | None, snippet: str) -> Locator:

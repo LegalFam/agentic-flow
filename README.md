@@ -279,24 +279,42 @@ Un chunk de File Search no respeta el articulado: puede arrancar a media frase d
 que no tiene por que ser el que sustenta la respuesta. Ese fue el caso real: la cita salia
 bien redactada y atribuida al articulo equivocado.
 
-Por eso el agente XAI devuelve dos textos por cita:
+Por eso el agente XAI devuelve dos textos por cita, y solo esos dos:
 
 - `original_snippet`: copia literal del pasaje del chunk en el que se apoyo.
-- `summary_snippet`: el resumen que lee el usuario (es lo que el backend persiste como
-  `snippet`).
+- `summary_snippet`: el resumen que lee el usuario (el backend lo persiste como
+  `source_snippet`).
+
+No hay un tercer campo con el mismo texto: `summary_snippet` es el unico nombre del
+resumen de punta a punta.
 
 `/resolve-locators` trata `original_snippet` como puntero, no como ubicacion: lo busca
 dentro del chunk que se guardo al recuperarlo y, si aparece, recalcula la ubicacion sobre
 el markdown a partir de esa posicion. Un texto que el modelo invento no esta en el chunk y
 se descarta sin mas.
 
+El documento de la cita (`file_name`, `file_url`) tampoco viaja por el prompt: se guarda
+en el registro junto al locator y `/resolve-locators` lo devuelve a partir del
+`citation_id`. Antes dependia de que el agente lo copiara, y una cita sin `file_url` se
+caia entera en el backend.
+
+#### Un excerpt tambien puede cruzar articulos
+
+El corte del excerpt lo elige el modelo, asi que puede arrancar al final del `Art. 562` y
+seguir dentro del `Art. 563`. Ubicarlo en el primero reproduce el mismo error un nivel mas
+abajo. Cuando eso pasa se citan todos los articulos que cubre (`Arts. 562 y 563`), siempre
+que cuelguen del mismo padre y no sean mas de `LOCATOR_MAX_COMBINED_ARTICLES` (3 por
+defecto). Un tramo que cruza de un titulo a otro ya no ubica nada util: sale sin ubicacion.
+
 `locator_scope` dice de donde salio cada ubicacion:
 
-- `excerpt`: del pasaje citado. Es el caso bueno.
+- `excerpt`: del pasaje citado, que cae dentro de un solo articulo. Es el caso bueno.
+- `excerpt_multi`: del pasaje citado, que cruza articulos y se cita con todos ellos.
 - `chunk`: del chunk completo, porque no hubo `original_snippet` verificable y el chunk
   cubre un solo articulo, asi que no hay ambiguedad que resolver.
-- `ambiguous`: el chunk cubria varios articulos y no hubo `original_snippet` verificable.
-  La cita sale sin ubicacion; elegir el primer articulo seria adivinar. Se apaga con
+- `ambiguous`: se cubrian varios articulos que no se pudieron combinar, o el chunk cubria
+  varios y no hubo `original_snippet` verificable. La cita sale sin ubicacion; elegir el
+  primer articulo seria adivinar. El caso del chunk se apaga con
   `LOCATOR_REQUIRE_EXCERPT_WHEN_AMBIGUOUS=false`.
 - `unknown`: el `citation_id` no esta en el registro (alterado por un agente o vencido).
 
@@ -308,7 +326,9 @@ cualquier articulo.
 La feature es aditiva y nunca rompe una busqueda:
 
 - Sin documentos en el corpus, o si el archivo no casa, se aplica un regex de
-  `Articulo N` sobre el propio snippet (`locator_source: "snippet_regex"`).
+  `Articulo N` sobre el propio snippet (`locator_source: "snippet_regex"`). Si el texto
+  nombra mas de un articulo, el regex no elige: sin indice no hay forma de saber donde
+  termina uno y empieza el otro.
 - Si tampoco hay referencia normativa, los campos quedan vacios y la cita sale igual que
   antes de esta feature.
 - Cualquier excepcion del locator se traga: `ENABLE_CITATION_LOCATOR=false` la desactiva

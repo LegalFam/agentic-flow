@@ -341,11 +341,18 @@ class LocatorResolveResponseCitation(BaseModel):
     page: int | None = None
     locator_source: str = ""
     resolved: bool = False
-    # De donde salio la ubicacion: "excerpt" (el fragmento citado), "chunk" (el chunk
-    # completo), "ambiguous" (el chunk abarca varios articulos y no hubo excerpt
-    # verificable: se devuelve vacio) o "unknown" (citation_id que no esta en el registro).
+    # De donde salio la ubicacion: "excerpt" (el fragmento citado, un solo articulo),
+    # "excerpt_multi" (el fragmento cruza articulos y se citan todos), "chunk" (el chunk
+    # completo), "ambiguous" (abarca varios articulos que no se pudieron combinar y no
+    # hubo excerpt verificable: se devuelve vacio) o "unknown" (citation_id que no esta
+    # en el registro).
     locator_scope: str = ""
     chunk_articles: list[str] = Field(default_factory=list)
+    excerpt_articles: list[str] = Field(default_factory=list)
+    # Documento de la cita. Viaja por el registro y no por el prompt, igual que el
+    # locator: asi la cita llega completa aunque el agente no copie estos campos.
+    file_name: str = ""
+    file_url: str = ""
 
 
 class LocatorResolveResponse(BaseModel):

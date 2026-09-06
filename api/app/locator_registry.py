@@ -26,7 +26,16 @@ EMPTY: dict = {"locator": "", "breadcrumb": "", "page": None, "locator_source": 
 # Junto al locator se guarda de donde salio. Sin esto, `/resolve-locators` no podria
 # reanclar el fragmento que el agente XAI dice haber usado: no sabria contra que documento
 # ni contra que chunk verificarlo.
-EMPTY_CONTEXT: dict = {"title": "", "file_id": "", "snippet": "", "articles": []}
+EMPTY_CONTEXT: dict = {
+    "title": "",
+    "file_id": "",
+    "snippet": "",
+    "articles": [],
+    # El documento de la cita se guarda aca por lo mismo que el locator: para que
+    # `/resolve-locators` lo devuelva sin depender de que el agente lo haya copiado.
+    "file_name": "",
+    "file_url": "",
+}
 
 
 def register(citation_id: str, fields: dict, context: dict | None = None) -> None:

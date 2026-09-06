@@ -30,6 +30,12 @@ CHUNK = (
 
 EXCERPT_562 = "El demandante goza de Auxilio Judicial sin trámite ni prestar caución juratoria."
 
+# Un excerpt que cruza el corte entre articulos: se cita con los dos o con ninguno.
+EXCERPT_561_562 = (
+    "los directores de los establecimientos de menores. Articulo 562.- El demandante goza "
+    "de Auxilio Judicial"
+)
+
 CHUNK_FIELDS = {
     "locator": "Art. 561",
     "breadcrumb": "Seccion Quinta - Procesos contenciosos > Art. 561",
@@ -58,6 +64,8 @@ def register(citation_id="abc123", articles=("Art. 561", "Art. 562")):
             "file_id": "procesal",
             "snippet": CHUNK,
             "articles": list(articles),
+            "file_name": "Codigo Procesal Civil",
+            "file_url": "https://example.test/procesal",
         },
     )
 
@@ -79,6 +87,40 @@ def test_excerpt_wins_over_the_chunk_locator(corpus_dir):
     assert citation.locator_scope == "excerpt"
     assert citation.chunk_articles == ["Art. 561", "Art. 562"]
     assert response.from_excerpt == 1
+
+
+def test_excerpt_that_crosses_articles_cites_all_of_them(corpus_dir):
+    """El caso que reaparecio: el fragmento parte del 561 y sigue dentro del 562."""
+    register()
+    response, citation = ask(excerpt=EXCERPT_561_562)
+    assert citation.locator == "Arts. 561 y 562"
+    assert citation.locator_scope == "excerpt_multi"
+    assert citation.excerpt_articles == ["Art. 561", "Art. 562"]
+    assert response.from_excerpt == 1
+
+
+def test_uncombinable_multi_article_excerpt_returns_no_location(corpus_dir, monkeypatch):
+    monkeypatch.setattr(settings, "locator_max_combined_articles", 1)
+    register()
+    response, citation = ask(excerpt=EXCERPT_561_562)
+    assert citation.locator == ""
+    assert citation.locator_scope == "ambiguous"
+    assert response.ambiguous == 1
+
+
+def test_the_document_comes_from_the_registry_not_from_the_agent(corpus_dir):
+    """El agente ya no copia file_name ni file_url: se recuperan por el citation_id."""
+    register()
+    _, citation = ask(excerpt=EXCERPT_562)
+    assert citation.file_name == "Codigo Procesal Civil"
+    assert citation.file_url == "https://example.test/procesal"
+
+
+def test_unknown_citation_id_has_no_document_either(corpus_dir):
+    register()
+    _, citation = ask(citation_id="alterado", excerpt=EXCERPT_562)
+    assert citation.file_name == ""
+    assert citation.file_url == ""
 
 
 def test_multi_article_chunk_without_excerpt_returns_no_location(corpus_dir):

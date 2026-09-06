@@ -420,7 +420,11 @@ def resolve_citation_locator(context_title: str, file_id: str, snippet: str) -> 
 
 
 def resolve_citation_entry(
-    context_title: str, file_id: str, snippet: str
+    context_title: str,
+    file_id: str,
+    snippet: str,
+    file_name: str = "",
+    file_url: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """`(campos del locator, contexto de resolucion)`.
 
@@ -429,7 +433,14 @@ def resolve_citation_entry(
     articulos, caso en el que quedarse con el primero seria adivinar.
     """
     empty = {"locator": "", "breadcrumb": "", "page": None, "locator_source": ""}
-    context = {"title": context_title, "file_id": file_id, "snippet": snippet, "articles": []}
+    context = {
+        "title": context_title,
+        "file_id": file_id,
+        "snippet": snippet,
+        "articles": [],
+        "file_name": file_name,
+        "file_url": file_url,
+    }
     if not settings.enable_citation_locator or not snippet:
         return empty, context
 
@@ -497,7 +508,9 @@ def _extract_grounding_citations(response: Any) -> list[dict[str, Any]]:
             snippet = _clean_user_text(getattr(context, "text", None))
             file_id = _clean_user_text(metadata.get("identificador")) or context_title
 
-            locator_fields, locator_context = resolve_citation_entry(context_title, file_id, snippet)
+            locator_fields, locator_context = resolve_citation_entry(
+                context_title, file_id, snippet, file_name, file_url
+            )
             identity = citation_identity(file_url, locator_fields["locator"], snippet)
             if identity in seen:
                 continue

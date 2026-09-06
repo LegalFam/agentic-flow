@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Un chunk que abarca varios articulos y sin excerpt verificable sale sin ubicacion:
     # quedarse con el primero seria adivinar cual sustenta la respuesta.
     locator_require_excerpt_when_ambiguous: bool = True
+    # Un excerpt que cruza articulos se cita con todos ellos, no con el primero. Pasado
+    # este numero el fragmento ya no ubica nada util y la cita sale sin ubicacion.
+    locator_max_combined_articles: int = 3
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

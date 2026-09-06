@@ -50,6 +50,28 @@ CHUNK = (
 EXCERPT_562 = "El demandante goza de Auxilio Judicial sin trámite ni prestar caución juratoria."
 EXCERPT_563 = "el Juez puede prohibir al demandado ausentarse del país"
 
+# El excerpt tampoco respeta el articulado: el agente copio desde el final del 562 y
+# siguio dentro del 563. Atribuirlo al 562 por ser el primero es el mismo error que el
+# excerpt vino a corregir, un nivel mas abajo.
+EXCERPT_562_563 = (
+    "La resolución que lo concede es inimpugnable. Articulo 563.- A pedido de parte y "
+    "cuando se acredite de manera indubitable el vínculo familiar"
+)
+
+# Dos articulos que no comparten padre: el tramo cruza de un titulo al siguiente.
+DOS_TITULOS = """TITULO I
+ALIMENTOS
+
+Articulo 472.- Se entiende por alimentos lo que es indispensable para el sustento del
+menor, y comprende habitacion, vestido, educacion y asistencia medica.
+
+TITULO II
+PATRIA POTESTAD
+
+Articulo 473.- El mayor de dieciocho anos solo puede pedir alimentos cuando no se
+encuentre en aptitud de atender a su subsistencia.
+"""
+
 
 @pytest.fixture(scope="module")
 def index():
@@ -126,3 +148,49 @@ def test_article_span_ignores_an_article_that_is_too_far_behind(index, monkeypat
     monkeypatch.setattr(settings, "locator_max_article_span", 1)
     _, articles = L.resolve_chunk(index, EXCERPT_563)
     assert articles == []
+
+
+# --- excerpt que cruza articulos -------------------------------------------------
+
+def test_excerpt_that_crosses_two_articles_cites_both(index):
+    """La cita real: el fragmento arranca en el 562 y termina dentro del 563."""
+    found, articles = L.resolve_excerpt_span(index, CHUNK, EXCERPT_562_563)
+    assert articles == ["Art. 562", "Art. 563"]
+    assert found.label == "Arts. 562 y 563"
+    assert found.breadcrumb.endswith("Arts. 562 y 563")
+    assert found.breadcrumb.startswith("Seccion Quinta")
+
+
+def test_single_article_excerpt_reports_only_that_article(index):
+    found, articles = L.resolve_excerpt_span(index, CHUNK, EXCERPT_562)
+    assert articles == ["Art. 562"]
+    assert found.label == "Art. 562"
+
+
+def test_excerpt_that_crosses_too_many_articles_is_rejected(index, monkeypatch):
+    monkeypatch.setattr(settings, "locator_max_combined_articles", 1)
+    found, articles = L.resolve_excerpt_span(index, CHUNK, EXCERPT_562_563)
+    assert articles == ["Art. 562", "Art. 563"]
+    assert found.is_empty()
+
+
+def test_excerpt_that_crosses_parents_is_rejected():
+    """Cruzar de un titulo a otro ya no ubica nada: mejor una cita sin ubicacion."""
+    index = L.build_index(DOS_TITULOS)
+    chunk = L.clean_user_text(DOS_TITULOS)
+    excerpt = (
+        "habitacion, vestido, educacion y asistencia medica. TITULO II PATRIA POTESTAD "
+        "Articulo 473.- El mayor de dieciocho anos solo puede pedir alimentos"
+    )
+    found, articles = L.resolve_excerpt_span(index, chunk, excerpt)
+    assert articles == ["Art. 472", "Art. 473"]
+    assert found.is_empty()
+
+
+def test_snippet_regex_fallback_refuses_a_multi_article_excerpt():
+    """Sin corpus no hay forma de saber donde termina un articulo: no se elige ninguno."""
+    chunk = (
+        "Articulo 562.- El demandante goza de Auxilio Judicial. Articulo 563.- A pedido "
+        "de parte el Juez puede prohibir al demandado ausentarse del pais."
+    )
+    assert L.resolve_excerpt(None, chunk, chunk).is_empty()
