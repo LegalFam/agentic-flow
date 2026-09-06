@@ -158,6 +158,86 @@ def clear_cache() -> int:
     return size
 
 
+def sync_replacement(filename: str, markdown: str, removed_display_names: list[str]) -> dict:
+    """Deja el corpus local en el mismo estado que el store tras un reemplazo.
+
+    Sin esto queda el peor caso silencioso que describe el README: el nombre viejo sigue
+    casando, el locator indexa un texto que ya no es el indexado, y las citas de ese
+    documento pierden ubicacion sin ningun error visible.
+
+    En Cloud Run el corpus es un volumen de Cloud Storage de solo lectura, asi que no
+    poder escribir es un resultado esperado y no una excepcion: se reporta `synced: False`
+    con el motivo y el operador sincroniza el bucket.
+    """
+    root = corpus_path()
+    if not root.is_dir():
+        return {"synced": False, "reason": f"{root} no existe"}
+
+    target = root / Path(filename).name
+    if target.suffix != ".md":
+        target = target.with_suffix(".md")
+
+    # Los viejos se resuelven ANTES de escribir el nuevo: los dos normalizan a la misma
+    # llave (es lo que los emparejo), asi que despues de escribirlo `resolve_document_path`
+    # del nombre viejo devolveria el archivo nuevo y lo borrariamos recien escrito.
+    stale = []
+    for display_name in removed_display_names:
+        path = resolve_document_path(display_name, None)
+        if path is not None and path != target and path not in stale:
+            stale.append(path)
+
+    try:
+        target.write_text(markdown, encoding="utf-8")
+    except OSError as exc:
+        return {"synced": False, "reason": f"no se pudo escribir {target}: {exc}"}
+
+    removed: list[str] = []
+    failed: list[str] = []
+    for path in stale:
+        try:
+            path.unlink()
+            removed.append(path.name)
+        except OSError as exc:
+            failed.append(f"{path.name}: {exc}")
+
+    manifest_pruned = _prune_manifest(removed_display_names, removed)
+    clear_cache()
+
+    return {
+        "synced": True,
+        "written": target.name,
+        "removed": removed,
+        "remove_failed": failed,
+        "manifest_pruned": manifest_pruned,
+    }
+
+
+def _prune_manifest(removed_display_names: list[str], removed_files: list[str]) -> list[str]:
+    """Saca del manifest las entradas que apuntan a lo que ya no existe.
+
+    Una entrada huerfana no rompe la resolucion, pero sobrevive a varias revisiones y
+    termina mapeando un nombre viejo a un archivo que alguien recreo con otro contenido.
+    """
+    manifest = load_manifest()
+    if not manifest:
+        return []
+
+    pruned = [
+        key
+        for key, value in manifest.items()
+        if key in set(removed_display_names) or value in set(removed_files)
+    ]
+    if not pruned:
+        return []
+
+    remaining = {key: value for key, value in manifest.items() if key not in set(pruned)}
+    try:
+        manifest_path().write_text(json.dumps(remaining, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        return []
+    return pruned
+
+
 def status() -> dict:
     files = iter_corpus_files()
     root = corpus_path()

@@ -229,6 +229,70 @@ class FileSearchStoreResolveResponse(BaseModel):
     saved: bool
 
 
+class FileSearchDocument(BaseModel):
+    name: str
+    display_name: str = ""
+    size_bytes: int = 0
+    state: str = ""
+    mime_type: str = ""
+    create_time: str | None = None
+
+
+class FileSearchDocumentListRequest(BaseModel):
+    file_search_store_name: str | None = None
+
+
+class FileSearchDocumentListResponse(BaseModel):
+    file_search_store: str
+    documents: list[FileSearchDocument] = Field(default_factory=list)
+
+
+class FileSearchReplacePlanRequest(BaseModel):
+    filename: str
+    file_search_store_name: str | None = None
+
+
+class FileSearchReplacePlanResponse(BaseModel):
+    file_search_store: str
+    filename: str
+    replacement_key: str
+    documents: int
+    superseded: list[FileSearchDocument] = Field(default_factory=list)
+    already_indexed: list[FileSearchDocument] = Field(default_factory=list)
+    # "replace" (uno solo, caso normal), "new" (nada que reemplazar), "ambiguous" (varios
+    # candidatos) o "identical" (mismo display_name, o sea el mismo PDF).
+    verdict: str
+    message: str
+
+
+class FileSearchReplaceRequest(BaseModel):
+    filename: str
+    markdown: str
+    metadata: LegalMetadata
+    file_search_store_name: str | None = None
+    # Nombres completos o display_name de los documentos a borrar. Manda sobre lo que
+    # deduzca el plan: es la unica forma de resolver un caso ambiguo.
+    supersedes: list[str] = Field(default_factory=list)
+    allow_new: bool = False
+    allow_multiple: bool = False
+    sync_corpus: bool = True
+    wait_until_done: bool = True
+    max_wait_seconds: int = Field(default=900, ge=1, le=3600)
+
+
+class FileSearchReplaceResponse(BaseModel):
+    file_search_store: str
+    filename: str
+    uploaded: bool
+    verdict: str = ""
+    superseded: list[FileSearchDocument] = Field(default_factory=list)
+    deleted: list[str] = Field(default_factory=list)
+    delete_failed: list[dict[str, str]] = Field(default_factory=list)
+    corpus: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    message: str
+
+
 class RagSearchRequest(BaseModel):
     query: str
     original_message: str | None = None

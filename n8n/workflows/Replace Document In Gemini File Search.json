@@ -1,0 +1,1430 @@
+{
+  "name": "Replace Document In Gemini File Search",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0000-4000-8000-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "store-display-name",
+              "name": "fileSearchStoreDisplayName",
+              "value": "FamilyLaw",
+              "type": "string"
+            },
+            {
+              "id": "updates-pdf-folder",
+              "name": "updatesPdfFolderId",
+              "value": "REPLACE_WITH_UPDATES_PDF_FOLDER_ID",
+              "type": "string"
+            },
+            {
+              "id": "processed-pdf-folder",
+              "name": "processedPdfFolderId",
+              "value": "REPLACE_WITH_PROCESSED_PDF_FOLDER_ID",
+              "type": "string"
+            },
+            {
+              "id": "replace-log-folder",
+              "name": "replaceLogFolderId",
+              "value": "REPLACE_WITH_REPLACE_LOG_FOLDER_ID",
+              "type": "string"
+            },
+            {
+              "id": "errors-folder",
+              "name": "errorsFolderId",
+              "value": "1Z3EMkZZ5fMG76u2zZKYsFYkrXzpC7tgP",
+              "type": "string"
+            },
+            {
+              "id": "corpus-bucket",
+              "name": "corpusBucket",
+              "value": "={{ $env.CORPUS_BUCKET || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "api-base-url",
+              "name": "processingApiBaseUrl",
+              "value": "={{ $env.PROCESSING_API_BASE_URL || 'http://processing-api:8000' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000002",
+      "name": "Edit Replace Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.processingApiBaseUrl + '/file-search-stores/resolve' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { display_name: $json.fileSearchStoreDisplayName, create_if_missing: false } }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000003",
+      "name": "API - Resolve File Search Store",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "store-name",
+              "name": "fileSearchStoreName",
+              "value": "={{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "store-display-name",
+              "name": "fileSearchStoreDisplayName",
+              "value": "={{ $('Edit Replace Config').item.json.fileSearchStoreDisplayName }}",
+              "type": "string"
+            },
+            {
+              "id": "updates-pdf-folder",
+              "name": "updatesPdfFolderId",
+              "value": "={{ $('Edit Replace Config').item.json.updatesPdfFolderId }}",
+              "type": "string"
+            },
+            {
+              "id": "processed-pdf-folder",
+              "name": "processedPdfFolderId",
+              "value": "={{ $('Edit Replace Config').item.json.processedPdfFolderId }}",
+              "type": "string"
+            },
+            {
+              "id": "replace-log-folder",
+              "name": "replaceLogFolderId",
+              "value": "={{ $('Edit Replace Config').item.json.replaceLogFolderId }}",
+              "type": "string"
+            },
+            {
+              "id": "errors-folder",
+              "name": "errorsFolderId",
+              "value": "={{ $('Edit Replace Config').item.json.errorsFolderId }}",
+              "type": "string"
+            },
+            {
+              "id": "corpus-bucket",
+              "name": "corpusBucket",
+              "value": "={{ $('Edit Replace Config').item.json.corpusBucket }}",
+              "type": "string"
+            },
+            {
+              "id": "api-base-url",
+              "name": "processingApiBaseUrl",
+              "value": "={{ $('Edit Replace Config').item.json.processingApiBaseUrl }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000004",
+      "name": "Set Resolved Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -940,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": ".pdf",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $('Set Resolved Config').item.json.updatesPdfFolderId }}",
+            "mode": "id",
+            "cachedResultName": "input/updates/pdf"
+          }
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000005",
+      "name": "Google Drive - List Updated PDFs",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -720,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000006",
+      "name": "Loop Over Updated PDFs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "pdf"
+        }
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000007",
+      "name": "Google Drive - Download PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -280,
+        96
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Set Resolved Config').item.json.processingApiBaseUrl + '/convert-jobs' }}",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "pdf"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000008",
+      "name": "API - Start PDF Conversion Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -60,
+        96
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000009",
+      "name": "Wait - Conversion Poll Interval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        0
+      ],
+      "webhookId": "replace-conversion-poll-interval"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Set Resolved Config').item.json.processingApiBaseUrl + '/convert-jobs/' + $json.job_id }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000010",
+      "name": "API - Get PDF Conversion Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        380,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "conversion-succeeded",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "succeeded",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000011",
+      "name": "IF - Conversion Succeeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "conversion-failed",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000012",
+      "name": "IF - Conversion Failed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $json;\nif (!job.result) {\n  throw new Error(`Conversion job ${job.job_id} completed without a result`);\n}\n// El display_name con el que se indexa es el nombre del markdown, y ese sale del\n// document_id: \"<stem>-<sha256(pdf)[:12]>.md\". Mismo criterio que el flujo de conversion,\n// porque si aca se nombrara distinto el reemplazo no encontraria la version vieja.\nreturn [{ json: { ...job.result, mdName: `${job.result.document_id}.md` } }];"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000013",
+      "name": "Take Conversion Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Set Resolved Config').item.json.processingApiBaseUrl + '/extract-metadata' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { filename: $json.filename, markdown: $json.markdown, fuente: $('Google Drive - Download PDF').item.json.webViewLink || $('Google Drive - Download PDF').item.json.name } }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000014",
+      "name": "API - Extract Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        -96
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Set Resolved Config').item.json.processingApiBaseUrl + '/file-search-stores/documents/plan-replace' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { filename: $('Take Conversion Result').item.json.mdName, file_search_store_name: $('Set Resolved Config').item.json.fileSearchStoreName } }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000015",
+      "name": "API - Plan Replacement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1260,
+        -96
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $json;\nconst converted = $('Take Conversion Result').item.json;\nconst metadata = $('API - Extract Metadata').item.json.metadata || {};\nconst config = $('Set Resolved Config').item.json;\n\nconst superseded = plan.superseded || [];\nconst supersededNames = superseded.map((doc) => doc.display_name);\n// Lo que el formulario tiene que dejar ver es exactamente lo que se va a borrar: en File\n// Search el borrado no se deshace y no queda version anterior a la que volver.\nconst supersededSummary = superseded.length\n  ? superseded.map((doc) => `- ${doc.display_name} (${doc.size_bytes} bytes)`).join('\\n')\n  : '- (ninguno)';\n\nconst advice = {\n  replace: 'Se reemplaza una sola version. Es el caso normal.',\n  identical: 'ESTE PDF YA ESTA INDEXADO con el mismo nombre, o sea es el mismo archivo byte a byte. Revisa que no hayas tomado el PDF viejo.',\n  new: 'NO HAY NADA QUE REEMPLAZAR con esa llave. Si de verdad es un documento nuevo, usa el flujo de alta. Si es una actualizacion cuyo PDF fue renombrado, pon el nombre viejo en supersedes.',\n  ambiguous: 'VARIOS DOCUMENTOS casan con la llave. Deja en supersedes solo el que corresponde, o el reemplazo se rechaza.',\n}[plan.verdict] || '';\n\nreturn [{\n  json: {\n    mdName: converted.mdName,\n    documentId: converted.document_id,\n    pdfName: converted.filename,\n    pages: converted.pages,\n    ocrUsed: converted.ocr_used,\n    fileSearchStoreName: config.fileSearchStoreName,\n    fileSearchStoreDisplayName: config.fileSearchStoreDisplayName,\n    processedPdfFolderId: config.processedPdfFolderId,\n    replaceLogFolderId: config.replaceLogFolderId,\n    errorsFolderId: config.errorsFolderId,\n    corpusBucket: config.corpusBucket,\n    corpusTarget: config.corpusBucket\n      ? `bucket ${config.corpusBucket} (lo sube este flujo antes de reemplazar)`\n      : 'volumen local, lo sincroniza la API',\n    verdict: plan.verdict,\n    // Solo se precarga cuando hay una sola version que reemplazar. En el caso ambiguo\n    // precargar los dos candidatos convertiria \"aceptar sin tocar nada\" en borrarlos\n    // todos: ahi el campo va vacio y la API rechaza con 409 hasta que alguien escriba\n    // el nombre exacto.\n    supersedesDefault: plan.verdict === 'replace' ? supersededNames.join('\\n') : '',\n    planMessage: plan.message,\n    replacementKey: plan.replacement_key,\n    storeDocuments: plan.documents,\n    superseded,\n    supersededNames,\n    supersededSummary,\n    advice,\n    metadata,\n  },\n}];"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000016",
+      "name": "Prepare Replacement Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Confirm Document Replacement In Gemini File Search",
+        "formDescription": "=Este paso BORRA la version anterior del store, y el borrado no se deshace.\n\nStore: {{ $json.fileSearchStoreDisplayName }} ({{ $json.storeDocuments }} documentos)\nPDF nuevo: {{ $json.pdfName }}\nSe indexara como: {{ $json.mdName }}\nLlave de reemplazo: {{ $json.replacementKey }}\nCorpus del locator: {{ $json.corpusTarget }}\n\nSE VA A BORRAR:\n{{ $json.supersededSummary }}\n\nVeredicto: {{ $json.verdict }}\n{{ $json.advice }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "mdName",
+              "fieldType": "hiddenField",
+              "fieldValue": "={{ $json.mdName }}"
+            },
+            {
+              "fieldName": "fileSearchStoreName",
+              "fieldType": "hiddenField",
+              "fieldValue": "={{ $json.fileSearchStoreName }}"
+            },
+            {
+              "fieldName": "processedPdfFolderId",
+              "fieldType": "hiddenField",
+              "fieldValue": "={{ $json.processedPdfFolderId }}"
+            },
+            {
+              "fieldName": "replaceLogFolderId",
+              "fieldType": "hiddenField",
+              "fieldValue": "={{ $json.replaceLogFolderId }}"
+            },
+            {
+              "fieldName": "errorsFolderId",
+              "fieldType": "hiddenField",
+              "fieldValue": "={{ $json.errorsFolderId }}"
+            },
+            {
+              "fieldLabel": "titulo",
+              "defaultValue": "={{ $json.metadata.titulo || '' }}"
+            },
+            {
+              "fieldLabel": "identificador",
+              "defaultValue": "={{ $json.metadata.identificador || '' }}"
+            },
+            {
+              "fieldLabel": "entidad",
+              "defaultValue": "={{ $json.metadata.entidad || '' }}"
+            },
+            {
+              "fieldLabel": "fecha",
+              "defaultValue": "={{ $json.metadata.fecha || '' }}"
+            },
+            {
+              "fieldLabel": "materia",
+              "defaultValue": "={{ $json.metadata.materia || '' }}"
+            },
+            {
+              "fieldLabel": "expediente",
+              "defaultValue": "={{ $json.metadata.expediente || '' }}"
+            },
+            {
+              "fieldLabel": "articulo",
+              "defaultValue": "={{ $json.metadata.articulo || '' }}"
+            },
+            {
+              "fieldLabel": "norma",
+              "defaultValue": "={{ $json.metadata.norma || '' }}"
+            },
+            {
+              "fieldLabel": "pleno",
+              "defaultValue": "={{ $json.metadata.pleno || '' }}"
+            },
+            {
+              "fieldLabel": "protocolo",
+              "defaultValue": "={{ $json.metadata.protocolo || '' }}"
+            },
+            {
+              "fieldLabel": "Fuente",
+              "placeholder": "URL, repositorio u origen documental",
+              "defaultValue": "={{ $json.metadata.fuente || '' }}"
+            },
+            {
+              "fieldLabel": "categoriasJSON",
+              "fieldType": "textarea",
+              "placeholder": "[{\"categoria\":\"Generales\",\"subcategorias\":[\"Otros\"]}]",
+              "defaultValue": "={{ JSON.stringify($json.metadata.categorias || [{ categoria: 'Generales', subcategorias: ['Otros'] }], null, 2) }}",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "confidence",
+              "fieldType": "number",
+              "defaultValue": "={{ $json.metadata.confidence || 0.5 }}"
+            },
+            {
+              "fieldLabel": "observaciones",
+              "fieldType": "textarea",
+              "defaultValue": "={{ $json.metadata.observaciones || '' }}"
+            },
+            {
+              "fieldLabel": "supersedes",
+              "fieldType": "textarea",
+              "placeholder": "Un display_name por linea. Vacio = lo que decidio el plan",
+              "defaultValue": "={{ $json.supersedesDefault }}"
+            },
+            {
+              "fieldLabel": "replaceDecision",
+              "fieldType": "dropdown",
+              "defaultValue": "skip",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "replace"
+                  },
+                  {
+                    "option": "skip"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000017",
+      "name": "Wait - Replacement Review Form",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1700,
+        -96
+      ],
+      "webhookId": "replacement-review"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "should-replace",
+              "leftValue": "={{ $json['replaceDecision'] }}",
+              "rightValue": "replace",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000018",
+      "name": "IF - Replace Decision",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $('Wait - Replacement Review Form').first().json;\nconst review = $('Prepare Replacement Review').first().json;\nconst reviewed = review.metadata || {};\n// El markdown se lee del resultado de la conversion, no de un campo del formulario: el\n// Codigo Civil pasa el megabyte y no tiene por que viajar por el form.\nconst markdown = $('Take Conversion Result').first().json.markdown;\nif (!markdown) {\n  throw new Error('La conversion no dejo markdown para reemplazar');\n}\n\nconst emptyToNull = (value) =>\n  value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim();\nconst formValue = (...keys) => {\n  for (const key of keys) {\n    if (form[key] !== undefined && form[key] !== null && String(form[key]).trim() !== '') {\n      return form[key];\n    }\n  }\n  return undefined;\n};\nconst submittedValue = (...keys) => {\n  for (const key of keys) {\n    if (Object.prototype.hasOwnProperty.call(form, key)) {\n      return form[key];\n    }\n  }\n  return undefined;\n};\nconst normalizeSubmittedValue = (value) => (value === undefined || value === null ? null : String(value).trim());\nconst metadataValue = (key, ...aliases) => {\n  const value = submittedValue(key, ...aliases);\n  return value !== undefined ? normalizeSubmittedValue(value) : emptyToNull(reviewed[key]);\n};\n\nlet categorias;\ntry {\n  const categoriasRaw =\n    formValue('categoriasJSON', 'categoriasJson', 'CategoriasJSON') ?? JSON.stringify(reviewed.categorias || []);\n  categorias = JSON.parse(categoriasRaw || '[]');\n} catch (error) {\n  throw new Error(`Categorias JSON invalido: ${error.message}`);\n}\nif (!Array.isArray(categorias) || categorias.length === 0) {\n  throw new Error('Categorias JSON debe ser un arreglo con al menos una categoria');\n}\nconst confidenceRaw = formValue('confidence', 'Confidence') ?? reviewed.confidence ?? 0.5;\nconst confidence = Number(confidenceRaw);\nif (!Number.isFinite(confidence)) {\n  throw new Error(`confidence debe ser numerico: ${confidenceRaw}`);\n}\n\nconst metadata = {\n  titulo: metadataValue('titulo', 'Titulo'),\n  identificador: metadataValue('identificador', 'Identificador'),\n  entidad: metadataValue('entidad', 'Entidad'),\n  fecha: metadataValue('fecha', 'Fecha'),\n  materia: metadataValue('materia', 'Materia'),\n  expediente: metadataValue('expediente', 'Expediente'),\n  articulo: metadataValue('articulo', 'Articulo'),\n  norma: metadataValue('norma', 'Norma'),\n  pleno: metadataValue('pleno', 'Pleno'),\n  protocolo: metadataValue('protocolo', 'Protocolo'),\n  fuente: metadataValue('fuente', 'Fuente', 'source'),\n  categorias,\n  confidence,\n  observaciones: metadataValue('observaciones', 'Observaciones'),\n};\n\n// Lo que el revisor dejo en el textarea manda sobre lo que dedujo el plan. Es la unica\n// salida para el caso ambiguo y para el PDF que cambio de nombre entre revisiones.\nconst supersedes = String(formValue('supersedes', 'Supersedes') ?? '')\n  .split('\\n')\n  .map((line) => line.trim())\n  .filter(Boolean);\n\nconst corpusBucket = String($('Set Resolved Config').first().json.corpusBucket || '').trim();\n\nreturn [{\n  json: {\n    filename: form.mdName,\n    markdown,\n    metadata,\n    file_search_store_name: form.fileSearchStoreName,\n    supersedes,\n    // Un alta nueva no se cuela por aca: si el plan no encontro nada que reemplazar y el\n    // revisor no escribio un supersedes, la API responde 409 y el PDF no se mueve.\n    allow_new: false,\n    allow_multiple: supersedes.length > 1,\n    // Con bucket el markdown ya viaja al corpus antes del reemplazo y el mount es de\n    // solo lectura: pedirle a la API que escriba solo agregaria un warning esperado.\n    // Sin bucket (local) /work/corpus es escribible y la API lo sincroniza sola.\n    sync_corpus: !corpusBucket,\n    wait_until_done: true,\n    max_wait_seconds: 900,\n    corpusBucket,\n    // El corpus se monta en la raiz del bucket (mount-path=/corpus), asi que el nombre\n    // del objeto es el nombre del markdown, sin prefijo.\n    corpusObjectName: form.mdName,\n    verdict: review.verdict,\n    pdfName: review.pdfName,\n    processedPdfFolderId: form.processedPdfFolderId,\n    replaceLogFolderId: form.replaceLogFolderId,\n    errorsFolderId: form.errorsFolderId,\n  },\n}];"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000019",
+      "name": "Prepare Replace Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2140,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "corpus-bucket-set",
+              "leftValue": "={{ $json.corpusBucket }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000020",
+      "name": "IF - Corpus Bucket Configured",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2340,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json;\nif (!payload.corpusBucket) {\n  throw new Error('Prepare Corpus Binary corrio sin corpusBucket');\n}\nconst item = { json: payload, binary: {} };\nitem.binary.markdown = await this.helpers.prepareBinaryData(\n  Buffer.from(payload.markdown, 'utf8'),\n  payload.corpusObjectName,\n  'text/markdown'\n);\nreturn [item];"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000021",
+      "name": "Prepare Corpus Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "object",
+        "operation": "create",
+        "bucketName": "={{ $json.corpusBucket }}",
+        "objectName": "={{ $json.corpusObjectName }}",
+        "createFromBinary": true,
+        "createBinaryPropertyName": "markdown",
+        "createData": {},
+        "createQuery": {},
+        "encryptionHeaders": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000022",
+      "name": "GCS - Upload New Markdown",
+      "type": "n8n-nodes-base.googleCloudStorage",
+      "typeVersion": 1.1,
+      "position": [
+        2740,
+        -336
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": null,
+          "name": "Corpus bucket service account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Set Resolved Config').item.json.processingApiBaseUrl + '/file-search-stores/documents/replace' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Prepare Replace Payload').first().json }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000023",
+      "name": "API - Replace Gemini Document",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2960,
+        -192
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "corpus-bucket-set",
+              "leftValue": "={{ $('Prepare Replace Payload').first().json.corpusBucket }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "something-was-deleted",
+              "leftValue": "={{ $json.deleted.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000024",
+      "name": "IF - Old Markdown In Bucket",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3180,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Prepare Replace Payload').first().json;\n// Un item por cada version que la API saco del store, porque el nodo de GCS borra un\n// objeto por item. Normalmente es una sola; son varias solo con allow_multiple.\nreturn ($json.deleted || []).map((displayName) => ({\n  json: { corpusBucket: payload.corpusBucket, objectName: displayName },\n}));"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000025",
+      "name": "Prepare Corpus Deletions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3380,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "object",
+        "operation": "delete",
+        "bucketName": "={{ $json.corpusBucket }}",
+        "objectName": "={{ $json.objectName }}",
+        "getParameters": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000026",
+      "name": "GCS - Delete Old Markdown",
+      "type": "n8n-nodes-base.googleCloudStorage",
+      "typeVersion": 1.1,
+      "position": [
+        3580,
+        -336
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": null,
+          "name": "Corpus bucket service account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $('Prepare Replace Payload').first().json;\n// Por el nodo y no por $json: cuando hubo borrado en el bucket, lo que llega es la\n// respuesta de GCS. Y .first() porque ese borrado puede haber abierto varios items.\nconst replace = $('API - Replace Gemini Document').first().json;\nconst corpus = payload.corpusBucket\n  ? {\n      mode: 'bucket',\n      bucket: payload.corpusBucket,\n      uploaded: payload.corpusObjectName,\n      deleted: replace.deleted || [],\n    }\n  : { mode: 'volumen local', ...(replace.corpus || {}) };\nconst result = {\n  pdf: payload.pdfName,\n  filename: payload.filename,\n  verdict: payload.verdict,\n  metadata: payload.metadata,\n  replace,\n  corpus,\n  replaced_at: new Date().toISOString(),\n};\nconst logName = `${payload.filename.replace(/\\.md$/, '')}.gemini-replace.json`;\nconst item = { json: { logName, result, replaceLogFolderId: payload.replaceLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(result, null, 2), 'utf8'),\n  logName,\n  'application/json'\n);\nreturn [item];"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000027",
+      "name": "Prepare Replace Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "log",
+        "name": "={{ $json.logName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.replaceLogFolderId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000028",
+      "name": "Google Drive - Upload Replace Log",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4020,
+        -192
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Drive - Download PDF').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Prepare Replace Payload').item.json.processedPdfFolderId }}",
+          "mode": "id",
+          "cachedResultName": "proccessed/pdf"
+        }
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000029",
+      "name": "Google Drive - Move PDF To Processed",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4240,
+        -192
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const review = $('Prepare Replacement Review').first().json;\nconst form = $('Wait - Replacement Review Form').first().json;\nconst record = {\n  pdf: review.pdfName,\n  filename: review.mdName,\n  verdict: review.verdict,\n  plan_message: review.planMessage,\n  would_have_deleted: review.supersededNames,\n  decision: form.replaceDecision,\n  skipped_at: new Date().toISOString(),\n};\nconst logName = `${review.documentId}.gemini-replace-skipped.json`;\nconst item = { json: { logName, record, replaceLogFolderId: review.replaceLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(record, null, 2), 'utf8'),\n  logName,\n  'application/json'\n);\nreturn [item];"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000030",
+      "name": "Prepare Skip Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2140,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "log",
+        "name": "={{ $json.logName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.replaceLogFolderId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000031",
+      "name": "Google Drive - Upload Skip Log",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2360,
+        0
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = $json;\nconst source = $('Google Drive - Download PDF').item?.json || {};\nconst filename = source.name || 'unknown.pdf';\nconst safeName = filename.replace(/[^a-zA-Z0-9_.-]+/g, '-');\n// Un 409 no es una caida: es la API negandose a borrar sin que alguien decida cual. Se\n// registra igual, y el PDF se queda en la carpeta de updates para reintentarlo bien.\nconst record = { filename, error: err, happened_at: new Date().toISOString() };\nconst item = { json: { errorName: `${safeName}.replace-error.json`, record }, binary: {} };\nitem.binary.error = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(record, null, 2), 'utf8'),\n  item.json.errorName,\n  'application/json'\n);\nreturn [item];"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000032",
+      "name": "Prepare Replace Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "error",
+        "name": "={{ $json.errorName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Set Resolved Config').item.json.errorsFolderId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000033",
+      "name": "Google Drive - Upload Error",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3180,
+        192
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "width": 700,
+        "height": 380,
+        "color": 3,
+        "content": "## Paso destructivo\n\nFile Search no tiene update in-place: la unica forma de actualizar un documento es borrarlo y volver a subirlo. El borrado no se deshace y no queda version anterior.\n\nLa version vieja no se encuentra por nombre: `build_document_id` mete el sha256 del PDF en el nombre, asi que un PDF nuevo trae otro nombre. Se encuentra por el stem sin el hash, la misma llave que usa el citation locator.\n\nEl plan se niega a elegir cuando la llave casa con varios documentos o con ninguno. Esos casos se resuelven escribiendo el nombre exacto en el campo `supersedes` del formulario, no dejando que el flujo adivine."
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000034",
+      "name": "Sticky Note - Destructive Step",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1660,
+        -620
+      ]
+    },
+    {
+      "parameters": {
+        "width": 700,
+        "height": 380,
+        "color": 5,
+        "content": "## El orden del corpus no es negociable\n\nEl markdown entra al bucket ANTES de reemplazar en el store, y el objeto viejo se borra DESPUES. Asi la ventana en la que una cita podria resolver contra el texto equivocado es cero.\n\nAl reves seria el peor caso: `resolve_document_path` cae al stem sin el hash, el nombre nuevo casa con el markdown VIEJO, y un articulo que sobrevivio la modificatoria pero cambio de numero casa difuso (umbral 0.82). La cita sale con el numero anterior, con seguridad y sin aviso.\n\nSi `CORPUS_BUCKET` esta vacio el flujo salta estos nodos y la API sincroniza `/work/corpus` sola, que es como funciona en local.\n\nLos dos nodos de GCS necesitan una credencial de service account con permiso de escritura y borrado en el bucket (`roles/storage.objectUser`)."
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000035",
+      "name": "Sticky Note - Corpus Order",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2320,
+        -620
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Edit Replace Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Replace Config": {
+      "main": [
+        [
+          {
+            "node": "API - Resolve File Search Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Resolve File Search Store": {
+      "main": [
+        [
+          {
+            "node": "Set Resolved Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Resolved Config": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - List Updated PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - List Updated PDFs": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Updated PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Updated PDFs": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Google Drive - Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Download PDF": {
+      "main": [
+        [
+          {
+            "node": "API - Start PDF Conversion Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Start PDF Conversion Job": {
+      "main": [
+        [
+          {
+            "node": "Wait - Conversion Poll Interval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait - Conversion Poll Interval": {
+      "main": [
+        [
+          {
+            "node": "API - Get PDF Conversion Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Get PDF Conversion Job": {
+      "main": [
+        [
+          {
+            "node": "IF - Conversion Succeeded",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Conversion Succeeded": {
+      "main": [
+        [
+          {
+            "node": "Take Conversion Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF - Conversion Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Conversion Failed": {
+      "main": [
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait - Conversion Poll Interval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Take Conversion Result": {
+      "main": [
+        [
+          {
+            "node": "API - Extract Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Extract Metadata": {
+      "main": [
+        [
+          {
+            "node": "API - Plan Replacement",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Plan Replacement": {
+      "main": [
+        [
+          {
+            "node": "Prepare Replacement Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Replacement Review": {
+      "main": [
+        [
+          {
+            "node": "Wait - Replacement Review Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait - Replacement Review Form": {
+      "main": [
+        [
+          {
+            "node": "IF - Replace Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Replace Decision": {
+      "main": [
+        [
+          {
+            "node": "Prepare Replace Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Skip Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Replace Payload": {
+      "main": [
+        [
+          {
+            "node": "IF - Corpus Bucket Configured",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Corpus Bucket Configured": {
+      "main": [
+        [
+          {
+            "node": "Prepare Corpus Binary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "API - Replace Gemini Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Corpus Binary": {
+      "main": [
+        [
+          {
+            "node": "GCS - Upload New Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GCS - Upload New Markdown": {
+      "main": [
+        [
+          {
+            "node": "API - Replace Gemini Document",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Replace Gemini Document": {
+      "main": [
+        [
+          {
+            "node": "IF - Old Markdown In Bucket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Old Markdown In Bucket": {
+      "main": [
+        [
+          {
+            "node": "Prepare Corpus Deletions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Corpus Deletions": {
+      "main": [
+        [
+          {
+            "node": "GCS - Delete Old Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GCS - Delete Old Markdown": {
+      "main": [
+        [
+          {
+            "node": "Prepare Replace Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Replace Log": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Upload Replace Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload Replace Log": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Move PDF To Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Move PDF To Processed": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Updated PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Skip Log": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Upload Skip Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload Skip Log": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Updated PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Replace Error": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Upload Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload Error": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Updated PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c7f1a4e2-5b3d-4c8a-9f21-6d0e8b4a1c93",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "RplcGmniFSStore1",
+  "tags": []
+}

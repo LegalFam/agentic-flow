@@ -3,7 +3,7 @@ from json import JSONDecodeError
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 
-from app import corpus, locator, locator_registry
+from app import corpus, locator, locator_registry, store_documents
 from app.config import settings
 from app.converter import convert_pdf_to_markdown
 from app.conversion_jobs import get_conversion_job, start_conversion_job
@@ -23,6 +23,12 @@ from app.models import (
     LocatorResolveRequest,
     LocatorResolveResponse,
     LocatorResolveResponseCitation,
+    FileSearchDocumentListRequest,
+    FileSearchDocumentListResponse,
+    FileSearchReplacePlanRequest,
+    FileSearchReplacePlanResponse,
+    FileSearchReplaceRequest,
+    FileSearchReplaceResponse,
     FileSearchUploadRequest,
     FileSearchUploadResponse,
     FileSearchStoreResolveRequest,
@@ -142,6 +148,64 @@ async def resolve_store(payload: FileSearchStoreResolveRequest) -> FileSearchSto
                 create_if_missing=payload.create_if_missing,
             )
         )
+    except Exception as exc:
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@app.post("/file-search-stores/documents", response_model=FileSearchDocumentListResponse)
+async def list_store_documents(payload: FileSearchDocumentListRequest) -> FileSearchDocumentListResponse:
+    try:
+        return FileSearchDocumentListResponse.model_validate(
+            store_documents.list_store_documents(payload.file_search_store_name)
+        )
+    except Exception as exc:
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@app.post("/file-search-stores/documents/plan-replace", response_model=FileSearchReplacePlanResponse)
+async def plan_replace_document(payload: FileSearchReplacePlanRequest) -> FileSearchReplacePlanResponse:
+    """Que version quedaria reemplazada, sin tocar el store.
+
+    Es el paso que alimenta la revision manual: el borrado en File Search no se deshace,
+    asi que quien aprueba tiene que ver antes el nombre exacto de lo que se va a borrar.
+    """
+    try:
+        return FileSearchReplacePlanResponse.model_validate(
+            store_documents.plan_replacement(
+                filename=payload.filename,
+                file_search_store_name=payload.file_search_store_name,
+            )
+        )
+    except Exception as exc:
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@app.post("/file-search-stores/documents/replace", response_model=FileSearchReplaceResponse)
+async def replace_store_document(payload: FileSearchReplaceRequest) -> FileSearchReplaceResponse:
+    """Sube la version nueva, borra la vieja y sincroniza el corpus local."""
+    try:
+        return FileSearchReplaceResponse.model_validate(
+            store_documents.replace_document(
+                filename=payload.filename,
+                markdown=payload.markdown,
+                metadata=payload.metadata,
+                file_search_store_name=payload.file_search_store_name,
+                supersedes=payload.supersedes,
+                allow_new=payload.allow_new,
+                allow_multiple=payload.allow_multiple,
+                sync_corpus=payload.sync_corpus,
+                wait_until_done=payload.wait_until_done,
+                max_wait_seconds=payload.max_wait_seconds,
+            )
+        )
+    except store_documents.ReplaceRefused as exc:
+        # 409 y no 503: reintentar da el mismo resultado, hace falta que alguien decida.
+        raise HTTPException(
+            status_code=409, detail=error_detail("REPLACE_NEEDS_DECISION", str(exc))
+        ) from exc
     except Exception as exc:
         status_code, detail = classify_processing_error(exc)
         raise HTTPException(status_code=status_code, detail=detail) from exc

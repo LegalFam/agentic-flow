@@ -10,6 +10,7 @@ Implementacion base para procesar PDFs legales desde Google Drive, convertirlos 
 - `n8n/workflows/upload_markdown_metadata_to_gemini_file_search.json`: workflow manual que resuelve/crea el File Search Store, empareja Markdown + metadata, pausa en un formulario de revision y continua con la subida o el log de omitido.
 - `n8n/workflows/LegalFam Message Flow.json`: workflow de chat que clasifica la consulta del usuario y usa Gemini File Search con hints de metadata para mejorar la recuperacion RAG.
 - `n8n/workflows/Move Reviewed PDFs To Proccessed.json`: workflow manual simple que mueve PDFs de `input/pdf` a `proccessed/pdf` cuando existe un `.review.json` cuyo campo `filename` coincide exactamente con el nombre del PDF.
+- `n8n/workflows/Replace Document In Gemini File Search.json`: workflow manual que actualiza un documento ya indexado a partir del PDF nuevo. Convierte, extrae metadata, muestra en un formulario que version se va a borrar y recien entonces reemplaza.
 - `.env.example`: variables requeridas.
 
 ## Puesta en marcha
@@ -43,11 +44,141 @@ docker compose up --build
 - `POST /extract-metadata`: Markdown a metadata JSON validada.
 - `POST /file-search-stores/resolve`: busca o crea el File Search Store por nombre visible y guarda su id en `/work/file_search_stores.json`.
 - `POST /upload-gemini-file-search`: subida a Gemini File Search desde el workflow separado.
+- `POST /file-search-stores/documents`: lista los documentos indexados en un store.
+- `POST /file-search-stores/documents/plan-replace`: dice que version quedaria reemplazada por un nombre dado, sin tocar el store.
+- `POST /file-search-stores/documents/replace`: sube la revision nueva, borra la vieja y sincroniza `work/corpus`.
 - `POST /rag-search`: busqueda con grounding. Cada cita incluye `locator`, `breadcrumb`, `page` y `locator_source`.
 - `GET /corpus/status`: cuantos markdowns ve el locator y si hay manifest.
 - `POST /corpus/reload`: limpia el cache de indices sin reiniciar el contenedor.
 - `POST /locator/probe`: diagnostico. Recibe `{title, snippet}` y devuelve la ubicacion resuelta y la estrategia usada.
 - `POST /resolve-locators`: cambia los `citation_id` que traen los agentes por el locator autoritativo. Acepta ademas el `original_snippet` que declara el agente XAI.
+
+## Actualizar un documento ya indexado
+
+Gemini File Search **no tiene update in-place**. Un documento solo se puede borrar y
+volver a subir. Si la version nueva entra sin sacar la vieja, el store queda con las dos
+y el RAG recupera texto contradictorio del mismo cuerpo legal sin forma de saber cual
+rige. Y el borrado no se deshace: no hay version anterior a la que volver.
+
+La version vieja tampoco se encuentra por igualdad de nombre. `build_document_id` mete
+el `sha256` del PDF en el nombre, asi que el PDF actualizado produce un `display_name`
+distinto. Se encuentra por la misma llave que usa el locator para casar corpus y store:
+el stem normalizado sin el hash.
+
+Esa llave puede casar con varios documentos o con ninguno. En los dos casos el reemplazo
+se **niega** con `409 REPLACE_NEEDS_DECISION` en vez de elegir, porque borrar el
+documento equivocado no se deshace. La salida es indicar el nombre exacto en
+`supersedes`.
+
+### El corpus del locator tiene que moverse con el store
+
+Es la parte que no perdona el olvido, y el dano es peor que perder la ubicacion de una
+cita. Si el store apunta al nombre nuevo y el corpus todavia tiene el markdown viejo,
+`resolve_document_path` no se queda sin respuesta: en su ultimo intento cae al stem sin el
+hash, que es justamente lo que empareja las dos revisiones, y **casa con el archivo
+viejo**. El locator entonces busca el snippet nuevo dentro del texto anterior, y con
+`LOCATOR_FUZZY_THRESHOLD` en 0.82 un articulo que sobrevivio la modificatoria pero cambio
+de numero casa igual. La cita sale con el numero anterior, con seguridad y sin aviso.
+
+De ahi el orden, que no es negociable: **el markdown entra al corpus antes de reemplazar
+en el store, y el viejo se borra despues**. Mientras el store apunta al nombre viejo nadie
+consulta el nuevo, asi que el archivo nuevo no molesta; y en el instante en que el store
+cambia, el corpus ya lo tiene y gana el match exacto. La ventana de citas mal atribuidas
+es cero.
+
+Quien hace ese movimiento depende del entorno:
+
+- **Local**: `work/corpus` es un volumen escribible, asi que
+  `/file-search-stores/documents/replace` lo sincroniza solo (escribe el nuevo, borra el
+  viejo, poda el manifest y limpia el cache del locator) cuando se lo llama con
+  `sync_corpus: true`.
+- **Cloud Run**: `/corpus` se monta desde Cloud Storage con `readonly=true`, asi que la
+  API no puede escribirlo por diseno. Ahi el workflow sube y borra los objetos del bucket
+  por la API de GCS y llama al reemplazo con `sync_corpus: false`. Si igual se lo llama
+  con `sync_corpus: true`, la respuesta sale con `corpus.synced: false` y un aviso en vez
+  de romper.
+
+### Desde n8n
+
+`Replace Document In Gemini File Search` toma los PDFs de una carpeta de Drive aparte de
+`input/pdf` (para que el flujo de alta no los trate como documentos nuevos), los
+convierte, extrae la metadata, y pausa en un formulario que muestra el nombre y el tamano
+exactos de lo que se va a borrar. El desplegable de decision viene en `skip`, y el campo
+`supersedes` solo viene precargado cuando hay una sola version que reemplazar: en el caso
+ambiguo va vacio, para que aceptar sin leer no borre los dos candidatos.
+
+Antes de la primera corrida hay que completar en `Edit Replace Config` los ids marcados
+como `REPLACE_WITH_..._FOLDER_ID` (la carpeta de PDFs actualizados y la de logs).
+
+El corpus lo maneja `corpusBucket`, que toma `CORPUS_BUCKET` del entorno:
+
+- **Vacio** (local): el flujo salta los nodos de GCS y llama al reemplazo con
+  `sync_corpus: true`, o sea que la API sincroniza `work/corpus`.
+- **Con valor** (Cloud Run): `GCS - Upload New Markdown` sube el markdown al bucket antes
+  del reemplazo, y `GCS - Delete Old Markdown` borra la revision anterior despues. El
+  reemplazo va con `sync_corpus: false`.
+
+Los dos nodos de GCS piden una credencial de service account con permiso de escritura y
+borrado en el bucket (`roles/storage.objectUser`). Se crea **una sola vez en n8n**, con el
+nombre exacto `Corpus bucket service account`, y el JSON no necesita conocer su id: los
+nodos vienen con `"id": null`, y en cada import `replaceInvalidCredentials` busca por
+nombre y tipo dentro del proyecto y le pone el id real. Si hay dos credenciales con ese
+nombre, o ninguna, el nodo queda sin credencial y falla diciendolo, en vez de apuntar a un
+id fantasma.
+
+Los folder ids son distintos: son parametros del nodo `Edit Replace Config` y no tienen
+resolucion por nombre, asi que el valor durable es el del JSON. Se pueden cambiar en la UI
+para probar, pero el deploy corre `n8n import:workflow`, que hace upsert por id de
+workflow, y eso pisa el contenido con el del repo. Vale para cualquier push que toque
+`api/**`, `n8n/workflows/**`, `Dockerfile.n8n`, `scripts/sync-n8n-workflows.sh` o el propio
+deploy: no hace falta que el cambio sea del workflow.
+
+No hace falta tocar el mount ni los permisos del runtime de Cloud Run: `/corpus` sigue
+siendo de solo lectura, porque quien escribe es n8n por la API de GCS y no el contenedor
+de la API.
+
+En Cloud Run, `CORPUS_BUCKET` llega al contenedor de n8n desde el deploy (mismo valor que
+arma el volumen), asi que no hay una variable nueva que crear en GitHub.
+
+Si la subida al bucket falla, el flujo **no** sigue al reemplazo: se registra el error y
+pasa al siguiente PDF. Es el punto del orden, y perderlo dejaria el store apuntando a un
+markdown que el corpus no tiene. Si lo que falla es el borrado del objeto viejo, el store
+ya quedo bien y la resolucion tambien (el nombre nuevo gana por match exacto), pero el
+bucket queda con un archivo de mas: eso se registra como error para que alguien lo mire, y
+`corpus_diff` lo reporta como sobrante.
+
+### Desde la linea de comandos
+
+```bash
+docker compose run --rm processing-api python -m app.corpus_replace --store "FamilyLaw" --list
+docker compose run --rm processing-api python -m app.corpus_replace --store "FamilyLaw" --plan codigo-civil-<hash>.md
+```
+
+El reemplazo pide el markdown ya convertido y su metadata, y sin `--apply` es dry-run:
+
+```bash
+docker compose run --rm processing-api python -m app.corpus_replace \
+  --store "FamilyLaw" \
+  --markdown /work/nuevo/codigo-civil-<hash>.md \
+  --metadata /work/nuevo/codigo-civil-<hash>.metadata.json \
+  --apply
+```
+
+Codigos de salida: 0 hecho, 2 hace falta una decision, 3 se aplico pero algo quedo a
+medias (tipicamente el borrado o la sincronizacion del corpus), 1 error.
+
+### Lo que este flujo no resuelve
+
+- **Solo la metadata.** El `custom_metadata` se fija al indexar y no se puede editar. Un
+  cambio de categorias o de fuente obliga a reemplazar el documento igual, con el mismo
+  texto.
+- **El PDF renombrado entre revisiones.** `build_document_id` pierde los acentos en vez
+  de normalizarlos (`Codigo Procesal Civil.pdf` quedo indexado como `c-digo-...`), asi
+  que mientras el PDF conserve su nombre las dos revisiones se manglean igual y casan. Si
+  alguien lo renombra, el plan sale `new` y hay que pasar `supersedes` a mano.
+- **El `citation_id` de una respuesta en vuelo.** El registro del locator apunta al texto
+  viejo hasta que expira (`LOCATOR_REGISTRY_TTL_SECONDS`, 15 minutos por defecto). Una
+  cita emitida justo antes del reemplazo puede resolver a una ubicacion que ya no existe.
 
 ## Ubicacion de las citas (citation locator)
 

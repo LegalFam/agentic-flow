@@ -159,9 +159,6 @@ def upload_to_file_search_store(
     if not file_search_store_name:
         raise RuntimeError("file_search_store_name o GEMINI_FILE_SEARCH_STORE no esta configurado")
 
-    import tempfile
-    from pathlib import Path
-
     from google import genai
     from google.genai import types
 
@@ -172,6 +169,49 @@ def upload_to_file_search_store(
         requested_name=file_search_store_name,
         create_store_if_missing=create_store_if_missing,
     )
+
+    final_operation = upload_document(
+        client=client,
+        types=types,
+        store_name=store_name,
+        filename=filename,
+        markdown=markdown,
+        metadata=metadata,
+        wait_until_done=wait_until_done,
+        max_wait_seconds=max_wait_seconds,
+    )
+
+    return {
+        "enabled": True,
+        "uploaded": True,
+        "file_search_store": store_name,
+        "file_uri": None,
+        "raw_response": {
+            "operation_name": getattr(final_operation, "name", None),
+            "operation_done": getattr(final_operation, "done", None),
+            "metadata": metadata.model_dump(),
+        },
+        "message": "Archivo enviado a Gemini File Search Store.",
+    }
+
+
+def upload_document(
+    client,
+    types,
+    store_name: str,
+    filename: str,
+    markdown: str,
+    metadata: LegalMetadata,
+    wait_until_done: bool,
+    max_wait_seconds: int,
+):
+    """Indexa un markdown en el store y devuelve la operacion terminada.
+
+    Compartido por la subida normal y por el reemplazo (`store_documents`): la metadata
+    se fija al indexar y no se puede editar despues, asi que las dos rutas tienen que
+    construirla igual o un documento reemplazado perderia filtros que el original tenia.
+    """
+    import tempfile
 
     with tempfile.TemporaryDirectory() as temp_dir:
         path = Path(temp_dir) / filename
@@ -194,20 +234,17 @@ def upload_to_file_search_store(
                 f"{exc}; custom_metadata_sent={json.dumps(debug_metadata, ensure_ascii=False)}"
             ) from exc
 
-    final_operation = _wait_for_operation(client, operation, wait_until_done, max_wait_seconds)
+    return _wait_for_operation(client, operation, wait_until_done, max_wait_seconds)
 
-    return {
-        "enabled": True,
-        "uploaded": True,
-        "file_search_store": store_name,
-        "file_uri": None,
-        "raw_response": {
-            "operation_name": getattr(final_operation, "name", None),
-            "operation_done": getattr(final_operation, "done", None),
-            "metadata": metadata.model_dump(),
-        },
-        "message": "Archivo enviado a Gemini File Search Store.",
-    }
+
+def build_client():
+    if not settings.gemini_api_key:
+        raise RuntimeError("GEMINI_API_KEY no esta configurado")
+
+    from google import genai
+    from google.genai import types
+
+    return genai.Client(api_key=settings.gemini_api_key), types
 
 
 def _resolve_file_search_store_name(client, types, requested_name: str, create_store_if_missing: bool) -> str:

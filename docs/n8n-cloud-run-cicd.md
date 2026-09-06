@@ -261,6 +261,67 @@ redeploying.
 
 Requires `--execution-environment gen2`, which the deploy already uses.
 
+### Write access for the replacement workflow
+
+The mount stays read-only: `processing-api` must never be able to corrupt the corpus, and
+the API degrades gracefully when it cannot write. Updating an already indexed document is
+therefore done by the `Replace Document In Gemini File Search` workflow, which writes to
+the bucket through the Cloud Storage API from n8n, not through the mount.
+
+That needs a service account credential configured in n8n. n8n's Service Account
+credential authenticates with an email plus a private key, so this requires a **JSON key**
+— unlike the Cloud Run runtime service account, which needs no key because it gets tokens
+from the metadata server. If your organization policy blocks service account key creation
+(`iam.disableServiceAccountKeyCreation`), this is where it will fail, and the fallback is
+to keep the corpus sync manual.
+
+Three steps, in order:
+
+```sh
+export CORPUS_WRITER="legalfam-corpus-writer"
+export CORPUS_WRITER_SA="$CORPUS_WRITER@$(gcloud config get-value project).iam.gserviceaccount.com"
+
+# 1. The account that n8n will use to write to the bucket.
+gcloud iam service-accounts create "$CORPUS_WRITER" \
+  --display-name="LegalFam corpus writer (n8n)"
+
+# 2. Write and delete on the corpus bucket only. No project-level role is needed.
+gcloud storage buckets add-iam-policy-binding "gs://$CORPUS_BUCKET" \
+  --member="serviceAccount:$CORPUS_WRITER_SA" \
+  --role="roles/storage.objectUser"
+
+# 3. The key to paste into n8n. Treat the file as a secret and delete it afterwards.
+gcloud iam service-accounts keys create corpus-writer-key.json \
+  --iam-account="$CORPUS_WRITER_SA"
+```
+
+Then in n8n create a **Google Service Account** credential named exactly
+`Corpus bucket service account`, pasting `client_email` into *Service Account Email* and
+`private_key` into *Private Key* from that JSON. Leave *Impersonate a User* off; the
+Cloud Storage node requests its own scopes, so *Set up for use in HTTP Request node* stays
+off too.
+
+The credential's id does not go into the workflow JSON. The two `GCS - *` nodes ship with
+`"id": null`, and on every import `replaceInvalidCredentials` resolves a null id by looking
+up the credential by name and type within the project, filling in the real id. So the name
+has to match exactly and has to be unique for that credential type; otherwise the node
+imports with no credential and fails with a clear error instead of pointing at a phantom
+id. A hardcoded id would work too, but it would have to be updated by hand whenever the
+credential is recreated, and a wrong one is not repaired by that lookup.
+
+Credentials themselves are never touched by `n8n import:workflow` — that command only
+imports workflows — so the credential created in the UI survives every deploy.
+
+The runtime service account keeps `roles/storage.objectViewer` and nothing more, so the
+API container still cannot write the corpus. Reusing the runtime service account for the
+n8n credential would also work — `readonly=true` on the volume keeps the mount unwritable
+regardless of IAM — but it would require a key for an account that currently needs none.
+
+Ordering matters and the workflow enforces it: the new markdown lands in the bucket
+*before* the store is replaced, and the old object is deleted *after*. See "Actualizar un
+documento ya indexado" in `agentic-flow/README.md` for why the reverse order silently
+misattributes citations.
+
 ## 8.1 Cloud Run Runtime Behavior
 
 The GitHub Actions deployment keeps n8n serverless while avoiding cold-start traffic before the database is ready:
