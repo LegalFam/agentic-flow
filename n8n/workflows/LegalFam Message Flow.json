@@ -16,7 +16,7 @@
       "typeVersion": 1,
       "credentials": {
         "googlePalmApi": {
-          "id": "J5fuQmNyhxq31HfY",
+          "id": "5RgMaZWPwNmZfsxJ",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -120,7 +120,7 @@
       "name": "Google Gemini Chat Model1",
       "credentials": {
         "googlePalmApi": {
-          "id": "J5fuQmNyhxq31HfY",
+          "id": "5RgMaZWPwNmZfsxJ",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -183,7 +183,7 @@
       "parameters": {
         "content": "## XAI Agent\nRewrites RAG output into personalized, safe Spanish Markdown with flexible structure, useful next steps, glossary when helpful, and prudent legal caveats.",
         "height": 656,
-        "width": 656,
+        "width": 976,
         "color": 7
       },
       "id": "1d4a77ec-3d4a-4f18-a34d-089b8d615f8a",
@@ -215,7 +215,7 @@
       "alwaysOutputData": false,
       "credentials": {
         "httpHeaderAuth": {
-          "id": "aKmM8QvCCJMhQZFQ",
+          "id": "atom1z32FyNBZveS",
           "name": "Header Auth account"
         }
       }
@@ -327,8 +327,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        1504,
-        1760
+        1808,
+        1792
       ],
       "id": "7f506e58-f65e-47be-a754-da7973899e3f",
       "name": "Respond with XAI"
@@ -347,7 +347,7 @@
       "name": "Google Gemini Chat Model XAI",
       "credentials": {
         "googlePalmApi": {
-          "id": "J5fuQmNyhxq31HfY",
+          "id": "5RgMaZWPwNmZfsxJ",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -360,7 +360,7 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        1392,
+        1440,
         2112
       ],
       "id": "bc789afe-f3f4-4838-949d-b38b82d89aad",
@@ -373,8 +373,8 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
       "typeVersion": 1,
       "position": [
-        1568,
-        2112
+        1280,
+        1952
       ],
       "id": "a37a8c56-7f4d-4ef2-8adf-0d2d107b9e85",
       "name": "XAI Auto-fixing Output Parser"
@@ -386,14 +386,14 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1568,
-        2288
+        1264,
+        2112
       ],
       "id": "ddfe0fc8-6296-4422-a799-8c7c63fdb3f5",
       "name": "Google Gemini Chat Model XAI Fixer",
       "credentials": {
         "googlePalmApi": {
-          "id": "J5fuQmNyhxq31HfY",
+          "id": "5RgMaZWPwNmZfsxJ",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -410,8 +410,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1152,
-        1760
+        992,
+        1792
       ],
       "id": "c1450c8f-870f-4749-97be-0f3e12c154f7",
       "name": "XAI Agent",
@@ -432,8 +432,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1312,
-        1680
+        1472,
+        1792
       ],
       "id": "a1f5c8e2-4d7b-4a91-9c33-2e6b8d0f7a15",
       "name": "Resolve Locators",
@@ -441,15 +441,13 @@
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
         "jsCode": "// El locator autoritativo viene de la API, nunca del modelo.\n//\n// Las citas atravesaron dos agentes LLM. Si alguno altero un citation_id, aca no se\n// encuentra y la cita sale sin ubicacion. Es el modo de fallo buscado: una cita sin\n// ubicacion es aceptable, una con la ubicacion equivocada no lo es.\n//\n// original_snippet es lo unico que el modelo aporta a la ubicacion, y solo como puntero:\n// la API lo verifica contra el fragmento que realmente recupero antes de reanclar la cita.\nconst xai = $('XAI Agent').first().json;\nconst payload = xai.output || xai;\nconst citations = Array.isArray(payload.citations) ? payload.citations : [];\n\nlet authoritative = new Map();\ntry {\n  const resolved = $json.citations || [];\n  for (const entry of resolved) {\n    if (entry && entry.citation_id) authoritative.set(entry.citation_id, entry);\n  }\n} catch (error) {\n  // Si /resolve-locators fallo, ninguna cita lleva ubicacion. El chat sigue.\n  authoritative = new Map();\n}\n\nconst enriched = citations.map((citation) => {\n  const match = authoritative.get(citation.citation_id);\n  const summary = citation.summary_snippet || citation.snippet || '';\n  return {\n    ...citation,\n    // El backend persiste `snippet`: ahi va el resumen, que es lo que lee el usuario.\n    snippet: summary,\n    summary_snippet: summary,\n    // El pasaje literal se conserva para auditar de que parte de la cita salio el locator.\n    original_snippet: citation.original_snippet || '',\n    // Se sobrescribe siempre, incluso sin match: lo que el modelo haya puesto en estos\n    // campos se descarta.\n    locator: (match && match.locator) || '',\n    breadcrumb: (match && match.breadcrumb) || '',\n    locator_source: (match && match.locator_source) || '',\n    // excerpt = ubicado por el pasaje citado; chunk = por el fragmento completo;\n    // ambiguous = el fragmento abarcaba varios articulos y no se pudo verificar cual.\n    locator_scope: (match && match.locator_scope) || '',\n  };\n});\n\nreturn [{ json: { ...payload, citations: enriched } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1408,
-        1840
+        1632,
+        1792
       ],
       "id": "b7c2d9a4-6e18-4f52-8b70-3a9c1e5d2f88",
       "name": "Attach Locators"
@@ -690,16 +688,17 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "e967c09d-9108-4dbb-8400-0f91c4d41c46",
+  "versionId": "a57b4733-d27c-4e09-976a-2c44c9b2e0b1",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "b4fe1b7f55c924806604a2431485ada3cf45cd4c8e6a1134735f55424b9bdf63"
+    "instanceId": "9fce58893f89ad8f33bc95b60bc48529c7919f940f2c626daea4bcdb1ccbb936"
   },
+  "nodeGroups": [],
   "id": "zrMqCWRq1V6lsI7i",
   "tags": []
 }
