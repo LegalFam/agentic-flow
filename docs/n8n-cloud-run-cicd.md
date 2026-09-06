@@ -244,8 +244,12 @@ gcloud storage buckets create "gs://$CORPUS_BUCKET" --location="$REGION"
 
 gcloud storage buckets add-iam-policy-binding "gs://$CORPUS_BUCKET" \
   --member="serviceAccount:$RUNTIME_SA" \
-  --role="roles/storage.objectViewer"
+  --role="roles/storage.objectUser"
 ```
+
+`objectUser` and not `objectViewer`: replacing an already indexed document has to rewrite
+its markdown in the corpus, and the API does that through the mount. Read-only access is
+enough only if you never update a document.
 
 Upload the markdown files. Their names must match the `display_name` used when they were
 indexed (the API uploads with `display_name=filename`):
@@ -255,72 +259,34 @@ gcloud storage rsync ./corpus "gs://$CORPUS_BUCKET" --recursive
 ```
 
 Then set the `CORPUS_BUCKET` repository variable and rerun the workflow. The deploy adds a
-read-only `cloud-storage` volume at `/corpus` on the `processing-api` container and sets
+writable `cloud-storage` volume at `/corpus` on the `processing-api` container and sets
 `CORPUS_DIR=/corpus`. Adding documents later only requires uploading to the bucket, not
 redeploying.
 
 Requires `--execution-environment gen2`, which the deploy already uses.
 
-### Write access for the replacement workflow
+### Why the mount is writable
 
-The mount stays read-only: `processing-api` must never be able to corrupt the corpus, and
-the API degrades gracefully when it cannot write. Updating an already indexed document is
-therefore done by the `Replace Document In Gemini File Search` workflow, which writes to
-the bucket through the Cloud Storage API from n8n, not through the mount.
+Replacing an already indexed document has to rewrite that document's markdown in the
+corpus, or the citation locator resolves the new name against the old text and reports the
+previous article number. See "Actualizar un documento ya indexado" in
+`agentic-flow/README.md` for why that failure is silent.
 
-That needs a service account credential configured in n8n. n8n's Service Account
-credential authenticates with an email plus a private key, so this requires a **JSON key**
-— unlike the Cloud Run runtime service account, which needs no key because it gets tokens
-from the metadata server. If your organization policy blocks service account key creation
-(`iam.disableServiceAccountKeyCreation`), this is where it will fail, and the fallback is
-to keep the corpus sync manual.
+The obvious way to do that without touching the mount would be to have n8n write to the
+bucket through the Cloud Storage API. That needs a service account key, and this
+organization forbids them (`iam.disableServiceAccountKeyCreation`). The Cloud Run runtime
+service account needs no key — it gets tokens from the metadata server — so the write is
+done by the API through the mount instead, in `corpus.sync_replacement`.
 
-Three steps, in order:
+What that costs: the `processing-api` container can write and delete corpus files. The
+exposure is narrow — `sync_replacement` writes exactly one file and deletes only paths it
+resolved as superseded, guarded against deleting the file it just wrote, and that behavior
+is covered by tests in `api/tests/test_store_replace.py`. But it is a real change from
+read-only, and worth knowing.
 
-```sh
-export CORPUS_WRITER="legalfam-corpus-writer"
-export CORPUS_WRITER_SA="$CORPUS_WRITER@$(gcloud config get-value project).iam.gserviceaccount.com"
-
-# 1. The account that n8n will use to write to the bucket.
-gcloud iam service-accounts create "$CORPUS_WRITER" \
-  --display-name="LegalFam corpus writer (n8n)"
-
-# 2. Write and delete on the corpus bucket only. No project-level role is needed.
-gcloud storage buckets add-iam-policy-binding "gs://$CORPUS_BUCKET" \
-  --member="serviceAccount:$CORPUS_WRITER_SA" \
-  --role="roles/storage.objectUser"
-
-# 3. The key to paste into n8n. Treat the file as a secret and delete it afterwards.
-gcloud iam service-accounts keys create corpus-writer-key.json \
-  --iam-account="$CORPUS_WRITER_SA"
-```
-
-Then in n8n create a **Google Service Account** credential named exactly
-`Corpus bucket service account`, pasting `client_email` into *Service Account Email* and
-`private_key` into *Private Key* from that JSON. Leave *Impersonate a User* off; the
-Cloud Storage node requests its own scopes, so *Set up for use in HTTP Request node* stays
-off too.
-
-The credential's id does not go into the workflow JSON. The two `GCS - *` nodes ship with
-`"id": null`, and on every import `replaceInvalidCredentials` resolves a null id by looking
-up the credential by name and type within the project, filling in the real id. So the name
-has to match exactly and has to be unique for that credential type; otherwise the node
-imports with no credential and fails with a clear error instead of pointing at a phantom
-id. A hardcoded id would work too, but it would have to be updated by hand whenever the
-credential is recreated, and a wrong one is not repaired by that lookup.
-
-Credentials themselves are never touched by `n8n import:workflow` — that command only
-imports workflows — so the credential created in the UI survives every deploy.
-
-The runtime service account keeps `roles/storage.objectViewer` and nothing more, so the
-API container still cannot write the corpus. Reusing the runtime service account for the
-n8n credential would also work — `readonly=true` on the volume keeps the mount unwritable
-regardless of IAM — but it would require a key for an account that currently needs none.
-
-Ordering matters and the workflow enforces it: the new markdown lands in the bucket
-*before* the store is replaced, and the old object is deleted *after*. See "Actualizar un
-documento ya indexado" in `agentic-flow/README.md` for why the reverse order silently
-misattributes citations.
+If service account keys ever become available, the `Replace Document In Gemini File Search`
+workflow still carries the two dormant `GCS - *` nodes. Setting `CORPUS_BUCKET` on the n8n
+container switches it to that path, and the mount can go back to `readonly=true`.
 
 ## 8.1 Cloud Run Runtime Behavior
 

@@ -96,21 +96,28 @@ jobs:
           # fallback por regex sobre el snippet.
           CORPUS_VOLUME_FLAGS=()
           CORPUS_MOUNT_FLAGS=()
-          CORPUS_N8N_FLAGS=()
 
           if [[ -n "${CORPUS_BUCKET:-}" ]]; then
-            CORPUS_VOLUME_FLAGS+=(--add-volume "name=corpus,type=cloud-storage,bucket=$CORPUS_BUCKET,readonly=true")
+            # El volumen va con escritura, no readonly. Actualizar un documento ya
+            # indexado obliga a reemplazar su markdown en el corpus, y hacerlo desde n8n
+            # requeriria una llave de service account: la organizacion las tiene
+            # prohibidas por `iam.disableServiceAccountKeyCreation`. La runtime SA, en
+            # cambio, saca tokens del metadata server y no necesita llave, asi que la
+            # escritura la hace la API por el mount (`corpus.sync_replacement`).
+            #
+            # Requiere que la runtime SA tenga `roles/storage.objectUser` en el bucket
+            # (crear y borrar objetos), no solo `objectViewer`.
+            CORPUS_VOLUME_FLAGS+=(--add-volume "name=corpus,type=cloud-storage,bucket=$CORPUS_BUCKET")
             # --add-volume-mount es por contenedor: va despues de --container processing-api.
             CORPUS_MOUNT_FLAGS+=(--add-volume-mount "volume=corpus,mount-path=/corpus")
             # Los --set-env-vars repetidos se acumulan (UpdateAction), no se reemplazan.
             CORPUS_MOUNT_FLAGS+=(--set-env-vars "CORPUS_DIR=/corpus")
-            # El mount es de solo lectura, asi que actualizar un documento ya indexado no
-            # puede pasar por la API: el workflow "Replace Document In Gemini File Search"
-            # escribe el bucket por la API de GCS. Necesita el nombre del bucket, y lo
-            # lee con $env.CORPUS_BUCKET (habilitado por N8N_BLOCK_ENV_ACCESS_IN_NODE=false).
-            # Vacio significa "sincroniza la API", que es lo correcto en local pero no aca.
-            CORPUS_N8N_FLAGS+=(--set-env-vars "CORPUS_BUCKET=$CORPUS_BUCKET")
           fi
+
+          # A proposito NO se le pasa CORPUS_BUCKET al contenedor de n8n: ese valor es lo
+          # que hace que el workflow de reemplazo tome el camino de los nodos de GCS, que
+          # necesitan una credencial con llave. Vacio, el workflow los salta y delega la
+          # sincronizacion del corpus a la API, que es el camino elegido aca.
 
           if [[ -n "${CLOUD_RUN_VPC_NETWORK:-}" ]]; then
             VPC_FLAGS+=(--network "$CLOUD_RUN_VPC_NETWORK")
@@ -144,7 +151,6 @@ jobs:
             --startup-probe "httpGet.path=/health/readiness,httpGet.port=5678,initialDelaySeconds=0,periodSeconds=5,timeoutSeconds=5,failureThreshold=36" \
             --set-env-vars "DB_TYPE=postgresdb,DB_POSTGRESDB_HOST=/cloudsql/$CLOUD_SQL_CONNECTION_NAME,DB_POSTGRESDB_PORT=5432,DB_POSTGRESDB_DATABASE=$N8N_DB_NAME,DB_POSTGRESDB_USER=$N8N_DB_USER,DB_POSTGRESDB_POOL_SIZE=2,DB_POSTGRESDB_CONNECTION_TIMEOUT=60000,DB_POSTGRESDB_IDLE_CONNECTION_TIMEOUT=120000,DB_PING_INTERVAL_SECONDS=10,N8N_PROTOCOL=https,N8N_HOST=$PUBLIC_HOST,WEBHOOK_URL=$PUBLIC_URL/,N8N_EDITOR_BASE_URL=$PUBLIC_URL/,N8N_ENDPOINT_HEALTH=health,N8N_BLOCK_ENV_ACCESS_IN_NODE=false,N8N_RUNNERS_GRANT_TOKEN_TTL=120,GENERIC_TIMEZONE=America/Lima,TZ=America/Lima" \
             --set-env-vars "PROCESSING_API_BASE_URL=http://127.0.0.1:8000" \
-            "${CORPUS_N8N_FLAGS[@]}" \
             --set-secrets "DB_POSTGRESDB_PASSWORD=n8n-db-password:latest,N8N_ENCRYPTION_KEY=n8n-encryption-key:latest" \
             --container processing-api \
             --image "$API_IMAGE_URI" \

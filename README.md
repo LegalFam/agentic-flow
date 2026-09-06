@@ -86,17 +86,21 @@ consulta el nuevo, asi que el archivo nuevo no molesta; y en el instante en que 
 cambia, el corpus ya lo tiene y gana el match exacto. La ventana de citas mal atribuidas
 es cero.
 
-Quien hace ese movimiento depende del entorno:
+Ese movimiento, en los dos entornos, lo hace la API con `sync_corpus: true`:
+`/file-search-stores/documents/replace` escribe el markdown nuevo, borra el viejo, poda el
+manifest y limpia el cache del locator. En local sobre el bind mount `./work:/work`; en
+Cloud Run sobre el volumen de Cloud Storage montado en `/corpus`, que va **con escritura**
+y necesita `roles/storage.objectUser` en la runtime SA.
 
-- **Local**: `work/corpus` es un volumen escribible, asi que
-  `/file-search-stores/documents/replace` lo sincroniza solo (escribe el nuevo, borra el
-  viejo, poda el manifest y limpia el cache del locator) cuando se lo llama con
-  `sync_corpus: true`.
-- **Cloud Run**: `/corpus` se monta desde Cloud Storage con `readonly=true`, asi que la
-  API no puede escribirlo por diseno. Ahi el workflow sube y borra los objetos del bucket
-  por la API de GCS y llama al reemplazo con `sync_corpus: false`. Si igual se lo llama
-  con `sync_corpus: true`, la respuesta sale con `corpus.synced: false` y un aviso en vez
-  de romper.
+Ese volumen fue de solo lectura hasta que aparecio este flujo, y lo natural habria sido
+que n8n escribiera el bucket por la API de GCS para no perder esa propiedad. No se puede:
+esa ruta exige una credencial de service account con llave, y la organizacion las prohibe
+por `iam.disableServiceAccountKeyCreation`. La runtime SA de Cloud Run, en cambio, saca
+tokens del metadata server y no necesita llave.
+
+Si el corpus no se puede escribir igual (un mount de solo lectura, un bucket sin permiso),
+la respuesta sale con `corpus.synced: false` y un aviso en vez de romper: el reemplazo en
+el store ya ocurrio y una excepcion ahi no ayudaria a nadie.
 
 ### Desde n8n
 
@@ -125,21 +129,23 @@ como `REPLACE_WITH_..._FOLDER_ID`: la carpeta de PDFs actualizados, la de logs d
 reemplazo y `derogated`. `processed/pdf`, `processed/markdown` y `processed/metadata` ya
 vienen con los mismos ids que usa `Upload To Gemini File Search`.
 
-El corpus lo maneja `corpusBucket`, que toma `CORPUS_BUCKET` del entorno:
+El corpus lo maneja `corpusBucket`, que toma `CORPUS_BUCKET` del entorno. **Hoy sale
+vacio en los dos entornos**, a proposito: el deploy no le pasa `CORPUS_BUCKET` al
+contenedor de n8n. Con eso el flujo salta los nodos de GCS y llama al reemplazo con
+`sync_corpus: true`, o sea que sincroniza la API.
 
-- **Vacio** (local): el flujo salta los nodos de GCS y llama al reemplazo con
-  `sync_corpus: true`, o sea que la API sincroniza `work/corpus`.
-- **Con valor** (Cloud Run): `GCS - Upload New Markdown` sube el markdown al bucket antes
-  del reemplazo, y `GCS - Delete Old Markdown` borra la revision anterior despues. El
-  reemplazo va con `sync_corpus: false`.
+Los dos nodos `GCS - *` quedan dormidos para el dia que se pueda usar una credencial con
+llave: setear `CORPUS_BUCKET` en el contenedor de n8n los activa, y ahi el markdown viaja
+al bucket antes del reemplazo, la revision anterior se borra despues, y el reemplazo va
+con `sync_corpus: false`. Ese es el orden que hace cero la ventana de citas mal
+atribuidas, y por eso el flujo lo conserva aunque hoy no se use.
 
-Los dos nodos de GCS piden una credencial de service account con permiso de escritura y
-borrado en el bucket (`roles/storage.objectUser`). Se crea **una sola vez en n8n**, con el
-nombre exacto `Corpus bucket service account`, y el JSON no necesita conocer su id: los
-nodos vienen con `"id": null`, y en cada import `replaceInvalidCredentials` busca por
-nombre y tipo dentro del proyecto y le pone el id real. Si hay dos credenciales con ese
-nombre, o ninguna, el nodo queda sin credencial y falla diciendolo, en vez de apuntar a un
-id fantasma.
+Los dos nodos de GCS vienen con `"id": null` y el nombre `Corpus bucket service account`.
+Mientras esten dormidos eso no importa; si algun dia se activan, alcanza con crear en n8n
+una credencial de service account con ese nombre exacto y el JSON no necesita conocer su
+id: en cada import `replaceInvalidCredentials` resuelve un id nulo buscando por nombre y
+tipo dentro del proyecto. Un id inexistente no dispara esa resolucion, asi que un
+placeholder quedaria roto en cada import.
 
 Los folder ids son distintos: son parametros del nodo `Edit Replace Config` y no tienen
 resolucion por nombre, asi que el valor durable es el del JSON. Se pueden cambiar en la UI
@@ -148,12 +154,8 @@ workflow, y eso pisa el contenido con el del repo. Vale para cualquier push que 
 `api/**`, `n8n/workflows/**`, `Dockerfile.n8n`, `scripts/sync-n8n-workflows.sh` o el propio
 deploy: no hace falta que el cambio sea del workflow.
 
-No hace falta tocar el mount ni los permisos del runtime de Cloud Run: `/corpus` sigue
-siendo de solo lectura, porque quien escribe es n8n por la API de GCS y no el contenedor
-de la API.
-
-En Cloud Run, `CORPUS_BUCKET` llega al contenedor de n8n desde el deploy (mismo valor que
-arma el volumen), asi que no hay una variable nueva que crear en GitHub.
+Lo que si hace falta en Cloud Run es que la runtime SA tenga `roles/storage.objectUser`
+en el bucket, no solo `objectViewer`, porque ahora es ella la que escribe el corpus.
 
 Si la subida al bucket falla, el flujo **no** sigue al reemplazo: se registra el error y
 pasa al siguiente PDF. Es el punto del orden, y perderlo dejaria el store apuntando a un
