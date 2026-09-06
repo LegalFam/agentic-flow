@@ -25,25 +25,43 @@
             {
               "id": "updates-pdf-folder",
               "name": "updatesPdfFolderId",
-              "value": "REPLACE_WITH_UPDATES_PDF_FOLDER_ID",
+              "value": "1YtNfrrOkYvIkJahDXfgOcsfkHygIwyEi",
               "type": "string"
             },
             {
               "id": "processed-pdf-folder",
               "name": "processedPdfFolderId",
-              "value": "REPLACE_WITH_PROCESSED_PDF_FOLDER_ID",
+              "value": "12Kgzs4XZTvtDzlmwatRoSTnlO8kX408I",
               "type": "string"
             },
             {
               "id": "replace-log-folder",
               "name": "replaceLogFolderId",
-              "value": "REPLACE_WITH_REPLACE_LOG_FOLDER_ID",
+              "value": "1Xqeer70GmzMTrsJ_ilHUFBzzPitSKmOk",
               "type": "string"
             },
             {
               "id": "errors-folder",
               "name": "errorsFolderId",
               "value": "1Z3EMkZZ5fMG76u2zZKYsFYkrXzpC7tgP",
+              "type": "string"
+            },
+            {
+              "id": "processed-markdown-folder",
+              "name": "processedMarkdownFolderId",
+              "value": "1jzuqeiGSqZJcPvs8Rs3xguSadOX4iiRh",
+              "type": "string"
+            },
+            {
+              "id": "processed-metadata-folder",
+              "name": "processedMetadataFolderId",
+              "value": "1uznXrc5injBILvd1peK8dHGbJpWcZkij",
+              "type": "string"
+            },
+            {
+              "id": "derogated-folder",
+              "name": "derogatedFolderId",
+              "value": "1FEQGpjm541bqohNP7QXXxB7ov902Cm4k",
               "type": "string"
             },
             {
@@ -130,6 +148,24 @@
               "type": "string"
             },
             {
+              "id": "processed-markdown-folder",
+              "name": "processedMarkdownFolderId",
+              "value": "={{ $('Edit Replace Config').item.json.processedMarkdownFolderId }}",
+              "type": "string"
+            },
+            {
+              "id": "processed-metadata-folder",
+              "name": "processedMetadataFolderId",
+              "value": "={{ $('Edit Replace Config').item.json.processedMetadataFolderId }}",
+              "type": "string"
+            },
+            {
+              "id": "derogated-folder",
+              "name": "derogatedFolderId",
+              "value": "={{ $('Edit Replace Config').item.json.derogatedFolderId }}",
+              "type": "string"
+            },
+            {
               "id": "corpus-bucket",
               "name": "corpusBucket",
               "value": "={{ $('Edit Replace Config').item.json.corpusBucket }}",
@@ -164,7 +200,7 @@
             "__rl": true,
             "value": "={{ $('Set Resolved Config').item.json.updatesPdfFolderId }}",
             "mode": "id",
-            "cachedResultName": "input/updates/pdf"
+            "cachedResultName": "update/pdf"
           }
         },
         "options": {}
@@ -826,7 +862,7 @@
           "__rl": true,
           "value": "={{ $('Prepare Replace Payload').item.json.processedPdfFolderId }}",
           "mode": "id",
-          "cachedResultName": "proccessed/pdf"
+          "cachedResultName": "processed/pdf"
         }
       },
       "id": "a1b2c3d4-0000-4000-8000-000000000029",
@@ -846,9 +882,169 @@
     },
     {
       "parameters": {
-        "jsCode": "const review = $('Prepare Replacement Review').first().json;\nconst form = $('Wait - Replacement Review Form').first().json;\nconst record = {\n  pdf: review.pdfName,\n  filename: review.mdName,\n  verdict: review.verdict,\n  plan_message: review.planMessage,\n  would_have_deleted: review.supersededNames,\n  decision: form.replaceDecision,\n  skipped_at: new Date().toISOString(),\n};\nconst logName = `${review.documentId}.gemini-replace-skipped.json`;\nconst item = { json: { logName, record, replaceLogFolderId: review.replaceLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(record, null, 2), 'utf8'),\n  logName,\n  'application/json'\n);\nreturn [item];"
+        "jsCode": "const payload = $('Prepare Replace Payload').first().json;\nconst config = $('Set Resolved Config').first().json;\nconst baseName = payload.filename.replace(/\\.md$/i, '');\n// Dos items con la MISMA propiedad binaria, para que un solo nodo de Drive suba los dos:\n// `inputDataFieldName` es un parametro fijo, no una expresion. Y se preparan juntos aca\n// porque el nodo de Drive no arrastra binarios a su salida.\nconst files = [\n  {\n    name: payload.filename,\n    folderId: config.processedMarkdownFolderId,\n    body: payload.markdown,\n    mime: 'text/markdown',\n  },\n  {\n    name: `${baseName}.metadata.json`,\n    folderId: config.processedMetadataFolderId,\n    body: JSON.stringify(payload.metadata, null, 2),\n    mime: 'application/json',\n  },\n];\nconst items = [];\nfor (const file of files) {\n  const item = { json: { name: file.name, folderId: file.folderId }, binary: {} };\n  item.binary.file = await this.helpers.prepareBinaryData(\n    Buffer.from(file.body, 'utf8'),\n    file.name,\n    file.mime\n  );\n  items.push(item);\n}\nreturn items;"
       },
       "id": "a1b2c3d4-0000-4000-8000-000000000030",
+      "name": "Prepare Curated Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4448,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "file",
+        "name": "={{ $json.name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $json.folderId }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000031",
+      "name": "Google Drive - Upload Curated Files",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4656,
+        -192
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Set Resolved Config').first().json;\nconst deleted = $('API - Replace Gemini Document').first().json.deleted || [];\n\n// Siempre al menos un item, incluso sin nada que archivar: un nodo que sale vacio corta\n// la cadena, y con la cadena cortada el loop no arranca el PDF siguiente.\nif (!deleted.length) {\n  return [{ json: { archive: false } }];\n}\n\nconst items = [];\nfor (const displayName of deleted) {\n  const baseName = displayName.replace(/\\.md$/i, '');\n  items.push({ json: { archive: true, name: displayName, folderId: config.processedMarkdownFolderId } });\n  items.push({\n    json: { archive: true, name: `${baseName}.metadata.json`, folderId: config.processedMetadataFolderId },\n  });\n}\nreturn items;"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000032",
+      "name": "Prepare Derogated Lookups",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4864,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-files-to-archive",
+              "leftValue": "={{ $json.archive }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000033",
+      "name": "IF - Has Files To Archive",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5072,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "={{ \"name = '\" + $json.name.replace(/\\\\/g, \"\\\\\\\\\").replace(/'/g, \"\\\\'\") + \"'\" }}",
+        "limit": 1,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $json.folderId }}",
+            "mode": "id"
+          }
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000034",
+      "name": "Google Drive - Find Derogated File",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        5280,
+        -320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Set Resolved Config').first().json.derogatedFolderId }}",
+          "mode": "id",
+          "cachedResultName": "derogated"
+        }
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000035",
+      "name": "Google Drive - Move To Derogated",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        5488,
+        -320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "euWzPM0tLCL2D9c0",
+          "name": "Google Drive account"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const review = $('Prepare Replacement Review').first().json;\nconst form = $('Wait - Replacement Review Form').first().json;\nconst record = {\n  pdf: review.pdfName,\n  filename: review.mdName,\n  verdict: review.verdict,\n  plan_message: review.planMessage,\n  would_have_deleted: review.supersededNames,\n  decision: form.replaceDecision,\n  skipped_at: new Date().toISOString(),\n};\nconst logName = `${review.documentId}.gemini-replace-skipped.json`;\nconst item = { json: { logName, record, replaceLogFolderId: review.replaceLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(record, null, 2), 'utf8'),\n  logName,\n  'application/json'\n);\nreturn [item];"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000036",
       "name": "Prepare Skip Log",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -873,7 +1069,7 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000031",
+      "id": "a1b2c3d4-0000-4000-8000-000000000037",
       "name": "Google Drive - Upload Skip Log",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -892,7 +1088,7 @@
       "parameters": {
         "jsCode": "const err = $json;\nconst source = $('Google Drive - Download PDF').item?.json || {};\nconst filename = source.name || 'unknown.pdf';\nconst safeName = filename.replace(/[^a-zA-Z0-9_.-]+/g, '-');\n// Un 409 no es una caida: es la API negandose a borrar sin que alguien decida cual. Se\n// registra igual, y el PDF se queda en la carpeta de updates para reintentarlo bien.\nconst record = { filename, error: err, happened_at: new Date().toISOString() };\nconst item = { json: { errorName: `${safeName}.replace-error.json`, record }, binary: {} };\nitem.binary.error = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(record, null, 2), 'utf8'),\n  item.json.errorName,\n  'application/json'\n);\nreturn [item];"
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000032",
+      "id": "a1b2c3d4-0000-4000-8000-000000000038",
       "name": "Prepare Replace Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -917,7 +1113,7 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000033",
+      "id": "a1b2c3d4-0000-4000-8000-000000000039",
       "name": "Google Drive - Upload Error",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -939,7 +1135,7 @@
         "color": 3,
         "content": "## Paso destructivo\n\nFile Search no tiene update in-place: la unica forma de actualizar un documento es borrarlo y volver a subirlo. El borrado no se deshace y no queda version anterior.\n\nLa version vieja no se encuentra por nombre: `build_document_id` mete el sha256 del PDF en el nombre, asi que un PDF nuevo trae otro nombre. Se encuentra por el stem sin el hash, la misma llave que usa el citation locator.\n\nEl plan se niega a elegir cuando la llave casa con varios documentos o con ninguno. Esos casos se resuelven escribiendo el nombre exacto en el campo `supersedes` del formulario, no dejando que el flujo adivine."
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000034",
+      "id": "a1b2c3d4-0000-4000-8000-000000000040",
       "name": "Sticky Note - Destructive Step",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -955,12 +1151,28 @@
         "color": 5,
         "content": "## El orden del corpus no es negociable\n\nEl markdown entra al bucket ANTES de reemplazar en el store, y el objeto viejo se borra DESPUES. Asi la ventana en la que una cita podria resolver contra el texto equivocado es cero.\n\nAl reves seria el peor caso: `resolve_document_path` cae al stem sin el hash, el nombre nuevo casa con el markdown VIEJO, y un articulo que sobrevivio la modificatoria pero cambio de numero casa difuso (umbral 0.82). La cita sale con el numero anterior, con seguridad y sin aviso.\n\nSi `CORPUS_BUCKET` esta vacio el flujo salta estos nodos y la API sincroniza `/work/corpus` sola, que es como funciona en local.\n\nLos dos nodos de GCS necesitan una credencial de service account con permiso de escritura y borrado en el bucket (`roles/storage.objectUser`)."
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000035",
+      "id": "a1b2c3d4-0000-4000-8000-000000000041",
       "name": "Sticky Note - Corpus Order",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
         2320,
+        -620
+      ]
+    },
+    {
+      "parameters": {
+        "width": 700,
+        "height": 380,
+        "color": 4,
+        "content": "## Drive tambien tiene que moverse\n\nEl store y el bucket ya quedaron con la revision nueva, pero `processed/markdown` es de donde el README dice repoblar el corpus. Si se queda con la version vieja, un `rsync` de mantenimiento reintroduce el texto desactualizado y vuelve el mismo caso silencioso: la cita sale con el numero de articulo anterior.\n\nAsi que la revision nueva se sube a `processed/markdown` y `processed/metadata`, y la anterior se archiva en `derogated` en vez de quedar conviviendo con las vigentes.\n\nEsto es limpieza, no la operacion autoritativa: corre despues del reemplazo y del log. Si falla, el RAG sigue correcto y Drive queda atrasado, que es lo que reporta `corpus_diff`.\n\nLos dos nodos finales llevan `alwaysOutputData`: un markdown viejo que no este en Drive (documento indexado antes de este flujo) haria salir vacia la busqueda, y una cadena cortada dejaria el loop sin arrancar el PDF siguiente."
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000042",
+      "name": "Sticky Note - Curated Record",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4400,
         -620
       ]
     }
@@ -1361,6 +1573,86 @@
       ]
     },
     "Google Drive - Move PDF To Processed": {
+      "main": [
+        [
+          {
+            "node": "Prepare Curated Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Curated Files": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Upload Curated Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload Curated Files": {
+      "main": [
+        [
+          {
+            "node": "Prepare Derogated Lookups",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Replace Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Derogated Lookups": {
+      "main": [
+        [
+          {
+            "node": "IF - Has Files To Archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Has Files To Archive": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Find Derogated File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Updated PDFs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Find Derogated File": {
+      "main": [
+        [
+          {
+            "node": "Google Drive - Move To Derogated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Move To Derogated": {
       "main": [
         [
           {

@@ -107,8 +107,23 @@ exactos de lo que se va a borrar. El desplegable de decision viene en `skip`, y 
 `supersedes` solo viene precargado cuando hay una sola version que reemplazar: en el caso
 ambiguo va vacio, para que aceptar sin leer no borre los dos candidatos.
 
+Al cerrar, el flujo deja Drive coherente con lo que quedo indexado: sube el markdown y la
+metadata nuevos a `processed/markdown` y `processed/metadata`, y **archiva los de la
+revision anterior en `derogated`**. Eso no es cosmetico: `processed/markdown` es de donde
+esta guia dice repoblar el corpus, asi que dejarlo con la version vieja significa que un
+`rsync` de mantenimiento reintroduce el texto desactualizado y vuelve el caso silencioso
+descrito arriba.
+
+Ese tramo es limpieza y corre despues del reemplazo y del log. Si falla, el RAG queda
+correcto y Drive atrasado, que es exactamente lo que `corpus_diff` reporta. Los dos nodos
+que archivan llevan `alwaysOutputData` porque un markdown viejo que no este en Drive (un
+documento indexado antes de que existiera este flujo) haria salir vacia la busqueda, y una
+cadena cortada dejaria el loop sin arrancar el PDF siguiente.
+
 Antes de la primera corrida hay que completar en `Edit Replace Config` los ids marcados
-como `REPLACE_WITH_..._FOLDER_ID` (la carpeta de PDFs actualizados y la de logs).
+como `REPLACE_WITH_..._FOLDER_ID`: la carpeta de PDFs actualizados, la de logs de
+reemplazo y `derogated`. `processed/pdf`, `processed/markdown` y `processed/metadata` ya
+vienen con los mismos ids que usa `Upload To Gemini File Search`.
 
 El corpus lo maneja `corpusBucket`, que toma `CORPUS_BUCKET` del entorno:
 
