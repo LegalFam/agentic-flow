@@ -203,8 +203,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       }
     },
@@ -243,8 +243,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       }
     },
@@ -671,8 +671,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       }
     },
@@ -706,8 +706,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       }
     },
@@ -750,8 +750,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       },
       "onError": "continueErrorOutput"
@@ -828,8 +828,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       },
       "alwaysOutputData": true
@@ -864,8 +864,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       },
       "alwaysOutputData": true,
@@ -910,8 +910,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       }
     },
@@ -954,58 +954,10 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "euWzPM0tLCL2D9c0",
-          "name": "Google Drive account"
+          "id": "u8B3y5G6TQakG3GJ",
+          "name": "Google Drive account 2"
         }
       }
-    },
-    {
-      "parameters": {
-        "width": 700,
-        "height": 380,
-        "color": 3,
-        "content": "## Paso destructivo\n\nFile Search no tiene update in-place: la unica forma de actualizar un documento es borrarlo y volver a subirlo. El borrado no se deshace y no queda version anterior.\n\nLa version vieja no se encuentra por nombre: `build_document_id` mete el sha256 del PDF en el nombre, asi que un PDF nuevo trae otro nombre. Se encuentra por el stem sin el hash, la misma llave que usa el citation locator.\n\nEl plan se niega a elegir cuando la llave casa con varios documentos o con ninguno. Esos casos se resuelven escribiendo el nombre exacto en el campo `supersedes` del formulario, no dejando que el flujo adivine."
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000034",
-      "name": "Sticky Note - Destructive Step",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1660,
-        -620
-      ]
-    },
-    {
-      "parameters": {
-        "width": 700,
-        "height": 380,
-        "color": 5,
-        "content": "## El corpus se mueve junto con el store\n\nLa API hace las dos cosas en la misma llamada y en el orden seguro: escribe el markdown nuevo en el corpus, borra el viejo, poda el manifest y limpia el cache del locator (`corpus.sync_replacement`).\n\nSi quedaran desincronizados seria el peor caso: `resolve_document_path` cae al stem sin el hash, el nombre nuevo casa con el markdown VIEJO, y un articulo que sobrevivio la modificatoria pero cambio de numero casa difuso (umbral 0.82). La cita sale con el numero anterior, con seguridad y sin aviso.\n\nEn Cloud Run el volumen del corpus va CON ESCRITURA y la runtime SA necesita `roles/storage.objectUser`. Escribirlo desde n8n en vez de la API exigiria una credencial de service account con llave, y la organizacion las prohibe por `iam.disableServiceAccountKeyCreation`.\n\nSi el corpus no se puede escribir, la respuesta trae `corpus.synced: false` y un aviso: el reemplazo en el store ya ocurrio y romper ahi no ayudaria."
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000035",
-      "name": "Sticky Note - Corpus Order",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        2100,
-        -620
-      ]
-    },
-    {
-      "parameters": {
-        "width": 700,
-        "height": 380,
-        "color": 4,
-        "content": "## Drive tambien tiene que moverse\n\nEl store y el bucket ya quedaron con la revision nueva, pero `processed/markdown` es de donde el README dice repoblar el corpus. Si se queda con la version vieja, un `rsync` de mantenimiento reintroduce el texto desactualizado y vuelve el mismo caso silencioso: la cita sale con el numero de articulo anterior.\n\nAsi que la revision nueva se sube a `processed/markdown` y `processed/metadata`, y la anterior se archiva en `derogated` en vez de quedar conviviendo con las vigentes.\n\nEsto es limpieza, no la operacion autoritativa: corre despues del reemplazo y del log. Si falla, el RAG sigue correcto y Drive queda atrasado, que es lo que reporta `corpus_diff`.\n\nLos dos nodos finales llevan `alwaysOutputData`: un markdown viejo que no este en Drive (documento indexado antes de este flujo) haria salir vacia la busqueda, y una cadena cortada dejaria el loop sin arrancar el PDF siguiente."
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000036",
-      "name": "Sticky Note - Curated Record",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        3140,
-        -620
-      ]
     }
   ],
   "pinData": {},
