@@ -284,9 +284,12 @@ resolved as superseded, guarded against deleting the file it just wrote, and tha
 is covered by tests in `api/tests/test_store_replace.py`. But it is a real change from
 read-only, and worth knowing.
 
-If service account keys ever become available, the `Replace Document In Gemini File Search`
-workflow still carries the two dormant `GCS - *` nodes. Setting `CORPUS_BUCKET` on the n8n
-container switches it to that path, and the mount can go back to `readonly=true`.
+An earlier version of the replacement workflow carried two `GCS - *` nodes that wrote the
+bucket from n8n. They were removed: n8n shows a credential error on such a node on every
+run even when the branch is never taken, which is indistinguishable from a real failure.
+If keys ever become available, reintroducing them means restoring the upload-before-replace
+ordering in the workflow and passing `CORPUS_BUCKET` to the n8n container, at which point
+the mount can go back to `readonly=true`.
 
 ## 8.1 Cloud Run Runtime Behavior
 

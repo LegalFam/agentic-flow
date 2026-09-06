@@ -65,12 +65,6 @@
               "type": "string"
             },
             {
-              "id": "corpus-bucket",
-              "name": "corpusBucket",
-              "value": "={{ $env.CORPUS_BUCKET || '' }}",
-              "type": "string"
-            },
-            {
               "id": "api-base-url",
               "name": "processingApiBaseUrl",
               "value": "={{ $env.PROCESSING_API_BASE_URL || 'http://processing-api:8000' }}",
@@ -163,12 +157,6 @@
               "id": "derogated-folder",
               "name": "derogatedFolderId",
               "value": "={{ $('Edit Replace Config').item.json.derogatedFolderId }}",
-              "type": "string"
-            },
-            {
-              "id": "corpus-bucket",
-              "name": "corpusBucket",
-              "value": "={{ $('Edit Replace Config').item.json.corpusBucket }}",
               "type": "string"
             },
             {
@@ -438,7 +426,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const plan = $json;\nconst converted = $('Take Conversion Result').item.json;\nconst metadata = $('API - Extract Metadata').item.json.metadata || {};\nconst config = $('Set Resolved Config').item.json;\n\nconst superseded = plan.superseded || [];\nconst supersededNames = superseded.map((doc) => doc.display_name);\n// Lo que el formulario tiene que dejar ver es exactamente lo que se va a borrar: en File\n// Search el borrado no se deshace y no queda version anterior a la que volver.\nconst supersededSummary = superseded.length\n  ? superseded.map((doc) => `- ${doc.display_name} (${doc.size_bytes} bytes)`).join('\\n')\n  : '- (ninguno)';\n\nconst advice = {\n  replace: 'Se reemplaza una sola version. Es el caso normal.',\n  identical: 'ESTE PDF YA ESTA INDEXADO con el mismo nombre, o sea es el mismo archivo byte a byte. Revisa que no hayas tomado el PDF viejo.',\n  new: 'NO HAY NADA QUE REEMPLAZAR con esa llave. Si de verdad es un documento nuevo, usa el flujo de alta. Si es una actualizacion cuyo PDF fue renombrado, pon el nombre viejo en supersedes.',\n  ambiguous: 'VARIOS DOCUMENTOS casan con la llave. Deja en supersedes solo el que corresponde, o el reemplazo se rechaza.',\n}[plan.verdict] || '';\n\nreturn [{\n  json: {\n    mdName: converted.mdName,\n    documentId: converted.document_id,\n    pdfName: converted.filename,\n    pages: converted.pages,\n    ocrUsed: converted.ocr_used,\n    fileSearchStoreName: config.fileSearchStoreName,\n    fileSearchStoreDisplayName: config.fileSearchStoreDisplayName,\n    processedPdfFolderId: config.processedPdfFolderId,\n    replaceLogFolderId: config.replaceLogFolderId,\n    errorsFolderId: config.errorsFolderId,\n    corpusBucket: config.corpusBucket,\n    corpusTarget: config.corpusBucket\n      ? `bucket ${config.corpusBucket} (lo sube este flujo antes de reemplazar)`\n      : 'volumen local, lo sincroniza la API',\n    verdict: plan.verdict,\n    // Solo se precarga cuando hay una sola version que reemplazar. En el caso ambiguo\n    // precargar los dos candidatos convertiria \"aceptar sin tocar nada\" en borrarlos\n    // todos: ahi el campo va vacio y la API rechaza con 409 hasta que alguien escriba\n    // el nombre exacto.\n    supersedesDefault: plan.verdict === 'replace' ? supersededNames.join('\\n') : '',\n    planMessage: plan.message,\n    replacementKey: plan.replacement_key,\n    storeDocuments: plan.documents,\n    superseded,\n    supersededNames,\n    supersededSummary,\n    advice,\n    metadata,\n  },\n}];"
+        "jsCode": "const plan = $json;\nconst converted = $('Take Conversion Result').item.json;\nconst metadata = $('API - Extract Metadata').item.json.metadata || {};\nconst config = $('Set Resolved Config').item.json;\n\nconst superseded = plan.superseded || [];\nconst supersededNames = superseded.map((doc) => doc.display_name);\n// Lo que el formulario tiene que dejar ver es exactamente lo que se va a borrar: en File\n// Search el borrado no se deshace y no queda version anterior a la que volver.\nconst supersededSummary = superseded.length\n  ? superseded.map((doc) => `- ${doc.display_name} (${doc.size_bytes} bytes)`).join('\\n')\n  : '- (ninguno)';\n\nconst advice = {\n  replace: 'Se reemplaza una sola version. Es el caso normal.',\n  identical: 'ESTE PDF YA ESTA INDEXADO con el mismo nombre, o sea es el mismo archivo byte a byte. Revisa que no hayas tomado el PDF viejo.',\n  new: 'NO HAY NADA QUE REEMPLAZAR con esa llave. Si de verdad es un documento nuevo, usa el flujo de alta. Si es una actualizacion cuyo PDF fue renombrado, pon el nombre viejo en supersedes.',\n  ambiguous: 'VARIOS DOCUMENTOS casan con la llave. Deja en supersedes solo el que corresponde, o el reemplazo se rechaza.',\n}[plan.verdict] || '';\n\nreturn [{\n  json: {\n    mdName: converted.mdName,\n    documentId: converted.document_id,\n    pdfName: converted.filename,\n    pages: converted.pages,\n    ocrUsed: converted.ocr_used,\n    fileSearchStoreName: config.fileSearchStoreName,\n    fileSearchStoreDisplayName: config.fileSearchStoreDisplayName,\n    processedPdfFolderId: config.processedPdfFolderId,\n    replaceLogFolderId: config.replaceLogFolderId,\n    errorsFolderId: config.errorsFolderId,\n    verdict: plan.verdict,\n    // Solo se precarga cuando hay una sola version que reemplazar. En el caso ambiguo\n    // precargar los dos candidatos convertiria \"aceptar sin tocar nada\" en borrarlos\n    // todos: ahi el campo va vacio y la API rechaza con 409 hasta que alguien escriba\n    // el nombre exacto.\n    supersedesDefault: plan.verdict === 'replace' ? supersededNames.join('\\n') : '',\n    planMessage: plan.message,\n    replacementKey: plan.replacement_key,\n    storeDocuments: plan.documents,\n    superseded,\n    supersededNames,\n    supersededSummary,\n    advice,\n    metadata,\n  },\n}];"
       },
       "id": "a1b2c3d4-0000-4000-8000-000000000016",
       "name": "Prepare Replacement Review",
@@ -453,7 +441,7 @@
       "parameters": {
         "resume": "form",
         "formTitle": "Confirm Document Replacement In Gemini File Search",
-        "formDescription": "=Este paso BORRA la version anterior del store, y el borrado no se deshace.\n\nStore: {{ $json.fileSearchStoreDisplayName }} ({{ $json.storeDocuments }} documentos)\nPDF nuevo: {{ $json.pdfName }}\nSe indexara como: {{ $json.mdName }}\nLlave de reemplazo: {{ $json.replacementKey }}\nCorpus del locator: {{ $json.corpusTarget }}\n\nSE VA A BORRAR:\n{{ $json.supersededSummary }}\n\nVeredicto: {{ $json.verdict }}\n{{ $json.advice }}",
+        "formDescription": "=Este paso BORRA la version anterior del store, y el borrado no se deshace.\n\nStore: {{ $json.fileSearchStoreDisplayName }} ({{ $json.storeDocuments }} documentos)\nPDF nuevo: {{ $json.pdfName }}\nSe indexara como: {{ $json.mdName }}\nLlave de reemplazo: {{ $json.replacementKey }}\n\nSE VA A BORRAR:\n{{ $json.supersededSummary }}\n\nVeredicto: {{ $json.verdict }}\n{{ $json.advice }}",
         "formFields": {
           "values": [
             {
@@ -614,7 +602,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const form = $('Wait - Replacement Review Form').first().json;\nconst review = $('Prepare Replacement Review').first().json;\nconst reviewed = review.metadata || {};\n// El markdown se lee del resultado de la conversion, no de un campo del formulario: el\n// Codigo Civil pasa el megabyte y no tiene por que viajar por el form.\nconst markdown = $('Take Conversion Result').first().json.markdown;\nif (!markdown) {\n  throw new Error('La conversion no dejo markdown para reemplazar');\n}\n\nconst emptyToNull = (value) =>\n  value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim();\nconst formValue = (...keys) => {\n  for (const key of keys) {\n    if (form[key] !== undefined && form[key] !== null && String(form[key]).trim() !== '') {\n      return form[key];\n    }\n  }\n  return undefined;\n};\nconst submittedValue = (...keys) => {\n  for (const key of keys) {\n    if (Object.prototype.hasOwnProperty.call(form, key)) {\n      return form[key];\n    }\n  }\n  return undefined;\n};\nconst normalizeSubmittedValue = (value) => (value === undefined || value === null ? null : String(value).trim());\nconst metadataValue = (key, ...aliases) => {\n  const value = submittedValue(key, ...aliases);\n  return value !== undefined ? normalizeSubmittedValue(value) : emptyToNull(reviewed[key]);\n};\n\nlet categorias;\ntry {\n  const categoriasRaw =\n    formValue('categoriasJSON', 'categoriasJson', 'CategoriasJSON') ?? JSON.stringify(reviewed.categorias || []);\n  categorias = JSON.parse(categoriasRaw || '[]');\n} catch (error) {\n  throw new Error(`Categorias JSON invalido: ${error.message}`);\n}\nif (!Array.isArray(categorias) || categorias.length === 0) {\n  throw new Error('Categorias JSON debe ser un arreglo con al menos una categoria');\n}\nconst confidenceRaw = formValue('confidence', 'Confidence') ?? reviewed.confidence ?? 0.5;\nconst confidence = Number(confidenceRaw);\nif (!Number.isFinite(confidence)) {\n  throw new Error(`confidence debe ser numerico: ${confidenceRaw}`);\n}\n\nconst metadata = {\n  titulo: metadataValue('titulo', 'Titulo'),\n  identificador: metadataValue('identificador', 'Identificador'),\n  entidad: metadataValue('entidad', 'Entidad'),\n  fecha: metadataValue('fecha', 'Fecha'),\n  materia: metadataValue('materia', 'Materia'),\n  expediente: metadataValue('expediente', 'Expediente'),\n  articulo: metadataValue('articulo', 'Articulo'),\n  norma: metadataValue('norma', 'Norma'),\n  pleno: metadataValue('pleno', 'Pleno'),\n  protocolo: metadataValue('protocolo', 'Protocolo'),\n  fuente: metadataValue('fuente', 'Fuente', 'source'),\n  categorias,\n  confidence,\n  observaciones: metadataValue('observaciones', 'Observaciones'),\n};\n\n// Lo que el revisor dejo en el textarea manda sobre lo que dedujo el plan. Es la unica\n// salida para el caso ambiguo y para el PDF que cambio de nombre entre revisiones.\nconst supersedes = String(formValue('supersedes', 'Supersedes') ?? '')\n  .split('\\n')\n  .map((line) => line.trim())\n  .filter(Boolean);\n\nconst corpusBucket = String($('Set Resolved Config').first().json.corpusBucket || '').trim();\n\nreturn [{\n  json: {\n    filename: form.mdName,\n    markdown,\n    metadata,\n    file_search_store_name: form.fileSearchStoreName,\n    supersedes,\n    // Un alta nueva no se cuela por aca: si el plan no encontro nada que reemplazar y el\n    // revisor no escribio un supersedes, la API responde 409 y el PDF no se mueve.\n    allow_new: false,\n    allow_multiple: supersedes.length > 1,\n    // Con bucket el markdown ya viaja al corpus antes del reemplazo y el mount es de\n    // solo lectura: pedirle a la API que escriba solo agregaria un warning esperado.\n    // Sin bucket (local) /work/corpus es escribible y la API lo sincroniza sola.\n    sync_corpus: !corpusBucket,\n    wait_until_done: true,\n    max_wait_seconds: 900,\n    corpusBucket,\n    // El corpus se monta en la raiz del bucket (mount-path=/corpus), asi que el nombre\n    // del objeto es el nombre del markdown, sin prefijo.\n    corpusObjectName: form.mdName,\n    verdict: review.verdict,\n    pdfName: review.pdfName,\n    processedPdfFolderId: form.processedPdfFolderId,\n    replaceLogFolderId: form.replaceLogFolderId,\n    errorsFolderId: form.errorsFolderId,\n  },\n}];"
+        "jsCode": "const form = $('Wait - Replacement Review Form').first().json;\nconst review = $('Prepare Replacement Review').first().json;\nconst reviewed = review.metadata || {};\n// El markdown se lee del resultado de la conversion, no de un campo del formulario: el\n// Codigo Civil pasa el megabyte y no tiene por que viajar por el form.\nconst markdown = $('Take Conversion Result').first().json.markdown;\nif (!markdown) {\n  throw new Error('La conversion no dejo markdown para reemplazar');\n}\n\nconst emptyToNull = (value) =>\n  value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim();\nconst formValue = (...keys) => {\n  for (const key of keys) {\n    if (form[key] !== undefined && form[key] !== null && String(form[key]).trim() !== '') {\n      return form[key];\n    }\n  }\n  return undefined;\n};\nconst submittedValue = (...keys) => {\n  for (const key of keys) {\n    if (Object.prototype.hasOwnProperty.call(form, key)) {\n      return form[key];\n    }\n  }\n  return undefined;\n};\nconst normalizeSubmittedValue = (value) => (value === undefined || value === null ? null : String(value).trim());\nconst metadataValue = (key, ...aliases) => {\n  const value = submittedValue(key, ...aliases);\n  return value !== undefined ? normalizeSubmittedValue(value) : emptyToNull(reviewed[key]);\n};\n\nlet categorias;\ntry {\n  const categoriasRaw =\n    formValue('categoriasJSON', 'categoriasJson', 'CategoriasJSON') ?? JSON.stringify(reviewed.categorias || []);\n  categorias = JSON.parse(categoriasRaw || '[]');\n} catch (error) {\n  throw new Error(`Categorias JSON invalido: ${error.message}`);\n}\nif (!Array.isArray(categorias) || categorias.length === 0) {\n  throw new Error('Categorias JSON debe ser un arreglo con al menos una categoria');\n}\nconst confidenceRaw = formValue('confidence', 'Confidence') ?? reviewed.confidence ?? 0.5;\nconst confidence = Number(confidenceRaw);\nif (!Number.isFinite(confidence)) {\n  throw new Error(`confidence debe ser numerico: ${confidenceRaw}`);\n}\n\nconst metadata = {\n  titulo: metadataValue('titulo', 'Titulo'),\n  identificador: metadataValue('identificador', 'Identificador'),\n  entidad: metadataValue('entidad', 'Entidad'),\n  fecha: metadataValue('fecha', 'Fecha'),\n  materia: metadataValue('materia', 'Materia'),\n  expediente: metadataValue('expediente', 'Expediente'),\n  articulo: metadataValue('articulo', 'Articulo'),\n  norma: metadataValue('norma', 'Norma'),\n  pleno: metadataValue('pleno', 'Pleno'),\n  protocolo: metadataValue('protocolo', 'Protocolo'),\n  fuente: metadataValue('fuente', 'Fuente', 'source'),\n  categorias,\n  confidence,\n  observaciones: metadataValue('observaciones', 'Observaciones'),\n};\n\n// Lo que el revisor dejo en el textarea manda sobre lo que dedujo el plan. Es la unica\n// salida para el caso ambiguo y para el PDF que cambio de nombre entre revisiones.\nconst supersedes = String(formValue('supersedes', 'Supersedes') ?? '')\n  .split('\\n')\n  .map((line) => line.trim())\n  .filter(Boolean);\n\nreturn [{\n  json: {\n    filename: form.mdName,\n    markdown,\n    metadata,\n    file_search_store_name: form.fileSearchStoreName,\n    supersedes,\n    // Un alta nueva no se cuela por aca: si el plan no encontro nada que reemplazar y el\n    // revisor no escribio un supersedes, la API responde 409 y el PDF no se mueve.\n    allow_new: false,\n    allow_multiple: supersedes.length > 1,\n    // La API sincroniza el corpus por el mount, en los dos entornos: bind mount en\n    // local, volumen de Cloud Storage con escritura en Cloud Run.\n    sync_corpus: true,\n    wait_until_done: true,\n    max_wait_seconds: 900,\n    verdict: review.verdict,\n    pdfName: review.pdfName,\n    processedPdfFolderId: form.processedPdfFolderId,\n    replaceLogFolderId: form.replaceLogFolderId,\n    errorsFolderId: form.errorsFolderId,\n  },\n}];"
       },
       "id": "a1b2c3d4-0000-4000-8000-000000000019",
       "name": "Prepare Replace Payload",
@@ -627,190 +615,33 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "corpus-bucket-set",
-              "leftValue": "={{ $json.corpusBucket }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000020",
-      "name": "IF - Corpus Bucket Configured",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        2340,
-        -192
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const payload = $json;\nif (!payload.corpusBucket) {\n  throw new Error('Prepare Corpus Binary corrio sin corpusBucket');\n}\nconst item = { json: payload, binary: {} };\nitem.binary.markdown = await this.helpers.prepareBinaryData(\n  Buffer.from(payload.markdown, 'utf8'),\n  payload.corpusObjectName,\n  'text/markdown'\n);\nreturn [item];"
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000021",
-      "name": "Prepare Corpus Binary",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2540,
-        -336
-      ]
-    },
-    {
-      "parameters": {
-        "authentication": "serviceAccount",
-        "resource": "object",
-        "operation": "create",
-        "bucketName": "={{ $json.corpusBucket }}",
-        "objectName": "={{ $json.corpusObjectName }}",
-        "createFromBinary": true,
-        "createBinaryPropertyName": "markdown",
-        "createData": {},
-        "createQuery": {},
-        "encryptionHeaders": {}
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000022",
-      "name": "GCS - Upload New Markdown",
-      "type": "n8n-nodes-base.googleCloudStorage",
-      "typeVersion": 1.1,
-      "position": [
-        2740,
-        -336
-      ],
-      "credentials": {
-        "googleApi": {
-          "id": null,
-          "name": "Corpus bucket service account"
-        }
-      },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "={{ $('Set Resolved Config').item.json.processingApiBaseUrl + '/file-search-stores/documents/replace' }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $('Prepare Replace Payload').first().json }}",
+        "jsonBody": "={{ $json }}",
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000023",
+      "id": "a1b2c3d4-0000-4000-8000-000000000020",
       "name": "API - Replace Gemini Document",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2960,
+        2352,
         -192
       ],
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "corpus-bucket-set",
-              "leftValue": "={{ $('Prepare Replace Payload').first().json.corpusBucket }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            },
-            {
-              "id": "something-was-deleted",
-              "leftValue": "={{ $json.deleted.length }}",
-              "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "gt"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "jsCode": "const payload = $('Prepare Replace Payload').first().json;\nconst replace = $('API - Replace Gemini Document').first().json;\n// El campo corpus dice si el markdown se escribio y que se borro: es lo primero que hay\n// que mirar cuando una cita sale sin ubicacion despues de un reemplazo.\nconst corpus = replace.corpus || {};\nconst result = {\n  pdf: payload.pdfName,\n  filename: payload.filename,\n  verdict: payload.verdict,\n  metadata: payload.metadata,\n  replace,\n  corpus,\n  replaced_at: new Date().toISOString(),\n};\nconst logName = `${payload.filename.replace(/\\.md$/, '')}.gemini-replace.json`;\nconst item = { json: { logName, result, replaceLogFolderId: payload.replaceLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(result, null, 2), 'utf8'),\n  logName,\n  'application/json'\n);\nreturn [item];"
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000024",
-      "name": "IF - Old Markdown In Bucket",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        3180,
-        -192
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const payload = $('Prepare Replace Payload').first().json;\n// Un item por cada version que la API saco del store, porque el nodo de GCS borra un\n// objeto por item. Normalmente es una sola; son varias solo con allow_multiple.\nreturn ($json.deleted || []).map((displayName) => ({\n  json: { corpusBucket: payload.corpusBucket, objectName: displayName },\n}));"
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000025",
-      "name": "Prepare Corpus Deletions",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3380,
-        -336
-      ]
-    },
-    {
-      "parameters": {
-        "authentication": "serviceAccount",
-        "resource": "object",
-        "operation": "delete",
-        "bucketName": "={{ $json.corpusBucket }}",
-        "objectName": "={{ $json.objectName }}",
-        "getParameters": {}
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000026",
-      "name": "GCS - Delete Old Markdown",
-      "type": "n8n-nodes-base.googleCloudStorage",
-      "typeVersion": 1.1,
-      "position": [
-        3580,
-        -336
-      ],
-      "credentials": {
-        "googleApi": {
-          "id": null,
-          "name": "Corpus bucket service account"
-        }
-      },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const payload = $('Prepare Replace Payload').first().json;\n// Por el nodo y no por $json: cuando hubo borrado en el bucket, lo que llega es la\n// respuesta de GCS. Y .first() porque ese borrado puede haber abierto varios items.\nconst replace = $('API - Replace Gemini Document').first().json;\nconst corpus = payload.corpusBucket\n  ? {\n      mode: 'bucket',\n      bucket: payload.corpusBucket,\n      uploaded: payload.corpusObjectName,\n      deleted: replace.deleted || [],\n    }\n  : { mode: 'volumen local', ...(replace.corpus || {}) };\nconst result = {\n  pdf: payload.pdfName,\n  filename: payload.filename,\n  verdict: payload.verdict,\n  metadata: payload.metadata,\n  replace,\n  corpus,\n  replaced_at: new Date().toISOString(),\n};\nconst logName = `${payload.filename.replace(/\\.md$/, '')}.gemini-replace.json`;\nconst item = { json: { logName, result, replaceLogFolderId: payload.replaceLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(result, null, 2), 'utf8'),\n  logName,\n  'application/json'\n);\nreturn [item];"
-      },
-      "id": "a1b2c3d4-0000-4000-8000-000000000027",
+      "id": "a1b2c3d4-0000-4000-8000-000000000021",
       "name": "Prepare Replace Log",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3800,
+        2560,
         -192
       ]
     },
@@ -830,12 +661,12 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000028",
+      "id": "a1b2c3d4-0000-4000-8000-000000000022",
       "name": "Google Drive - Upload Replace Log",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        4020,
+        2768,
         -192
       ],
       "credentials": {
@@ -865,12 +696,12 @@
           "cachedResultName": "processed/pdf"
         }
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000029",
+      "id": "a1b2c3d4-0000-4000-8000-000000000023",
       "name": "Google Drive - Move PDF To Processed",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        4240,
+        2976,
         -192
       ],
       "credentials": {
@@ -884,12 +715,12 @@
       "parameters": {
         "jsCode": "const payload = $('Prepare Replace Payload').first().json;\nconst config = $('Set Resolved Config').first().json;\nconst baseName = payload.filename.replace(/\\.md$/i, '');\n// Dos items con la MISMA propiedad binaria, para que un solo nodo de Drive suba los dos:\n// `inputDataFieldName` es un parametro fijo, no una expresion. Y se preparan juntos aca\n// porque el nodo de Drive no arrastra binarios a su salida.\nconst files = [\n  {\n    name: payload.filename,\n    folderId: config.processedMarkdownFolderId,\n    body: payload.markdown,\n    mime: 'text/markdown',\n  },\n  {\n    name: `${baseName}.metadata.json`,\n    folderId: config.processedMetadataFolderId,\n    body: JSON.stringify(payload.metadata, null, 2),\n    mime: 'application/json',\n  },\n];\nconst items = [];\nfor (const file of files) {\n  const item = { json: { name: file.name, folderId: file.folderId }, binary: {} };\n  item.binary.file = await this.helpers.prepareBinaryData(\n    Buffer.from(file.body, 'utf8'),\n    file.name,\n    file.mime\n  );\n  items.push(item);\n}\nreturn items;"
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000030",
+      "id": "a1b2c3d4-0000-4000-8000-000000000024",
       "name": "Prepare Curated Files",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4448,
+        3184,
         -192
       ]
     },
@@ -909,12 +740,12 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000031",
+      "id": "a1b2c3d4-0000-4000-8000-000000000025",
       "name": "Google Drive - Upload Curated Files",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        4656,
+        3392,
         -192
       ],
       "credentials": {
@@ -929,12 +760,12 @@
       "parameters": {
         "jsCode": "const config = $('Set Resolved Config').first().json;\nconst deleted = $('API - Replace Gemini Document').first().json.deleted || [];\n\n// Siempre al menos un item, incluso sin nada que archivar: un nodo que sale vacio corta\n// la cadena, y con la cadena cortada el loop no arranca el PDF siguiente.\nif (!deleted.length) {\n  return [{ json: { archive: false } }];\n}\n\nconst items = [];\nfor (const displayName of deleted) {\n  const baseName = displayName.replace(/\\.md$/i, '');\n  items.push({ json: { archive: true, name: displayName, folderId: config.processedMarkdownFolderId } });\n  items.push({\n    json: { archive: true, name: `${baseName}.metadata.json`, folderId: config.processedMetadataFolderId },\n  });\n}\nreturn items;"
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000032",
+      "id": "a1b2c3d4-0000-4000-8000-000000000026",
       "name": "Prepare Derogated Lookups",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4864,
+        3600,
         -192
       ]
     },
@@ -963,12 +794,12 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000033",
+      "id": "a1b2c3d4-0000-4000-8000-000000000027",
       "name": "IF - Has Files To Archive",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        5072,
+        3808,
         -192
       ]
     },
@@ -987,12 +818,12 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000034",
+      "id": "a1b2c3d4-0000-4000-8000-000000000028",
       "name": "Google Drive - Find Derogated File",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        5280,
+        4016,
         -320
       ],
       "credentials": {
@@ -1023,12 +854,12 @@
           "cachedResultName": "derogated"
         }
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000035",
+      "id": "a1b2c3d4-0000-4000-8000-000000000029",
       "name": "Google Drive - Move To Derogated",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        5488,
+        4224,
         -320
       ],
       "credentials": {
@@ -1044,7 +875,7 @@
       "parameters": {
         "jsCode": "const review = $('Prepare Replacement Review').first().json;\nconst form = $('Wait - Replacement Review Form').first().json;\nconst record = {\n  pdf: review.pdfName,\n  filename: review.mdName,\n  verdict: review.verdict,\n  plan_message: review.planMessage,\n  would_have_deleted: review.supersededNames,\n  decision: form.replaceDecision,\n  skipped_at: new Date().toISOString(),\n};\nconst logName = `${review.documentId}.gemini-replace-skipped.json`;\nconst item = { json: { logName, record, replaceLogFolderId: review.replaceLogFolderId }, binary: {} };\nitem.binary.log = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(record, null, 2), 'utf8'),\n  logName,\n  'application/json'\n);\nreturn [item];"
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000036",
+      "id": "a1b2c3d4-0000-4000-8000-000000000030",
       "name": "Prepare Skip Log",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1069,7 +900,7 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000037",
+      "id": "a1b2c3d4-0000-4000-8000-000000000031",
       "name": "Google Drive - Upload Skip Log",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
@@ -1088,12 +919,12 @@
       "parameters": {
         "jsCode": "const err = $json;\nconst source = $('Google Drive - Download PDF').item?.json || {};\nconst filename = source.name || 'unknown.pdf';\nconst safeName = filename.replace(/[^a-zA-Z0-9_.-]+/g, '-');\n// Un 409 no es una caida: es la API negandose a borrar sin que alguien decida cual. Se\n// registra igual, y el PDF se queda en la carpeta de updates para reintentarlo bien.\nconst record = { filename, error: err, happened_at: new Date().toISOString() };\nconst item = { json: { errorName: `${safeName}.replace-error.json`, record }, binary: {} };\nitem.binary.error = await this.helpers.prepareBinaryData(\n  Buffer.from(JSON.stringify(record, null, 2), 'utf8'),\n  item.json.errorName,\n  'application/json'\n);\nreturn [item];"
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000038",
+      "id": "a1b2c3d4-0000-4000-8000-000000000032",
       "name": "Prepare Replace Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2960,
+        2560,
         192
       ]
     },
@@ -1113,12 +944,12 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000039",
+      "id": "a1b2c3d4-0000-4000-8000-000000000033",
       "name": "Google Drive - Upload Error",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        3180,
+        2768,
         192
       ],
       "credentials": {
@@ -1135,7 +966,7 @@
         "color": 3,
         "content": "## Paso destructivo\n\nFile Search no tiene update in-place: la unica forma de actualizar un documento es borrarlo y volver a subirlo. El borrado no se deshace y no queda version anterior.\n\nLa version vieja no se encuentra por nombre: `build_document_id` mete el sha256 del PDF en el nombre, asi que un PDF nuevo trae otro nombre. Se encuentra por el stem sin el hash, la misma llave que usa el citation locator.\n\nEl plan se niega a elegir cuando la llave casa con varios documentos o con ninguno. Esos casos se resuelven escribiendo el nombre exacto en el campo `supersedes` del formulario, no dejando que el flujo adivine."
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000040",
+      "id": "a1b2c3d4-0000-4000-8000-000000000034",
       "name": "Sticky Note - Destructive Step",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
@@ -1149,14 +980,14 @@
         "width": 700,
         "height": 380,
         "color": 5,
-        "content": "## El orden del corpus no es negociable\n\nEl markdown entra al bucket ANTES de reemplazar en el store, y el objeto viejo se borra DESPUES. Asi la ventana en la que una cita podria resolver contra el texto equivocado es cero.\n\nAl reves seria el peor caso: `resolve_document_path` cae al stem sin el hash, el nombre nuevo casa con el markdown VIEJO, y un articulo que sobrevivio la modificatoria pero cambio de numero casa difuso (umbral 0.82). La cita sale con el numero anterior, con seguridad y sin aviso.\n\nHOY ESTOS DOS NODOS ESTAN DORMIDOS. Necesitan una credencial de service account con llave, y la organizacion las tiene prohibidas por `iam.disableServiceAccountKeyCreation`. Como `CORPUS_BUCKET` no se le pasa al contenedor de n8n, `corpusBucket` sale vacio, el flujo los salta, y la sincronizacion del corpus la hace la API con `sync_corpus: true` — el mount de Cloud Run va con escritura y la runtime SA no necesita llave.\n\nQuedan aca para el dia que se pueda usar una llave: alcanza con setear `CORPUS_BUCKET` en el contenedor de n8n y volver el mount a `readonly=true`."
+        "content": "## El corpus se mueve junto con el store\n\nLa API hace las dos cosas en la misma llamada y en el orden seguro: escribe el markdown nuevo en el corpus, borra el viejo, poda el manifest y limpia el cache del locator (`corpus.sync_replacement`).\n\nSi quedaran desincronizados seria el peor caso: `resolve_document_path` cae al stem sin el hash, el nombre nuevo casa con el markdown VIEJO, y un articulo que sobrevivio la modificatoria pero cambio de numero casa difuso (umbral 0.82). La cita sale con el numero anterior, con seguridad y sin aviso.\n\nEn Cloud Run el volumen del corpus va CON ESCRITURA y la runtime SA necesita `roles/storage.objectUser`. Escribirlo desde n8n en vez de la API exigiria una credencial de service account con llave, y la organizacion las prohibe por `iam.disableServiceAccountKeyCreation`.\n\nSi el corpus no se puede escribir, la respuesta trae `corpus.synced: false` y un aviso: el reemplazo en el store ya ocurrio y romper ahi no ayudaria."
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000041",
+      "id": "a1b2c3d4-0000-4000-8000-000000000035",
       "name": "Sticky Note - Corpus Order",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2320,
+        2100,
         -620
       ]
     },
@@ -1167,12 +998,12 @@
         "color": 4,
         "content": "## Drive tambien tiene que moverse\n\nEl store y el bucket ya quedaron con la revision nueva, pero `processed/markdown` es de donde el README dice repoblar el corpus. Si se queda con la version vieja, un `rsync` de mantenimiento reintroduce el texto desactualizado y vuelve el mismo caso silencioso: la cita sale con el numero de articulo anterior.\n\nAsi que la revision nueva se sube a `processed/markdown` y `processed/metadata`, y la anterior se archiva en `derogated` en vez de quedar conviviendo con las vigentes.\n\nEsto es limpieza, no la operacion autoritativa: corre despues del reemplazo y del log. Si falla, el RAG sigue correcto y Drive queda atrasado, que es lo que reporta `corpus_diff`.\n\nLos dos nodos finales llevan `alwaysOutputData`: un markdown viejo que no este en Drive (documento indexado antes de este flujo) haria salir vacia la busqueda, y una cadena cortada dejaria el loop sin arrancar el PDF siguiente."
       },
-      "id": "a1b2c3d4-0000-4000-8000-000000000042",
+      "id": "a1b2c3d4-0000-4000-8000-000000000036",
       "name": "Sticky Note - Curated Record",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        4400,
+        3140,
         -620
       ]
     }
@@ -1431,54 +1262,7 @@
       "main": [
         [
           {
-            "node": "IF - Corpus Bucket Configured",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "IF - Corpus Bucket Configured": {
-      "main": [
-        [
-          {
-            "node": "Prepare Corpus Binary",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
             "node": "API - Replace Gemini Document",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Corpus Binary": {
-      "main": [
-        [
-          {
-            "node": "GCS - Upload New Markdown",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "GCS - Upload New Markdown": {
-      "main": [
-        [
-          {
-            "node": "API - Replace Gemini Document",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Prepare Replace Error",
             "type": "main",
             "index": 0
           }
@@ -1486,53 +1270,6 @@
       ]
     },
     "API - Replace Gemini Document": {
-      "main": [
-        [
-          {
-            "node": "IF - Old Markdown In Bucket",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Prepare Replace Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "IF - Old Markdown In Bucket": {
-      "main": [
-        [
-          {
-            "node": "Prepare Corpus Deletions",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Prepare Replace Log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Corpus Deletions": {
-      "main": [
-        [
-          {
-            "node": "GCS - Delete Old Markdown",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "GCS - Delete Old Markdown": {
       "main": [
         [
           {

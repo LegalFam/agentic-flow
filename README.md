@@ -129,23 +129,14 @@ como `REPLACE_WITH_..._FOLDER_ID`: la carpeta de PDFs actualizados, la de logs d
 reemplazo y `derogated`. `processed/pdf`, `processed/markdown` y `processed/metadata` ya
 vienen con los mismos ids que usa `Upload To Gemini File Search`.
 
-El corpus lo maneja `corpusBucket`, que toma `CORPUS_BUCKET` del entorno. **Hoy sale
-vacio en los dos entornos**, a proposito: el deploy no le pasa `CORPUS_BUCKET` al
-contenedor de n8n. Con eso el flujo salta los nodos de GCS y llama al reemplazo con
-`sync_corpus: true`, o sea que sincroniza la API.
+El reemplazo va siempre con `sync_corpus: true`: la sincronizacion del corpus la hace la
+API por el mount, sin nodos de por medio.
 
-Los dos nodos `GCS - *` quedan dormidos para el dia que se pueda usar una credencial con
-llave: setear `CORPUS_BUCKET` en el contenedor de n8n los activa, y ahi el markdown viaja
-al bucket antes del reemplazo, la revision anterior se borra despues, y el reemplazo va
-con `sync_corpus: false`. Ese es el orden que hace cero la ventana de citas mal
-atribuidas, y por eso el flujo lo conserva aunque hoy no se use.
-
-Los dos nodos de GCS vienen con `"id": null` y el nombre `Corpus bucket service account`.
-Mientras esten dormidos eso no importa; si algun dia se activan, alcanza con crear en n8n
-una credencial de service account con ese nombre exacto y el JSON no necesita conocer su
-id: en cada import `replaceInvalidCredentials` resuelve un id nulo buscando por nombre y
-tipo dentro del proyecto. Un id inexistente no dispara esa resolucion, asi que un
-placeholder quedaria roto en cada import.
+Hubo una version de este flujo con dos nodos `GCS - *` que escribian el bucket desde n8n
+antes de reemplazar. Se sacaron: necesitan una credencial de service account con llave, la
+organizacion las prohibe, y un nodo con credencial que n8n no puede resolver muestra error
+en cada corrida aunque nunca se ejecute — indistinguible de un fallo real. El orden sigue
+garantizado, solo que dentro de `sync_replacement` en vez de en el canvas.
 
 Los folder ids son distintos: son parametros del nodo `Edit Replace Config` y no tienen
 resolucion por nombre, asi que el valor durable es el del JSON. Se pueden cambiar en la UI
