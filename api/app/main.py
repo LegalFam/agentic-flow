@@ -185,21 +185,54 @@ def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
     Un id desconocido devuelve campos vacios, nunca un error: si el modelo altero el id o
     la entrada vencio, la cita debe salir sin ubicacion en vez de tumbar la respuesta del
     chat. Y nunca con la ubicacion que el modelo haya podido inventar.
+
+    El texto que si se acepta del modelo es `original_snippet`, y solo como puntero: se
+    verifica contra el chunk que se guardo al recuperarlo, y la ubicacion se recalcula
+    sobre el documento. Si no se verifica, se descarta sin mas.
     """
     citations = []
     resolved = 0
+    from_excerpt = 0
+    ambiguous = 0
 
     for requested in payload.citations:
-        fields = locator_registry.resolve(requested.citation_id)
-        found = fields is not None
-        if found:
-            resolved += 1
-        else:
+        entry = locator_registry.resolve_entry(requested.citation_id)
+        if entry is None:
+            citations.append(
+                LocatorResolveResponseCitation(
+                    citation_id=requested.citation_id,
+                    resolved=False,
+                    locator_scope="unknown",
+                    **locator_registry.EMPTY,
+                )
+            )
+            continue
+
+        resolved += 1
+        fields = entry["fields"]
+        context = entry["context"]
+        articles = context.get("articles") or []
+
+        excerpt_fields = _locator_from_excerpt(context, requested.original_snippet)
+        if excerpt_fields is not None:
+            fields = excerpt_fields
+            scope = "excerpt"
+            from_excerpt += 1
+        elif len(articles) > 1 and settings.locator_require_excerpt_when_ambiguous:
+            # El chunk cruza varios articulos y el agente no dejo verificable cual uso:
+            # el primero es una moneda al aire y una atribucion falsa es peor que ninguna.
             fields = locator_registry.EMPTY
+            scope = "ambiguous"
+            ambiguous += 1
+        else:
+            scope = "chunk"
+
         citations.append(
             LocatorResolveResponseCitation(
                 citation_id=requested.citation_id,
-                resolved=found,
+                resolved=True,
+                locator_scope=scope,
+                chunk_articles=articles,
                 **fields,
             )
         )
@@ -208,7 +241,31 @@ def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
         citations=citations,
         resolved=resolved,
         unknown=len(citations) - resolved,
+        from_excerpt=from_excerpt,
+        ambiguous=ambiguous,
     )
+
+
+def _locator_from_excerpt(context: dict, excerpt: str) -> dict | None:
+    """Reancla la cita sobre el fragmento citado. `None` si no se pudo verificar."""
+    if not settings.enable_citation_locator or not excerpt or not context.get("snippet"):
+        return None
+
+    try:
+        index = corpus.get_index(context.get("title"), context.get("file_id"))
+        found = locator.resolve_excerpt(index, context["snippet"], excerpt)
+    except Exception:
+        return None
+
+    if found.is_empty():
+        return None
+
+    return {
+        "locator": found.label,
+        "breadcrumb": found.breadcrumb,
+        "page": found.page,
+        "locator_source": found.source,
+    }
 
 
 @app.post("/locator/probe", response_model=LocatorProbeResponse)

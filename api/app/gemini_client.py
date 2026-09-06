@@ -379,25 +379,40 @@ def _extract_response_text(response: Any) -> str:
 def resolve_citation_locator(context_title: str, file_id: str, snippet: str) -> dict[str, Any]:
     """Ubica el snippet dentro del documento. Nunca lanza: una cita sin locator es
     aceptable, una busqueda legal caida no lo es."""
+    return resolve_citation_entry(context_title, file_id, snippet)[0]
+
+
+def resolve_citation_entry(
+    context_title: str, file_id: str, snippet: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """`(campos del locator, contexto de resolucion)`.
+
+    El contexto viaja al registro para que `/resolve-locators` pueda reanclar despues el
+    fragmento que el agente XAI diga haber usado, y para saber si el chunk abarca varios
+    articulos, caso en el que quedarse con el primero seria adivinar.
+    """
     empty = {"locator": "", "breadcrumb": "", "page": None, "locator_source": ""}
+    context = {"title": context_title, "file_id": file_id, "snippet": snippet, "articles": []}
     if not settings.enable_citation_locator or not snippet:
-        return empty
+        return empty, context
 
     try:
         index = corpus.get_index(context_title, file_id)
-        found = locator.resolve(index, snippet)
+        found, articles = locator.resolve_chunk(index, snippet)
     except Exception:
-        return empty
+        return empty, context
+
+    context["articles"] = articles
 
     if found.is_empty():
-        return empty
+        return empty, context
 
     return {
         "locator": found.label,
         "breadcrumb": found.breadcrumb,
         "page": found.page,
         "locator_source": found.source,
-    }
+    }, context
 
 
 def citation_identity(file_url: str, locator_label: str, snippet: str) -> str:
@@ -445,7 +460,7 @@ def _extract_grounding_citations(response: Any) -> list[dict[str, Any]]:
             snippet = _clean_user_text(getattr(context, "text", None))
             file_id = _clean_user_text(metadata.get("identificador")) or context_title
 
-            locator_fields = resolve_citation_locator(context_title, file_id, snippet)
+            locator_fields, locator_context = resolve_citation_entry(context_title, file_id, snippet)
             identity = citation_identity(file_url, locator_fields["locator"], snippet)
             if identity in seen:
                 continue
@@ -453,7 +468,7 @@ def _extract_grounding_citations(response: Any) -> list[dict[str, Any]]:
 
             cid = citation_id(identity)
             # El locator autoritativo se guarda aca, no viaja por el prompt.
-            locator_registry.register(cid, locator_fields)
+            locator_registry.register(cid, locator_fields, locator_context)
 
             citations.append(
                 {

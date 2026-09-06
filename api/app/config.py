@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     locator_registry_max_entries: int = 5000
     locator_fuzzy_threshold: float = 0.82
     locator_max_article_span: int = 20000
+    # Debajo de esto un excerpt no discrimina un articulo de otro dentro del chunk.
+    locator_min_excerpt_chars: int = 25
+    # Un chunk que abarca varios articulos y sin excerpt verificable sale sin ubicacion:
+    # quedarse con el primero seria adivinar cual sustenta la respuesta.
+    locator_require_excerpt_when_ambiguous: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

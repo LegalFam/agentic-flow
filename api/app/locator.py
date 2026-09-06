@@ -73,6 +73,10 @@ _ROMAN_RE = re.compile(r"^[IVXLCDM]+$")
 _INCISO_RE = re.compile(r"\binciso\s+(\d+)", re.IGNORECASE)
 _SNIPPET_ARTICULO_RE = re.compile(r"\bart[ií]culo\s+(\d+[\-–]?[a-z]?)", re.IGNORECASE)
 
+# Holgura al buscar el excerpt dentro del chunk: absorbe el desfase de un chunk que solo
+# caso por prefijo o difuso, sin llegar a alcanzar el articulo siguiente.
+_WINDOW_SLACK = 200
+
 
 @dataclass(frozen=True)
 class Heading:
@@ -290,29 +294,45 @@ def find_offset(index: DocumentIndex, snippet: str) -> tuple[int | None, str]:
     if not query or not index.folded:
         return None, "none"
 
+    position, strategy = find_in_folded(index.folded, query)
+    if position is None:
+        return None, "none"
+    return index.offset_map[position], strategy
+
+
+def find_in_folded(haystack: str, query: str) -> tuple[int | None, str]:
+    """Busca `query` (ya colapsado) en un texto folded: `(posicion, estrategia)`.
+
+    La posicion esta en las coordenadas del haystack, no en `base`. Se separo de
+    `find_offset` porque el mismo escalonado exacto -> prefijo -> difuso hace falta
+    tambien contra un chunk suelto, que no tiene indice ni `offset_map`.
+    """
+    if not haystack or not query:
+        return None, "none"
+
     folded_query = fold(query)
 
-    position = index.folded.find(folded_query)
+    position = haystack.find(folded_query)
     if position >= 0:
-        return index.offset_map[position], "exact"
+        return position, "exact"
 
     tokens = query.split(" ")
     for size in (20, 15, 10, 6):
         if len(tokens) < size:
             continue
         prefix = fold(" ".join(tokens[:size]))
-        position = index.folded.find(prefix)
+        position = haystack.find(prefix)
         if position >= 0:
-            return index.offset_map[position], "prefix"
+            return position, "prefix"
 
-    position = _fuzzy_offset(index, folded_query)
+    position = _fuzzy_offset(haystack, folded_query)
     if position is not None:
-        return index.offset_map[position], "fuzzy"
+        return position, "fuzzy"
 
     return None, "none"
 
 
-def _fuzzy_offset(index: DocumentIndex, folded_query: str) -> int | None:
+def _fuzzy_offset(haystack: str, folded_query: str) -> int | None:
     from difflib import SequenceMatcher
 
     window = len(folded_query)
@@ -332,7 +352,7 @@ def _fuzzy_offset(index: DocumentIndex, folded_query: str) -> int | None:
     for anchor in anchors:
         start = 0
         while len(candidates) < 200:
-            found = index.folded.find(anchor, start)
+            found = haystack.find(anchor, start)
             if found < 0:
                 break
             candidates.append(max(0, found - 40))
@@ -346,7 +366,7 @@ def _fuzzy_offset(index: DocumentIndex, folded_query: str) -> int | None:
     matcher.set_seq2(folded_query)
 
     for candidate in candidates:
-        chunk = index.folded[candidate : candidate + window]
+        chunk = haystack[candidate : candidate + window]
         matcher.set_seq1(chunk)
         if matcher.real_quick_ratio() < best_ratio or matcher.quick_ratio() < best_ratio:
             continue
@@ -431,13 +451,104 @@ def locator_from_snippet(snippet: str) -> Locator:
     return Locator(label=label, breadcrumb=label, page=None, source="snippet_regex")
 
 
+def articles_in_span(index: DocumentIndex, start: int, end: int) -> list[str]:
+    """Articulos que cubre el tramo `[start, end)` en coordenadas base.
+
+    Un chunk de File Search no respeta el articulado: puede arrancar a media frase del
+    Art. 561 y terminar dentro del 563. Saber cuantos articulos abarca es lo que permite
+    distinguir un chunk cuya ubicacion es inequivoca de uno donde quedarse con el primero
+    seria adivinar.
+    """
+    labels: list[str] = []
+    current: Heading | None = None
+
+    for heading in index.headings:
+        if heading.kind != "articulo":
+            continue
+        if heading.offset <= start:
+            current = heading
+            continue
+        if heading.offset >= end:
+            break
+        labels.append(heading.label)
+
+    # El articulo abierto antes del chunk tambien lo cubre, salvo que quede tan lejos que
+    # ya no lo gobierne (mismo criterio que build_locator).
+    if current is not None and start - current.offset <= settings.locator_max_article_span:
+        labels.insert(0, current.label)
+
+    return labels
+
+
+def resolve_chunk(index: DocumentIndex | None, snippet: str) -> tuple[Locator, list[str]]:
+    """Ubica el chunk recuperado y reporta que articulos abarca."""
+    if index is None:
+        return locator_from_snippet(snippet), []
+
+    query = clean_user_text(snippet)
+    position, strategy = find_in_folded(index.folded, query)
+    if position is None:
+        return locator_from_snippet(snippet), []
+
+    start = index.offset_map[position]
+    end_position = min(position + len(query), len(index.offset_map) - 1)
+    end = index.offset_map[end_position]
+
+    found = build_locator(index, start, strategy)
+    if found.is_empty():
+        return locator_from_snippet(snippet), []
+
+    return found, articles_in_span(index, start, end + 1)
+
+
+def resolve_excerpt(index: DocumentIndex | None, chunk: str, excerpt: str) -> Locator:
+    """Ubica el fragmento que el agente dice haber usado, exigiendo que salga del chunk.
+
+    El locator del chunk se queda con el primer articulo que aparece, que no tiene por que
+    ser el que sustenta la respuesta cuando el chunk abarca varios. Reanclando sobre el
+    texto citado, la ubicacion corresponde a lo que el agente realmente uso.
+
+    Devuelve `EMPTY_LOCATOR` cuando el excerpt no se puede verificar contra el chunk: el
+    caller decide como degradar, pero nunca se ubica texto que el modelo pudo inventar.
+    """
+    chunk_text = clean_user_text(chunk)
+    excerpt_text = clean_user_text(excerpt)
+    if not chunk_text or not excerpt_text:
+        return EMPTY_LOCATOR
+
+    # Un excerpt muy corto ("El demandante") casa en cualquier parte y no discrimina un
+    # articulo de otro, que es justo lo que se quiere resolver.
+    if len(excerpt_text) < settings.locator_min_excerpt_chars:
+        return EMPTY_LOCATOR
+
+    folded_chunk = fold(chunk_text)
+    inner, strategy = find_in_folded(folded_chunk, excerpt_text)
+    if inner is None:
+        return EMPTY_LOCATOR
+
+    if index is None:
+        return locator_from_snippet(excerpt_text)
+
+    chunk_start, _ = find_in_folded(index.folded, chunk_text)
+    if chunk_start is None:
+        return locator_from_snippet(excerpt_text)
+
+    # Buscar el excerpt directamente dentro de la ventana del chunk es lo mas preciso;
+    # la suma de posiciones es el respaldo cuando el chunk solo caso por prefijo o difuso
+    # y por lo tanto arrastra un desfase de unos pocos caracteres.
+    window_end = chunk_start + len(folded_chunk) + _WINDOW_SLACK
+    direct = index.folded.find(fold(excerpt_text), chunk_start, window_end)
+    if direct >= 0:
+        position, strategy = direct, "exact"
+    else:
+        position = min(chunk_start + inner, len(index.offset_map) - 1)
+
+    found = build_locator(index, index.offset_map[position], strategy)
+    if found.is_empty():
+        return locator_from_snippet(excerpt_text)
+    return found
+
+
 def resolve(index: DocumentIndex | None, snippet: str) -> Locator:
     """Punto de entrada: indice si hay documento, regex sobre el snippet si no."""
-    if index is not None:
-        offset, strategy = find_offset(index, snippet)
-        if offset is not None:
-            locator = build_locator(index, offset, strategy)
-            if not locator.is_empty():
-                return locator
-
-    return locator_from_snippet(snippet)
+    return resolve_chunk(index, snippet)[0]

@@ -47,6 +47,7 @@ docker compose up --build
 - `GET /corpus/status`: cuantos markdowns ve el locator y si hay manifest.
 - `POST /corpus/reload`: limpia el cache de indices sin reiniciar el contenedor.
 - `POST /locator/probe`: diagnostico. Recibe `{title, snippet}` y devuelve la ubicacion resuelta y la estrategia usada.
+- `POST /resolve-locators`: cambia los `citation_id` que traen los agentes por el locator autoritativo. Acepta ademas el `original_snippet` que declara el agente XAI.
 
 ## Ubicacion de las citas (citation locator)
 
@@ -131,6 +132,37 @@ normalizado (ignora acentos, mayusculas y separadores), y stem normalizado sin e
 metadata. Si nada casa devuelve `None` y la cita cae al fallback por regex: nunca adivina
 un documento parecido, porque una cita atribuida al documento equivocado es peor que una
 cita sin ubicacion.
+
+### El fragmento que uso el agente (`original_snippet`)
+
+Un chunk de File Search no respeta el articulado: puede arrancar a media frase del
+`Art. 561` y terminar dentro del `Art. 563`. El locator del chunk se queda con el primero,
+que no tiene por que ser el que sustenta la respuesta. Ese fue el caso real: la cita salia
+bien redactada y atribuida al articulo equivocado.
+
+Por eso el agente XAI devuelve dos textos por cita:
+
+- `original_snippet`: copia literal del pasaje del chunk en el que se apoyo.
+- `summary_snippet`: el resumen que lee el usuario (es lo que el backend persiste como
+  `snippet`).
+
+`/resolve-locators` trata `original_snippet` como puntero, no como ubicacion: lo busca
+dentro del chunk que se guardo al recuperarlo y, si aparece, recalcula la ubicacion sobre
+el markdown a partir de esa posicion. Un texto que el modelo invento no esta en el chunk y
+se descarta sin mas.
+
+`locator_scope` dice de donde salio cada ubicacion:
+
+- `excerpt`: del pasaje citado. Es el caso bueno.
+- `chunk`: del chunk completo, porque no hubo `original_snippet` verificable y el chunk
+  cubre un solo articulo, asi que no hay ambiguedad que resolver.
+- `ambiguous`: el chunk cubria varios articulos y no hubo `original_snippet` verificable.
+  La cita sale sin ubicacion; elegir el primer articulo seria adivinar. Se apaga con
+  `LOCATOR_REQUIRE_EXCERPT_WHEN_AMBIGUOUS=false`.
+- `unknown`: el `citation_id` no esta en el registro (alterado por un agente o vencido).
+
+`LOCATOR_MIN_EXCERPT_CHARS` (25 por defecto) descarta pasajes tan cortos que casarian en
+cualquier articulo.
 
 ### Degradacion
 

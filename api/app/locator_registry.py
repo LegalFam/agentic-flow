@@ -23,19 +23,32 @@ _LOCK = threading.Lock()
 
 EMPTY: dict = {"locator": "", "breadcrumb": "", "page": None, "locator_source": ""}
 
+# Junto al locator se guarda de donde salio. Sin esto, `/resolve-locators` no podria
+# reanclar el fragmento que el agente XAI dice haber usado: no sabria contra que documento
+# ni contra que chunk verificarlo.
+EMPTY_CONTEXT: dict = {"title": "", "file_id": "", "snippet": "", "articles": []}
 
-def register(citation_id: str, fields: dict) -> None:
+
+def register(citation_id: str, fields: dict, context: dict | None = None) -> None:
     if not citation_id:
         return
 
     expires_at = time.monotonic() + settings.locator_registry_ttl_seconds
+    entry = {"fields": dict(fields), "context": dict(context or EMPTY_CONTEXT)}
     with _LOCK:
-        _ENTRIES[citation_id] = (expires_at, dict(fields))
+        _ENTRIES[citation_id] = (expires_at, entry)
         if len(_ENTRIES) > settings.locator_registry_max_entries:
             _evict_locked()
 
 
 def resolve(citation_id: str) -> dict | None:
+    """Solo los campos del locator, que es lo que viaja en la respuesta de la cita."""
+    entry = resolve_entry(citation_id)
+    return None if entry is None else entry["fields"]
+
+
+def resolve_entry(citation_id: str) -> dict | None:
+    """Locator + contexto de resolucion (`{"fields": ..., "context": ...}`)."""
     if not citation_id:
         return None
 
@@ -44,11 +57,11 @@ def resolve(citation_id: str) -> dict | None:
         entry = _ENTRIES.get(citation_id)
         if entry is None:
             return None
-        expires_at, fields = entry
+        expires_at, stored = entry
         if expires_at <= now:
             del _ENTRIES[citation_id]
             return None
-        return dict(fields)
+        return {"fields": dict(stored["fields"]), "context": dict(stored["context"])}
 
 
 def _evict_locked() -> None:

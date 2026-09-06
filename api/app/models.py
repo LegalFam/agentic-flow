@@ -261,6 +261,9 @@ class RagSearchResponse(BaseModel):
 
 class LocatorResolveRequestCitation(BaseModel):
     citation_id: str = ""
+    # Copia textual del fragmento del chunk que el agente XAI dice haber usado. Cuando se
+    # verifica contra el chunk recuperado, la ubicacion sale de aca y no del chunk entero.
+    original_snippet: str = ""
 
 
 class LocatorResolveRequest(BaseModel):
@@ -274,12 +277,19 @@ class LocatorResolveResponseCitation(BaseModel):
     page: int | None = None
     locator_source: str = ""
     resolved: bool = False
+    # De donde salio la ubicacion: "excerpt" (el fragmento citado), "chunk" (el chunk
+    # completo), "ambiguous" (el chunk abarca varios articulos y no hubo excerpt
+    # verificable: se devuelve vacio) o "unknown" (citation_id que no esta en el registro).
+    locator_scope: str = ""
+    chunk_articles: list[str] = Field(default_factory=list)
 
 
 class LocatorResolveResponse(BaseModel):
     citations: list[LocatorResolveResponseCitation] = Field(default_factory=list)
     resolved: int = 0
     unknown: int = 0
+    from_excerpt: int = 0
+    ambiguous: int = 0
 
 
 class CorpusStatusResponse(BaseModel):
