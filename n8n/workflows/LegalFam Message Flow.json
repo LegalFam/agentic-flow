@@ -10,8 +10,8 @@
       "name": "Google Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "position": [
-        1136,
-        2112
+        1200,
+        2064
       ],
       "typeVersion": 1,
       "credentials": {
@@ -31,7 +31,7 @@
       "name": "Merge1",
       "type": "n8n-nodes-base.merge",
       "position": [
-        960,
+        976,
         1792
       ],
       "typeVersion": 3.2
@@ -49,8 +49,8 @@
       "name": "SearchStore",
       "type": "n8n-nodes-base.httpRequestTool",
       "position": [
-        1328,
-        2112
+        1360,
+        2048
       ],
       "typeVersion": 4.3,
       "retryOnFail": true,
@@ -70,7 +70,7 @@
       "name": "RAG Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "position": [
-        1248,
+        1312,
         1792
       ],
       "typeVersion": 3.1,
@@ -86,7 +86,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1104,
+        1152,
         1792
       ],
       "id": "eab080c9-61b8-4901-9260-615ad7cf4e42",
@@ -100,8 +100,8 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        -272,
-        2064
+        -176,
+        2080
       ],
       "id": "e1fb94f4-6d04-4114-a6f8-f53a023cc119",
       "name": "Structured Output Parser"
@@ -113,8 +113,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -480,
-        2064
+        -384,
+        2080
       ],
       "id": "afe2e2d7-6894-48ad-aa51-668a27d629ee",
       "name": "Google Gemini Chat Model1",
@@ -136,24 +136,24 @@
       "name": "Sticky Note5",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        944,
+        976,
         1616
       ],
       "typeVersion": 1
     },
     {
       "parameters": {
-        "content": "## Parse User Message",
-        "height": 656,
-        "width": 976,
+        "content": "## Normalize User Message",
+        "height": 592,
+        "width": 896,
         "color": 7
       },
       "id": "f79e6d8d-daa3-4fe3-8567-eb00d17e2757",
       "name": "Sticky Note4",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        -720,
-        1616
+        -1440,
+        2128
       ],
       "typeVersion": 1
     },
@@ -169,8 +169,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        -448,
-        1840
+        -352,
+        1856
       ],
       "id": "51f858bf-6f77-4741-8b0b-5b2bb6b99715",
       "name": "Parser Agent",
@@ -183,14 +183,14 @@
       "parameters": {
         "content": "## XAI Agent\nRewrites RAG output into personalized, safe Spanish Markdown with flexible structure, useful next steps, glossary when helpful, and prudent legal caveats.",
         "height": 656,
-        "width": 976,
+        "width": 928,
         "color": 7
       },
       "id": "1d4a77ec-3d4a-4f18-a34d-089b8d615f8a",
       "name": "Sticky Note6",
       "type": "n8n-nodes-base.stickyNote",
       "position": [
-        1616,
+        1664,
         1616
       ],
       "typeVersion": 1
@@ -206,8 +206,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -688,
-        1840
+        -1424,
+        2368
       ],
       "id": "71aaf36d-afd6-454c-9a88-5bf48dcf1288",
       "name": "Webhook",
@@ -239,7 +239,7 @@
       "type": "n8n-nodes-base.set",
       "position": [
         720,
-        1680
+        1728
       ],
       "typeVersion": 3.4
     },
@@ -251,8 +251,8 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        1472,
-        2112
+        1520,
+        2048
       ],
       "id": "ee8d3a47-dc1a-48df-a279-c4a24171a5c7",
       "name": "Structured Output Parser1"
@@ -284,8 +284,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -160,
-        1840
+        -48,
+        1856
       ],
       "id": "3e8cc168-c04d-472f-9586-1d37043ca1ee",
       "name": "If Relevant"
@@ -297,8 +297,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
-        1840
+        736,
+        1856
       ],
       "id": "e201b2c8-451a-4369-8c41-15da16b4b9d1",
       "name": "Map Retrieval Metadata"
@@ -310,7 +310,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1712,
+        1744,
         2112
       ],
       "id": "f0a3e89c-9e77-4c93-a29e-aa91634fb338",
@@ -380,7 +380,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
-        1648,
+        1744,
         1792
       ],
       "id": "c1450c8f-870f-4749-97be-0f3e12c154f7",
@@ -402,7 +402,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2128,
+        2160,
         1792
       ],
       "id": "a1f5c8e2-4d7b-4a91-9c33-2e6b8d0f7a15",
@@ -416,7 +416,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2288,
+        2320,
         1792
       ],
       "id": "b7c2d9a4-6e18-4f52-8b70-3a9c1e5d2f88",
@@ -429,45 +429,11 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        352,
+        336,
         1840
       ],
       "id": "3f0a2d61-9c4b-4a71-8d20-6e1c5b0f7a91",
       "name": "Clarification Gate"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "b1d4e77a-5f2c-4c08-9a63-2d8f0b41c5e7",
-              "leftValue": "={{ $json.clarification.shouldAsk }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        528,
-        1840
-      ],
-      "id": "7c93f4a2-0b16-4de5-9f74-31a5c6e28b40",
-      "name": "If Needs Clarification"
     },
     {
       "parameters": {
@@ -492,8 +458,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -528,
-        1840
+        -1248,
+        2368
       ],
       "id": "a1f4c7d2-3b58-4e19-9c60-7d2a8f1b4e03",
       "name": "Resolve Language"
@@ -525,8 +491,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -368,
-        1840
+        -1072,
+        2368
       ],
       "id": "d7b2e514-6c09-4a83-b25f-91e4c8073f6a",
       "name": "If Non-Spanish"
@@ -540,8 +506,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -256,
-        2016
+        -880,
+        2304
       ],
       "id": "b8c30f47-2d91-4e6a-8f53-04a7b91c2e68",
       "name": "Google Gemini Chat Model Translate In",
@@ -562,13 +528,14 @@
               "message": "Eres un traductor. No eres un asistente legal y no debes responder la consulta.\n\nRecibes un texto escrito por una persona en quechua sureno (Chanka-Collao) o en aymara y\ndevuelves UNICAMENTE su traduccion al espanol.\n\nReglas:\n- Devuelve solo la traduccion: sin comillas, sin preambulo, sin explicaciones.\n- No respondas la pregunta, no des orientacion legal y no agregues nada que el texto no diga.\n- No desambigues por tu cuenta: si el original es ambiguo, la traduccion tambien lo es.\n- Conserva nombres propios, cifras, fechas y montos exactamente como aparecen.\n- Manten el registro coloquial del original; no lo vuelvas juridico.\n- Si el texto ya viene en espanol, devuelvelo sin cambios."
             }
           ]
-        }
+        },
+        "batching": {}
       },
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.7,
       "position": [
-        -192,
-        1840
+        -880,
+        2160
       ],
       "id": "e5a71b03-4f28-49d6-b710-8c3e2d9f5a41",
       "name": "Translate Inbound"
@@ -580,8 +547,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -32,
-        1840
+        -688,
+        2384
       ],
       "id": "f3d68a29-5e14-4c07-9b82-6a01e7d3f5b4",
       "name": "Normalized Input"
@@ -593,8 +560,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        96,
-        2016
+        144,
+        2432
       ],
       "id": "0c9e4b71-8d32-4a56-bf09-3e175c2a8d64",
       "name": "Build Response Without RAG"
@@ -606,8 +573,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
-        2016
+        832,
+        2288
       ],
       "id": "2b76d0f5-9a41-4e83-8c25-6f0d9b3e714a",
       "name": "Build Response Clarification"
@@ -652,8 +619,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        2656,
-        1904
+        2704,
+        2464
       ],
       "id": "7e4b9c18-2a05-4f63-8d71-95c0e3a26b7f",
       "name": "If Needs Localization"
@@ -667,8 +634,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        2816,
-        2080
+        3008,
+        2368
       ],
       "id": "9a2f7d40-6b81-4e35-ac09-2d51f8b30e67",
       "name": "Google Gemini Chat Model Translate Out",
@@ -687,8 +654,8 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        2976,
-        2080
+        3152,
+        2368
       ],
       "id": "3c81b6e9-5d47-4a02-98f1-6e0b2a7d4c53",
       "name": "Localize Output Parser"
@@ -696,21 +663,22 @@
     {
       "parameters": {
         "promptType": "define",
-        "hasOutputParser": true,
         "text": "=Idioma destino: {{ $json.language === 'qu' ? 'quechua sureno (Chanka-Collao)' : 'aymara' }}\n\nRespuesta en espanol (Markdown), a traducir integra:\n<<<\n{{ $json.payload.message }}\n>>>\n\nSiguientes pasos a traducir (devuelve la misma cantidad, en el mismo orden):\n{{ JSON.stringify($json.payload.nextSteps) }}\n\nPreguntas aclaratorias a traducir (misma cantidad, mismo orden):\n{{ JSON.stringify($json.payload.clarifyingQuestions) }}\n\nResumenes de cita a traducir (misma cantidad, mismo orden):\n{{ JSON.stringify(($json.payload.citations || []).map(citation => citation.summary_snippet || '')) }}",
+        "hasOutputParser": true,
         "messages": {
           "messageValues": [
             {
               "message": "Eres un traductor especializado en material juridico peruano de Derecho de Familia.\nNo eres el autor del contenido: traduces, no reescribes.\n\nTraduces del espanol al idioma destino que se te indica.\n\nContenido:\n- No agregues, omitas ni suavices nada. No respondas por tu cuenta ni completes lo que falte.\n- No inventes articulos, normas, plazos, cifras ni instituciones.\n\nTerminologia juridica (la regla mas importante):\n- Los terminos con efecto legal se MANTIENEN EN ESPANOL: \"pension de alimentos\",\n  \"patria potestad\", \"tenencia\", \"regimen de visitas\", \"filiacion\", \"union de hecho\",\n  \"sociedad de gananciales\", \"tutela\", \"curatela\", \"medidas de proteccion\", \"conciliacion\",\n  \"divorcio\", \"separacion de hecho\", \"sucesion\", \"herencia\"; las siglas REDAM, DEMUNA, CEM,\n  PNP, MIMP; los nombres de instituciones y normas (Poder Judicial, Ministerio Publico,\n  Codigo Civil, Codigo de los Ninos y Adolescentes) y todo numero de articulo o de ley.\n- La primera vez que aparezca uno de esos terminos, dejalo en espanol y agrega entre\n  parentesis una explicacion breve en el idioma destino. Despues usalo solo en espanol.\n- Inventar un equivalente juridico en quechua o aymara es peor que no traducir. No lo hagas.\n\nFormato:\n- Conserva exactamente la estructura Markdown: encabezados, negritas, vinetas y el orden.\n- Traduce cada elemento de lista por separado y devuelve la misma cantidad de elementos,\n  en el mismo orden que recibiste.\n- No traduzcas URLs.\n\nRegistro: trato respetuoso y directo, lenguaje sencillo, dirigido a una persona que busca\norientacion y no a un abogado."
             }
           ]
-        }
+        },
+        "batching": {}
       },
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.7,
       "position": [
-        2848,
-        1904
+        3008,
+        2192
       ],
       "id": "6d31e05b-7f94-42a8-b160-8c2e75a09d31",
       "name": "Localize Response"
@@ -722,8 +690,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3040,
-        1904
+        3376,
+        2272
       ],
       "id": "4a07f9c2-8e53-461b-90d7-2b6c8e15a370",
       "name": "Apply Localization"
@@ -735,8 +703,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2848,
-        1728
+        3392,
+        2496
       ],
       "id": "1e63d94a-7c20-4f85-b3e6-05a91d7c26b8",
       "name": "Unwrap Spanish Response"
@@ -750,27 +718,77 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        3232,
-        1808
+        3616,
+        2400
       ],
       "id": "c05a8f36-1b74-49e2-8a60-7d3e91c5b204",
       "name": "Respond to Webhook"
     },
     {
       "parameters": {
-        "content": "## Translate at the edges\nQuechua and Aymara are read-only languages here: the message is translated into Spanish before the Parser Agent and the finished answer is translated back after it, so classification, retrieval, citations and the Spanish corpus never leave Spanish. Both translators are plain LLM chains, not agents — translation decides nothing, and an agent free enough to reason is free enough to answer instead of translate. The Spanish text always travels alongside the translation and stays the authoritative version; a citation’s literal passage is never translated.",
-        "height": 420,
-        "width": 620,
-        "color": 4
+        "content": "## Parse User Message",
+        "height": 656,
+        "width": 720,
+        "color": 7
       },
+      "id": "b1169dda-8b87-49ac-ba9c-5bdfe781a2d1",
+      "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
       "position": [
-        -640,
-        1600
+        -464,
+        1616
       ],
-      "id": "8f2c1a05-6e39-4b74-a1d8-53c0e97b2f16",
-      "name": "Sticky Note8"
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Normalize Agent Response",
+        "height": 640,
+        "width": 1104,
+        "color": 7
+      },
+      "id": "1449ad24-0751-4660-aff3-b4da77dc71f6",
+      "name": "Sticky Note8",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2656,
+        2064
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b1d4e77a-5f2c-4c08-9a63-2d8f0b41c5e7",
+              "leftValue": "={{ $json.clarification.shouldAsk }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        496,
+        1840
+      ],
+      "id": "7c93f4a2-0b16-4de5-9f74-31a5c6e28b40",
+      "name": "If Its Clear"
     }
   ],
   "pinData": {},
@@ -1006,30 +1024,7 @@
       "main": [
         [
           {
-            "node": "If Needs Clarification",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "If Needs Clarification": {
-      "main": [
-        [
-          {
-            "node": "Build Response Clarification",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Map Retrieval Metadata",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Get FileStore Name1",
+            "node": "If Its Clear",
             "type": "main",
             "index": 0
           }
@@ -1203,6 +1198,29 @@
           }
         ]
       ]
+    },
+    "If Its Clear": {
+      "main": [
+        [
+          {
+            "node": "Get FileStore Name1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Map Retrieval Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Response Clarification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -1210,7 +1228,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "a57b4733-d27c-4e09-976a-2c44c9b2e0b1",
+  "versionId": "b6b0471a-604a-4d36-a362-87ae922aa4f4",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "9fce58893f89ad8f33bc95b60bc48529c7919f940f2c626daea4bcdb1ccbb936"
