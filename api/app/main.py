@@ -23,6 +23,8 @@ from app.models import (
     LocatorResolveRequest,
     LocatorResolveResponse,
     LocatorResolveResponseCitation,
+    FileSearchDocumentDeleteRequest,
+    FileSearchDocumentDeleteResponse,
     FileSearchDocumentListRequest,
     FileSearchDocumentListResponse,
     FileSearchReplacePlanRequest,
@@ -159,6 +161,29 @@ async def list_store_documents(payload: FileSearchDocumentListRequest) -> FileSe
         return FileSearchDocumentListResponse.model_validate(
             store_documents.list_store_documents(payload.file_search_store_name)
         )
+    except Exception as exc:
+        status_code, detail = classify_processing_error(exc)
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@app.post("/file-search-stores/documents/delete", response_model=FileSearchDocumentDeleteResponse)
+async def delete_store_document(payload: FileSearchDocumentDeleteRequest) -> FileSearchDocumentDeleteResponse:
+    """Borra un documento del store sin subir nada.
+
+    Es la salida para el reemplazo que quedo a medias: subio la version nueva pero no
+    pudo borrar la vieja, y el store devuelve las dos al RAG hasta que alguien saque una.
+    """
+    try:
+        return FileSearchDocumentDeleteResponse.model_validate(
+            store_documents.delete_store_document(
+                document=payload.document,
+                file_search_store_name=payload.file_search_store_name,
+            )
+        )
+    except store_documents.ReplaceRefused as exc:
+        raise HTTPException(
+            status_code=409, detail=error_detail("DELETE_NEEDS_DECISION", str(exc))
+        ) from exc
     except Exception as exc:
         status_code, detail = classify_processing_error(exc)
         raise HTTPException(status_code=status_code, detail=detail) from exc

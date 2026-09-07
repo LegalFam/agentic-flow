@@ -247,6 +247,18 @@ class FileSearchDocumentListResponse(BaseModel):
     documents: list[FileSearchDocument] = Field(default_factory=list)
 
 
+class FileSearchDocumentDeleteRequest(BaseModel):
+    # name completo (fileSearchStores/.../documents/...) o display_name.
+    document: str
+    file_search_store_name: str | None = None
+
+
+class FileSearchDocumentDeleteResponse(BaseModel):
+    file_search_store: str
+    deleted: FileSearchDocument
+    message: str
+
+
 class FileSearchReplacePlanRequest(BaseModel):
     filename: str
     file_search_store_name: str | None = None

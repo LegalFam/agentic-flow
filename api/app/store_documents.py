@@ -82,6 +82,58 @@ def _resolve_store(client, types, requested: str | None) -> str:
     )
 
 
+def _delete_document(client, types, name: str) -> None:
+    """Borra un documento del store, con sus chunks.
+
+    `force` no es opcional en la practica: un documento indexado siempre tiene chunks, y
+    sin `force` la API responde 400 FAILED_PRECONDITION "Cannot delete non-empty
+    Document". Un borrado sin chunks solo pasaria con un documento que nunca termino de
+    procesarse, o sea el caso raro y no el normal.
+    """
+    client.file_search_stores.documents.delete(
+        name=name,
+        config=types.DeleteDocumentConfig(force=True),
+    )
+
+
+def delete_store_document(document: str, file_search_store_name: str | None) -> dict[str, Any]:
+    """Borra un documento por `name` completo o por `display_name`.
+
+    Existe para limpiar lo que un reemplazo dejo a medias: si la subida entro y el borrado
+    fallo, el store queda con las dos versiones y hace falta sacar la vieja sin volver a
+    subir nada. Se resuelve contra la lista del store para no borrar a ciegas un nombre
+    mal escrito, y para poder devolver que documento se borro.
+    """
+    client, types = build_client()
+    store = _resolve_store(client, types, file_search_store_name)
+    documents = [
+        _document_summary(item) for item in client.file_search_stores.documents.list(parent=store)
+    ]
+
+    by_name = {item["name"]: item for item in documents}
+    by_display = [item for item in documents if item["display_name"] == document]
+    target = by_name.get(document)
+    if target is None:
+        if not by_display:
+            raise ReplaceRefused(
+                f"'{document}' no esta en el store {store}. Lista los documentos antes de borrar."
+            )
+        if len(by_display) > 1:
+            names = ", ".join(item["name"] for item in by_display)
+            raise ReplaceRefused(
+                f"'{document}' casa con {len(by_display)} documentos ({names}). "
+                "Pasa el name completo para decir cual."
+            )
+        target = by_display[0]
+
+    _delete_document(client, types, target["name"])
+    return {
+        "file_search_store": store,
+        "deleted": target,
+        "message": f"'{target['display_name']}' borrado del store.",
+    }
+
+
 def list_store_documents(file_search_store_name: str | None) -> dict[str, Any]:
     client, types = build_client()
     store = _resolve_store(client, types, file_search_store_name)
@@ -183,7 +235,7 @@ def replace_document(
     delete_failed: list[dict[str, str]] = []
     for target in targets:
         try:
-            client.file_search_stores.documents.delete(name=target["name"])
+            _delete_document(client, types, target["name"])
             deleted.append(target["display_name"])
         except Exception as exc:
             delete_failed.append(

@@ -209,3 +209,40 @@ def test_sync_reports_a_read_only_corpus_instead_of_raising(corpus_dir, monkeypa
     # Y sobre todo: no se borro la revision vieja. Si se hubiera borrado sin poder
     # escribir la nueva, el corpus se quedaria sin ninguna de las dos.
     assert (corpus_dir / "codigo-civil-97fe57ba02fb.md").exists()
+
+
+class _FakeDocuments:
+    def __init__(self):
+        self.calls = []
+
+    def delete(self, name, config=None):
+        self.calls.append((name, config))
+
+
+class _FakeStores:
+    def __init__(self):
+        self.documents = _FakeDocuments()
+
+
+class _FakeClient:
+    def __init__(self):
+        self.file_search_stores = _FakeStores()
+
+
+class _FakeTypes:
+    class DeleteDocumentConfig:
+        def __init__(self, force=None):
+            self.force = force
+
+
+def test_delete_forces_removal_of_the_chunks():
+    """Sin force, la API responde 400 'Cannot delete non-empty Document'.
+
+    Todo documento ya indexado tiene chunks, asi que un borrado sin force falla siempre
+    justo en el caso normal: el reemplazo sube la version nueva y deja la vieja.
+    """
+    client = _FakeClient()
+    store_documents._delete_document(client, _FakeTypes, "fileSearchStores/s/documents/d")
+    (name, config), = client.file_search_stores.documents.calls
+    assert name == "fileSearchStores/s/documents/d"
+    assert config.force is True

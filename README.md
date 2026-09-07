@@ -47,6 +47,7 @@ docker compose up --build
 - `POST /file-search-stores/documents`: lista los documentos indexados en un store.
 - `POST /file-search-stores/documents/plan-replace`: dice que version quedaria reemplazada por un nombre dado, sin tocar el store.
 - `POST /file-search-stores/documents/replace`: sube la revision nueva, borra la vieja y sincroniza `work/corpus`.
+- `POST /file-search-stores/documents/delete`: borra un documento del store sin subir nada. Es la limpieza para un reemplazo que quedo a medias.
 - `POST /rag-search`: busqueda con grounding. Cada cita incluye `locator`, `breadcrumb`, `page` y `locator_source`.
 - `GET /corpus/status`: cuantos markdowns ve el locator y si hay manifest.
 - `POST /corpus/reload`: limpia el cache de indices sin reiniciar el contenedor.
@@ -69,6 +70,13 @@ Esa llave puede casar con varios documentos o con ninguno. En los dos casos el r
 se **niega** con `409 REPLACE_NEEDS_DECISION` en vez de elegir, porque borrar el
 documento equivocado no se deshace. La salida es indicar el nombre exacto en
 `supersedes`.
+
+El borrado va con `force`. Un documento ya indexado tiene chunks, y la API rechaza
+borrarlo sin `force` con `400 FAILED_PRECONDITION: Cannot delete non-empty Document`, o sea
+que falla exactamente en el caso normal. Si aun asi un borrado falla, el reemplazo **no**
+revierte la subida (dejar el store sin ninguna version seria peor): responde con
+`delete_failed` y un warning, y la version vieja se saca despues con
+`/file-search-stores/documents/delete` o con `corpus_replace --delete <doc> --apply`.
 
 ### El corpus del locator tiene que moverse con el store
 

@@ -61,6 +61,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--store", help="Nombre completo o display_name del store")
     parser.add_argument("--list", action="store_true", help="Listar los documentos del store")
     parser.add_argument("--plan", metavar="FILENAME", help="Solo mostrar que reemplazaria ese nombre")
+    parser.add_argument(
+        "--delete",
+        metavar="DOC",
+        help="Borrar un documento (name completo o display_name) sin subir nada. "
+        "Para limpiar la version vieja que un reemplazo no logro borrar",
+    )
     parser.add_argument("--markdown", help="Ruta al .md de la revision nueva")
     parser.add_argument("--metadata", help="Ruta al .metadata.json de la revision nueva")
     parser.add_argument(
@@ -83,6 +89,32 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.list:
             print_documents(store_documents.list_store_documents(args.store))
+            return 0
+
+        if args.delete:
+            # Mismo criterio que el reemplazo: el borrado no se deshace, asi que sin
+            # --apply solo se dice que documento se iria.
+            if not args.apply:
+                listed = store_documents.list_store_documents(args.store)
+                matches = [
+                    item
+                    for item in listed["documents"]
+                    if args.delete in (item["name"], item["display_name"])
+                ]
+                if not matches:
+                    print(f"'{args.delete}' no esta en {listed['file_search_store']}", file=sys.stderr)
+                    return 2
+                print(f"store   : {listed['file_search_store']}")
+                for item in matches:
+                    print(f"borraria: {item['display_name']}  ({item['size_bytes']} bytes)")
+                    print(f"          {item['name']}")
+                print("\nDRY RUN. Corre otra vez con --apply para borrarlo.")
+                return 0
+            result = store_documents.delete_store_document(args.delete, args.store)
+            print(f"store   : {result['file_search_store']}")
+            print(f"borrado : {result['deleted']['display_name']}")
+            print(f"          {result['deleted']['name']}")
+            print(f"\n{result['message']}")
             return 0
 
         if args.plan:
