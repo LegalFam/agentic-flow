@@ -303,6 +303,13 @@ plano antes de responderle al backend, siempre *despues* de `/resolve-locators`:
 compara el pasaje tal como vino contra el chunk recuperado, asi que limpiarlo antes
 romperia el anclaje.
 
+El mismo nodo descarta las citas repetidas. Dos `citation_id` distintos pueden terminar en
+el mismo pasaje del mismo articulo cuando el agente lo cita dos veces con otro resumen, y
+en pantalla eso sale como el articulo duplicado. Se comparan documento, locator y pasaje
+(por contencion, porque el recorte lo elige el modelo y los bordes varian): queda la
+primera cita con la version mas larga del pasaje. Dos pasajes distintos del mismo articulo
+no se tocan.
+
 `/resolve-locators` trata `original_snippet` como puntero, no como ubicacion: lo busca
 dentro del chunk que se guardo al recuperarlo y, si aparece, recalcula la ubicacion sobre
 el markdown a partir de esa posicion. Un texto que el modelo invento no esta en el chunk y
