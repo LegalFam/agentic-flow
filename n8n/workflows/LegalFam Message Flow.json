@@ -305,36 +305,6 @@
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.message || \"Puedo orientar sobre Derecho de Familia en Peru. Cuentame de forma general tu situacion familiar y que necesitas decidir, sin incluir datos personales.\") }},\n  \"citations\": [],\n  \"confidenceStatus\": null,\n  \"confidenceReason\": null,\n  \"nextSteps\": [],\n  \"specialistSupportRecommended\": false,\n  \"citationSupportStatus\": null,\n  \"clarifyingQuestions\": [],\n  \"agentTokenCost\": 1\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        96,
-        2016
-      ],
-      "id": "e3cfe24c-f72f-4006-9441-fef65a10d912",
-      "name": "Respond without RAG"
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.output?.answer || $json.answer || \"Con lo que cuentas hasta ahora, puedo darte una orientacion general de Derecho de Familia. Describe de forma general la situacion familiar y que necesitas decidir, sin incluir datos personales sensibles.\") }},\n  \"citations\": {{ JSON.stringify($json.output?.citations || $json.citations || []) }},\n  \"confidenceStatus\": {{ JSON.stringify($json.output?.confidenceStatus || $json.confidenceStatus || (($json.output?.citations || $json.citations || []).length ? \"MEDIUM\" : \"LOW\")) }},\n  \"confidenceReason\": {{ JSON.stringify($json.output?.confidenceReason ?? $json.confidenceReason ?? null) }},\n  \"nextSteps\": {{ JSON.stringify($json.output?.nextSteps || $json.nextSteps || []) }},\n  \"specialistSupportRecommended\": {{ JSON.stringify(Boolean($json.output?.specialistSupportRecommended ?? $json.specialistSupportRecommended)) }},\n  \"citationSupportStatus\": {{ JSON.stringify($('RAG Agent').first().json.output?.citationSupportStatus || $json.output?.citationSupportStatus || $json.citationSupportStatus || (($json.output?.citations || $json.citations || []).length ? \"GOOD\" : \"NONE\")) }},\n  \"clarifyingQuestions\": {{ JSON.stringify($json.output?.clarifyingQuestions || $json.clarifyingQuestions || []) }},\n  \"agentTokenCost\": 3\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        2464,
-        1792
-      ],
-      "id": "7f506e58-f65e-47be-a754-da7973899e3f",
-      "name": "Respond with XAI"
-    },
-    {
-      "parameters": {
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
@@ -501,21 +471,6 @@
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\n  \"message\": {{ JSON.stringify($json.clarification.message) }},\n  \"citations\": [],\n  \"confidenceStatus\": null,\n  \"confidenceReason\": null,\n  \"nextSteps\": [],\n  \"specialistSupportRecommended\": false,\n  \"citationSupportStatus\": null,\n  \"clarifyingQuestions\": {{ JSON.stringify($json.clarification.questions) }},\n  \"agentTokenCost\": 1\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        720,
-        2016
-      ],
-      "id": "d58b1e34-6a97-4f02-b3c1-9e7d0a2f8c65",
-      "name": "Respond with Clarification"
-    },
-    {
-      "parameters": {
         "content": "## Clarify Case\nWhen the classified message is missing the general facts that decide the orientation, the flow spends one token asking up to three questions instead of three tokens retrieving an answer built on guesses. It asks at most once in a row, and never ahead of an urgent situation.",
         "height": 656,
         "width": 656,
@@ -529,6 +484,293 @@
       ],
       "id": "a2467f10-8d35-4b9e-af62-05c3d17b4e29",
       "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// El idioma decide unicamente en que lengua se lee la orientacion. El razonamiento\n// juridico, el corpus y las citas siguen siendo en espanol de punta a punta.\nconst SUPPORTED = ['es', 'qu', 'ay'];\nconst body = $json.body || {};\nconst requested = String(body.language || '').trim().toLowerCase();\n// Un idioma ausente o desconocido cae a espanol en lugar de fallar: el backend ya valida\n// la lista blanca, y aca un valor raro no debe costarle el turno al usuario.\nconst language = SUPPORTED.includes(requested) ? requested : 'es';\nreturn [{ json: { ...$json, body: { ...body, language } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -528,
+        1840
+      ],
+      "id": "a1f4c7d2-3b58-4e19-9c60-7d2a8f1b4e03",
+      "name": "Resolve Language"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c4e91d07-8a26-4b53-9f18-2e6b0d7a3c95",
+              "leftValue": "={{ $json.body.language }}",
+              "rightValue": "es",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -368,
+        1840
+      ],
+      "id": "d7b2e514-6c09-4a83-b25f-91e4c8073f6a",
+      "name": "If Non-Spanish"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        2016
+      ],
+      "id": "b8c30f47-2d91-4e6a-8f53-04a7b91c2e68",
+      "name": "Google Gemini Chat Model Translate In",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5RgMaZWPwNmZfsxJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Lengua de origen: {{ $json.body.language === 'qu' ? 'quechua sureno (Chanka-Collao)' : 'aymara' }}\nTraduce al espanol el siguiente texto escrito por el usuario:\n<<<\n{{ $json.body.message }}\n>>>",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Eres un traductor. No eres un asistente legal y no debes responder la consulta.\n\nRecibes un texto escrito por una persona en quechua sureno (Chanka-Collao) o en aymara y\ndevuelves UNICAMENTE su traduccion al espanol.\n\nReglas:\n- Devuelve solo la traduccion: sin comillas, sin preambulo, sin explicaciones.\n- No respondas la pregunta, no des orientacion legal y no agregues nada que el texto no diga.\n- No desambigues por tu cuenta: si el original es ambiguo, la traduccion tambien lo es.\n- Conserva nombres propios, cifras, fechas y montos exactamente como aparecen.\n- Manten el registro coloquial del original; no lo vuelvas juridico.\n- Si el texto ya viene en espanol, devuelvelo sin cambios."
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -192,
+        1840
+      ],
+      "id": "e5a71b03-4f28-49d6-b710-8c3e2d9f5a41",
+      "name": "Translate Inbound"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Punto en el que la entrada queda normalizada al espanol, venga en la lengua que venga.\n// A partir de aca todo el pipeline (Parser, RAG, XAI) trabaja como siempre lo hizo, sin\n// enterarse de que existen otros idiomas.\n//\n// Convergen las dos ramas: la espanola llega directa desde If Non-Spanish y la traducida\n// llega desde Translate Inbound, cuyo item solo trae el texto de la traduccion. Por eso el\n// cuerpo original se relee siempre de Resolve Language.\nconst base = $('Resolve Language').first().json;\nconst body = base.body || {};\nconst language = body.language || 'es';\nconst translated = language === 'es'\n  ? ''\n  : String($json.text ?? $json.output ?? '').trim();\n// Si la traduccion fallo o vino vacia, se sigue con el texto original. La orientacion\n// saldra peor, pero el usuario no pierde el turno ni sus tokens por un fallo del traductor.\nconst message = translated || body.message;\nreturn [{\n  json: {\n    ...base,\n    body: {\n      ...body,\n      message,\n      // Lo que el usuario escribio de verdad. Se conserva para poder mostrarlo tal cual.\n      message_original: body.message,\n      language,\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        1840
+      ],
+      "id": "f3d68a29-5e14-4c07-9b82-6a01e7d3f5b4",
+      "name": "Normalized Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Las tres ramas terminales arman el mismo objeto `payload`, con el contrato exacto que\n// espera el backend. Antes cada una lo construia por su cuenta dentro del nodo de\n// respuesta, con formas ligeramente distintas; ahora convergen para poder traducirse en un\n// solo lugar.\nconst output = $json.output || {};\nconst language = $('Resolve Language').first().json.body.language || 'es';\nreturn [{\n  json: {\n    language,\n    payload: {\n      message: output.message || 'Puedo orientar sobre Derecho de Familia en Peru. Cuentame de forma general tu situacion familiar y que necesitas decidir, sin incluir datos personales.',\n      citations: [],\n      confidenceStatus: null,\n      confidenceReason: null,\n      nextSteps: [],\n      specialistSupportRecommended: false,\n      citationSupportStatus: null,\n      clarifyingQuestions: [],\n      agentTokenCost: 1,\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        2016
+      ],
+      "id": "0c9e4b71-8d32-4a56-bf09-3e175c2a8d64",
+      "name": "Build Response Without RAG"
+    },
+    {
+      "parameters": {
+        "jsCode": "const clarification = $json.clarification || {};\nconst language = $('Resolve Language').first().json.body.language || 'es';\nreturn [{\n  json: {\n    language,\n    payload: {\n      message: clarification.message,\n      citations: [],\n      confidenceStatus: null,\n      confidenceReason: null,\n      nextSteps: [],\n      specialistSupportRecommended: false,\n      citationSupportStatus: null,\n      clarifyingQuestions: clarification.questions || [],\n      // Preguntar cuesta un token; recuperar y redactar cuesta tres.\n      agentTokenCost: 1,\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        2016
+      ],
+      "id": "2b76d0f5-9a41-4e83-8c25-6f0d9b3e714a",
+      "name": "Build Response Clarification"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $json.output || {};\nconst citations = output.citations || $json.citations || [];\nconst language = $('Resolve Language').first().json.body.language || 'es';\n// El estado de respaldo documental lo declara el RAG Agent, que es quien vio lo que la\n// busqueda devolvio; el XAI solo lo repite.\nconst ragCitationSupport = $('RAG Agent').first().json.output?.citationSupportStatus;\nreturn [{\n  json: {\n    language,\n    payload: {\n      message: output.answer || $json.answer || 'Con lo que cuentas hasta ahora, puedo darte una orientacion general de Derecho de Familia. Describe de forma general la situacion familiar y que necesitas decidir, sin incluir datos personales sensibles.',\n      citations,\n      confidenceStatus: output.confidenceStatus || $json.confidenceStatus || (citations.length ? 'MEDIUM' : 'LOW'),\n      confidenceReason: output.confidenceReason ?? $json.confidenceReason ?? null,\n      nextSteps: output.nextSteps || $json.nextSteps || [],\n      specialistSupportRecommended: Boolean(output.specialistSupportRecommended ?? $json.specialistSupportRecommended),\n      citationSupportStatus: ragCitationSupport || output.citationSupportStatus || $json.citationSupportStatus || (citations.length ? 'GOOD' : 'NONE'),\n      clarifyingQuestions: output.clarifyingQuestions || $json.clarifyingQuestions || [],\n      agentTokenCost: 3,\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        1792
+      ],
+      "id": "5f18c3a7-0e62-4d95-b843-71c96a0e2fd8",
+      "name": "Build Response XAI"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8d0a5e26-4c73-4b19-9f52-06e3b81d7a4c",
+              "leftValue": "={{ $json.language }}",
+              "rightValue": "es",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2656,
+        1904
+      ],
+      "id": "7e4b9c18-2a05-4f63-8d71-95c0e3a26b7f",
+      "name": "If Needs Localization"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        2816,
+        2080
+      ],
+      "id": "9a2f7d40-6b81-4e35-ac09-2d51f8b30e67",
+      "name": "Google Gemini Chat Model Translate Out",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5RgMaZWPwNmZfsxJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"LocalizedResponse\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"message\": {\n      \"type\": \"string\",\n      \"description\": \"La respuesta completa traducida, conservando el Markdown original.\"\n    },\n    \"nextSteps\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Los siguientes pasos traducidos, en el mismo orden y cantidad.\"\n    },\n    \"clarifyingQuestions\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Las preguntas aclaratorias traducidas, en el mismo orden y cantidad.\"\n    },\n    \"citationSummaries\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Los resumenes de cita traducidos, en el mismo orden y cantidad que se recibieron.\"\n    }\n  },\n  \"required\": [\n    \"message\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        2976,
+        2080
+      ],
+      "id": "3c81b6e9-5d47-4a02-98f1-6e0b2a7d4c53",
+      "name": "Localize Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "hasOutputParser": true,
+        "text": "=Idioma destino: {{ $json.language === 'qu' ? 'quechua sureno (Chanka-Collao)' : 'aymara' }}\n\nRespuesta en espanol (Markdown), a traducir integra:\n<<<\n{{ $json.payload.message }}\n>>>\n\nSiguientes pasos a traducir (devuelve la misma cantidad, en el mismo orden):\n{{ JSON.stringify($json.payload.nextSteps) }}\n\nPreguntas aclaratorias a traducir (misma cantidad, mismo orden):\n{{ JSON.stringify($json.payload.clarifyingQuestions) }}\n\nResumenes de cita a traducir (misma cantidad, mismo orden):\n{{ JSON.stringify(($json.payload.citations || []).map(citation => citation.summary_snippet || '')) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Eres un traductor especializado en material juridico peruano de Derecho de Familia.\nNo eres el autor del contenido: traduces, no reescribes.\n\nTraduces del espanol al idioma destino que se te indica.\n\nContenido:\n- No agregues, omitas ni suavices nada. No respondas por tu cuenta ni completes lo que falte.\n- No inventes articulos, normas, plazos, cifras ni instituciones.\n\nTerminologia juridica (la regla mas importante):\n- Los terminos con efecto legal se MANTIENEN EN ESPANOL: \"pension de alimentos\",\n  \"patria potestad\", \"tenencia\", \"regimen de visitas\", \"filiacion\", \"union de hecho\",\n  \"sociedad de gananciales\", \"tutela\", \"curatela\", \"medidas de proteccion\", \"conciliacion\",\n  \"divorcio\", \"separacion de hecho\", \"sucesion\", \"herencia\"; las siglas REDAM, DEMUNA, CEM,\n  PNP, MIMP; los nombres de instituciones y normas (Poder Judicial, Ministerio Publico,\n  Codigo Civil, Codigo de los Ninos y Adolescentes) y todo numero de articulo o de ley.\n- La primera vez que aparezca uno de esos terminos, dejalo en espanol y agrega entre\n  parentesis una explicacion breve en el idioma destino. Despues usalo solo en espanol.\n- Inventar un equivalente juridico en quechua o aymara es peor que no traducir. No lo hagas.\n\nFormato:\n- Conserva exactamente la estructura Markdown: encabezados, negritas, vinetas y el orden.\n- Traduce cada elemento de lista por separado y devuelve la misma cantidad de elementos,\n  en el mismo orden que recibiste.\n- No traduzcas URLs.\n\nRegistro: trato respetuoso y directo, lenguaje sencillo, dirigido a una persona que busca\norientacion y no a un abogado."
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        2848,
+        1904
+      ],
+      "id": "6d31e05b-7f94-42a8-b160-8c2e75a09d31",
+      "name": "Localize Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// La traduccion viaja JUNTO al espanol, nunca en su lugar. El backend guarda el espanol\n// como version canonica y el frontend ofrece verlo, asi que perder el original seria\n// perder la unica version verificable contra las normas citadas.\n//\n// El aviso de traduccion automatica no se agrega aca a proposito: lo muestra el frontend\n// junto al conmutador 'Ver en espanol'. Incrustarlo en el texto lo dejaria congelado en la\n// base de datos y duplicado en pantalla.\nconst base = $('If Needs Localization').first().json;\nconst payload = base.payload || {};\nconst translation = $json.output || {};\nconst asArray = (value) => (Array.isArray(value) ? value.map((item) => String(item || '')) : []);\n\n// Sin traduccion utilizable se entrega el espanol tal cual. Es peor experiencia, pero es\n// contenido correcto; devolver el turno vacio o cobrarlo dos veces seria peor.\nconst messageLocalized = String(translation.message || '').trim() || null;\n\nconst citations = (payload.citations || []).map((citation, index) => ({\n  ...citation,\n  // Solo se traduce el resumen. `original_snippet` es el texto literal de la norma y se\n  // queda en espanol: es lo unico que permite contrastar la cita contra la fuente.\n  summary_snippet_localized: asArray(translation.citationSummaries)[index] || null,\n}));\n\nreturn [{\n  json: {\n    ...payload,\n    citations,\n    message_localized: messageLocalized,\n    nextSteps_localized: asArray(translation.nextSteps),\n    clarifyingQuestions_localized: asArray(translation.clarifyingQuestions),\n    // El espanol del mensaje del usuario ya lo produjo Translate Inbound. El backend lo\n    // necesita para dejar el historial en un solo idioma.\n    user_message_es: $('Normalized Input').first().json.body.message,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        1904
+      ],
+      "id": "4a07f9c2-8e53-461b-90d7-2b6c8e15a370",
+      "name": "Apply Localization"
+    },
+    {
+      "parameters": {
+        "jsCode": "// La rama espanola no traduce nada, pero tiene que entregar el mismo contrato que la otra.\nreturn [{ json: { ...($json.payload || {}) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2848,
+        1728
+      ],
+      "id": "1e63d94a-7c20-4f85-b3e6-05a91d7c26b8",
+      "name": "Unwrap Spanish Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3232,
+        1808
+      ],
+      "id": "c05a8f36-1b74-49e2-8a60-7d3e91c5b204",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "content": "## Translate at the edges\nQuechua and Aymara are read-only languages here: the message is translated into Spanish before the Parser Agent and the finished answer is translated back after it, so classification, retrieval, citations and the Spanish corpus never leave Spanish. Both translators are plain LLM chains, not agents — translation decides nothing, and an agent free enough to reason is free enough to answer instead of translate. The Spanish text always travels alongside the translation and stays the authoritative version; a citation’s literal passage is never translated.",
+        "height": 420,
+        "width": 620,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        1600
+      ],
+      "id": "8f2c1a05-6e39-4b74-a1d8-53c0e97b2f16",
+      "name": "Sticky Note8"
     }
   ],
   "pinData": {},
@@ -581,7 +823,7 @@
       "main": [
         [
           {
-            "node": "Parser Agent",
+            "node": "Resolve Language",
             "type": "main",
             "index": 0
           }
@@ -621,7 +863,7 @@
         ],
         [
           {
-            "node": "Respond without RAG",
+            "node": "Build Response Without RAG",
             "type": "main",
             "index": 0
           }
@@ -753,7 +995,7 @@
       "main": [
         [
           {
-            "node": "Respond with XAI",
+            "node": "Build Response XAI",
             "type": "main",
             "index": 0
           }
@@ -775,7 +1017,7 @@
       "main": [
         [
           {
-            "node": "Respond with Clarification",
+            "node": "Build Response Clarification",
             "type": "main",
             "index": 0
           }
@@ -789,6 +1031,174 @@
           {
             "node": "Get FileStore Name1",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Language": {
+      "main": [
+        [
+          {
+            "node": "If Non-Spanish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Non-Spanish": {
+      "main": [
+        [
+          {
+            "node": "Translate Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalized Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate Inbound": {
+      "main": [
+        [
+          {
+            "node": "Normalized Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalized Input": {
+      "main": [
+        [
+          {
+            "node": "Parser Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model Translate In": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Translate Inbound",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response Without RAG": {
+      "main": [
+        [
+          {
+            "node": "If Needs Localization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response Clarification": {
+      "main": [
+        [
+          {
+            "node": "If Needs Localization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response XAI": {
+      "main": [
+        [
+          {
+            "node": "If Needs Localization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Needs Localization": {
+      "main": [
+        [
+          {
+            "node": "Localize Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unwrap Spanish Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Localize Response": {
+      "main": [
+        [
+          {
+            "node": "Apply Localization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Localization": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unwrap Spanish Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model Translate Out": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Localize Response",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Localize Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Localize Response",
+            "type": "ai_outputParser",
             "index": 0
           }
         ]
