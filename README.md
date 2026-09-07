@@ -296,6 +296,13 @@ Por eso el agente XAI devuelve dos textos por cita, y solo esos dos:
 No hay un tercer campo con el mismo texto: `summary_snippet` es el unico nombre del
 resumen de punta a punta.
 
+El corpus es markdown convertido desde PDF, asi que esa copia literal arrastra titulos
+(`#`), negritas (`**`), filas de tabla (`|`), comentarios (`<!-- image -->`), entidades
+HTML y los espacios repartidos que deja el OCR. El nodo `Attach Locators` lo pasa a texto
+plano antes de responderle al backend, siempre *despues* de `/resolve-locators`: la API
+compara el pasaje tal como vino contra el chunk recuperado, asi que limpiarlo antes
+romperia el anclaje.
+
 `/resolve-locators` trata `original_snippet` como puntero, no como ubicacion: lo busca
 dentro del chunk que se guardo al recuperarlo y, si aparece, recalcula la ubicacion sobre
 el markdown a partir de esa posicion. Un texto que el modelo invento no esta en el chunk y
