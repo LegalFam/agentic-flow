@@ -46,8 +46,20 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 # "Articulo 333.-", "Articulo 12°", "Articulo 4-A:". Exige separador o fin de linea para no
 # capturar prosa como "conforme al articulo 333 del codigo".
+#
+# El prefijo admite dos decoraciones mas porque el corpus las usa en encabezados reales:
+# la vineta de lista ("- Articulo 93º", Codigo de los Ninos y Adolescentes) y la comilla de
+# apertura, recta o tipografica, con la que el texto unico ordenado transcribe los articulos
+# sustituidos por leyes posteriores ('**" Articulo 21.- Regulacion de la capacidad juridica**',
+# '## "Articulo 7. Sujetos de proteccion'). Sin ellas esos 631 encabezados se pierden y su
+# texto se atribuye al articulo anterior, que es peor que quedarse sin ubicacion.
+#
+# Lo que separa un encabezado de una referencia en prosa no es el prefijo sino el separador
+# exigido tras el numero: "Articulo 23 de este Codigo." y "articulo 8, de conformidad con la
+# ley" siguen fuera porque les sigue una palabra o una coma.
 _ARTICULO_RE = re.compile(
-    r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}art[ií]culo\s+(\d+(?:[\s\-–]?[a-z])?[°º]?)\s*(?:[.\-–—:)º°]|$)",
+    r"^\s{0,8}(?:[-*+•]\s+)?(?:#{1,6}\s*)?[*_\"'“”‘’ ]{0,10}"
+    r"art[ií]culo\s+(\d+(?:[\s\-–]?[a-z])?[°º]?)\s*(?:[.\-–—:)º°]|$)",
     re.IGNORECASE,
 )
 

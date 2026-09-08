@@ -1,0 +1,1226 @@
+{
+  "name": "LegalFam Eval - full",
+  "nodes": [
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-pro-preview",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "78c7994e-969b-520f-bce1-877548607457",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "position": [
+        1200,
+        2064
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5RgMaZWPwNmZfsxJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "ac5feafb-962c-593d-9f00-8aabe0ee8135",
+      "name": "Merge1",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        976,
+        1840
+      ],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://processing-api:8000/rag-search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  query: $fromAI('query', 'A legal retrieval query. If the first result is invalid, retry once with broader legal synonyms and the canonical category.'),\n  original_message: $('Prepare RAG Agent Input').item.json.rag.original_message,\n  legal_category: $('Prepare RAG Agent Input').item.json.rag.legal_category,\n  canonical_category: $('Prepare RAG Agent Input').item.json.rag.canonical_category,\n  canonical_subcategories: $('Prepare RAG Agent Input').item.json.rag.canonical_subcategories,\n  metadata_hints: $('Prepare RAG Agent Input').item.json.rag.metadata_hints,\n  search_terms: $('Prepare RAG Agent Input').item.json.rag.search_terms,\n  file_search_store_name: $('Prepare RAG Agent Input').item.json.rag.file_search_store_name\n} }}",
+        "options": {}
+      },
+      "id": "d5d0da2a-c767-551f-b9e6-d5aecd1edece",
+      "name": "SearchStore",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "position": [
+        1376,
+        2080
+      ],
+      "typeVersion": 4.3,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.rag_prompt }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Eres un agente RAG legal de Derecho de Familia peruano.\n\nDebes usar siempre la herramienta SearchStore antes de responder.\n\nUsa previous_messages solo para resolver continuidad, pronombres, hechos generales ya mencionados y categoria legal. La fuente de verdad para memoria es el historial persistido enviado por el webhook, no la memoria interna de n8n.\n\nProceso obligatorio:\n1. Llama SearchStore con una consulta que conserve la pregunta original e incluya categoria canonica, subcategorias, terminos de busqueda y metadata preferida.\n2. Revisa el resultado de SearchStore.\n3. Considera GOOD solo cuando valid=true, answer responde directamente la pregunta del usuario, y citations contiene fuentes utiles relacionadas con la categoria consultada.\n4. Considera WEAK cuando hay citas relacionadas pero el respaldo es indirecto, parcial o no cubre todos los puntos principales. Devuelve esas citas de todas formas.\n5. Si el primer resultado no es valido, no responde todavia: llama SearchStore una segunda vez con una consulta reformulada, mas amplia, usando sinonimos juridicos, categoria canonica y terminos alternativos.\n6. Despues del segundo intento, devuelve el mejor resultado disponible para orientar la consulta de Derecho de Familia. Si no hay citas utiles, responde de forma prudente con la mejor orientacion legal general disponible y usa citations: [].\n\nContrato de salida obligatorio:\n- Devuelve exclusivamente JSON valido, sin Markdown, sin bloque ```json, sin texto antes ni despues.\n- El JSON debe tener exactamente esta forma: {\"answer\":\"texto en espanol\",\"citations\":[],\"citationSupportStatus\":\"GOOD\"}.\n- citationSupportStatus debe ser GOOD, WEAK o NONE.\n- Usa GOOD si hay citas utiles y directas; WEAK si hay citas debiles o indirectas y debes devolverlas; NONE si no hay citas utiles y citations debe ser [].\n- answer debe ser un string en espanol claro y no debe mencionar detalles tecnicos.\n- citations debe ser el arreglo de citas validas devuelto por SearchStore; si citationSupportStatus es WEAK devuelve las citas debiles disponibles; si es NONE usa [].\n- Si SearchStore devuelve texto plano, extrae su respuesta a answer, usa citations: [] y citationSupportStatus: NONE.\n- No inventes articulos, enlaces, nombres de documentos ni citas."
+        }
+      },
+      "id": "c46e3943-0d1c-56a9-96c6-a33b936bc23a",
+      "name": "RAG Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        1312,
+        1840
+      ],
+      "typeVersion": 3.1,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $json.output || {};\nconst retrieval = $json.retrieval || {};\n// El nodo Agent no propaga su item de entrada, asi que el historial persistido se lee del\n// Webhook. Leerlo de $json dejaba al RAG Agent sin memoria de la conversacion.\nconst body = $('Webhook').first().json.body || {};\nconst clarification = $json.clarification || {};\nconst stringArray = (value) => Array.isArray(value)\n  ? value.map((item) => String(item || '').trim()).filter(Boolean)\n  : [];\nconst previousMessages = Array.isArray(body.previous_messages) ? body.previous_messages : [];\nconst formattedHistory = previousMessages\n  .map((message) => `${String(message.role || '').trim()}: ${String(message.content || '').trim()}`)\n  .filter((line) => line.length > 2)\n  .join('\\n');\nconst rag = {\n  original_message: String(output.original_message || '').trim(),\n  legal_category: String(output.category || '').trim(),\n  canonical_category: String(retrieval.canonicalCategory || '').trim(),\n  canonical_subcategories: stringArray(retrieval.canonicalSubcategories),\n  metadata_hints: stringArray(retrieval.metadataHints),\n  search_terms: stringArray(retrieval.searchTerms),\n  file_search_store_name: String($json['Search Store'] || '').trim(),\n  previous_messages: previousMessages,\n  // Preguntas que no llegaron a cortar el flujo: siguen sin respuesta, y lo que cubren no\n  // se puede dar por cierto.\n  pending_questions: stringArray(clarification.questions)\n};\nconst rag_prompt = [\n  `Mensaje del usuario: \"${rag.original_message}\"`,\n  `Historial persistido reciente:\\n${formattedHistory || '(sin mensajes previos)'}`,\n  `Categoria: \"${rag.legal_category}\"`,\n  `Categoria canonica: \"${rag.canonical_category}\"`,\n  `Subcategorias canonicas: \"${rag.canonical_subcategories.join(', ')}\"`,\n  `Metadata preferida: \"${rag.metadata_hints.join(' ')}\"`,\n  `Terminos de busqueda: \"${rag.search_terms.join(', ')}\"`,\n  rag.pending_questions.length\n    ? `Datos aun no confirmados por el usuario (no los des por ciertos):\\n${rag.pending_questions.map((question) => `- ${question}`).join('\\n')}`\n    : ''\n].filter(Boolean).join('\\n');\nreturn [{ json: { ...$json, rag, rag_prompt } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        1840
+      ],
+      "id": "e324f0ef-bbb2-59fd-9cac-bdcdec721001",
+      "name": "Prepare RAG Agent Input"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"MessageObject\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"session_id\": {\n      \"type\": \"string\",\n      \"format\": \"uuid\",\n      \"description\": \"A unique identifier for the current chat session.\"\n    },\n    \"original_message\": {\n      \"type\": \"string\",\n      \"description\": \"The raw input message.\"\n    },\n    \"message\": {\n      \"type\": \"string\",\n      \"description\": \"The processed response message. Required when category is error.\"\n    },\n    \"category\": {\n      \"type\": \"string\",\n      \"description\": \"The classification category.\"\n    },\n    \"information_sufficiency\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"SUFFICIENT\",\n        \"PARTIAL\",\n        \"INSUFFICIENT\"\n      ],\n      \"description\": \"Whether the message already carries the general facts needed to orient this category.\"\n    },\n    \"clarifying_questions\": {\n      \"type\": \"array\",\n      \"maxItems\": 3,\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Short questions asking only for general facts that would change the legal orientation. Empty when nothing material is missing.\"\n    }\n  },\n  \"required\": [\n    \"session_id\",\n    \"original_message\",\n    \"category\"\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -176,
+        2080
+      ],
+      "id": "10a1a652-b4f3-59d3-a2d9-d17e4437e703",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        2080
+      ],
+      "id": "f2b72b0e-e516-599a-bc8c-2626f502fc23",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5RgMaZWPwNmZfsxJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Retrieve Context\nRAG Agent must call SearchStore, validate whether the result answers the user question, and retry once with a broader query when evidence is weak.",
+        "height": 592,
+        "width": 688,
+        "color": 7
+      },
+      "id": "6a6b1811-72d6-56ee-a9a5-3d15a9a94652",
+      "name": "Sticky Note5",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        944,
+        1680
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Normalize User Message",
+        "height": 592,
+        "width": 896,
+        "color": 7
+      },
+      "id": "4a5b96be-41f9-52fd-a74c-1ff270b9815c",
+      "name": "Sticky Note4",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1408,
+        1680
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Chat Session: {{ $json.body.session_id }}\nUser message: {{ $json.body.message }}\nPrevious persisted messages: {{ JSON.stringify($json.body.previous_messages || []) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Actua como clasificador legal de Derecho de Familia en Peru. Analiza el mensaje del usuario y devuelve un objeto que cumpla exactamente con el esquema del parser estructurado.\n\nUsa Previous persisted messages solo para resolver continuidad, pronombres y categoria legal. No los trates como memoria interna de n8n ni inventes datos no escritos.\n\nTrato conversacional:\n- Usa Previous persisted messages para saber si la conversacion ya empezo y si el asistente ya saludo o se presento.\n- Si ya existe al menos un mensaje ASSISTANT previo, no abras el message con \"Hola\", \"¡Hola!\", \"Soy un asistente\" ni otra presentacion inicial, salvo que el ultimo mensaje del usuario sea solo un saludo.\n- En seguimientos, responde como continuacion: \"Entiendo\", \"Con ese contexto\", \"En ese caso\" o una frase directa vinculada al ultimo mensaje del usuario.\n- Para consultas fuera de alcance dentro de una conversacion ya iniciada, no reinicies la conversacion; explica brevemente el limite y, si hay una posible conexion familiar, indica desde que angulo familiar puedes orientar.\n\nReglas de salida:\n- Copia el Chat Session recibido en session_id como texto.\n- Copia el User message recibido en original_message.\n- Usa category para una sola categoria de la lista o \"error\".\n- No envuelvas la respuesta dentro de otra propiedad como output.\n- Solo incluye message cuando category sea \"error\", cuando la consulta este fuera de alcance, o cuando falte informacion minima para orientar.\n\nCategorias permitidas:\n1. Pension de Alimentos (fijacion, aumento o reduccion).\n2. Tenencia y Custodia (cuidado de hijos y visitas).\n3. Patria Potestad (derechos/deberes sobre hijos).\n4. Violencia Familiar (medidas de proteccion).\n5. Divorcio y Separacion (fin del matrimonio o bienes).\n6. Filiacion y Paternidad (ADN y reconocimiento).\n7. Adopcion (procesos judiciales/administrativos).\n8. Sucesiones y Herencias (herederos y testamentos).\n9. Sociedad de Gananciales (bienes del matrimonio).\n10. Union de Hecho (convivencia).\n11. Tutela y Curatela (proteccion de menores o personas con apoyos).\n12. Procedimientos Administrativos (conciliacion y DEMUNA).\n13. Otros (no aplica ninguna de las otras categorias, pero sigue siendo Derecho de Familia).\n\nReglas para consultas no validas o insuficientes:\n- Si el mensaje es una frase incompleta, una solicitud de contacto, no contiene una pregunta legal clara, o no trata sobre Derecho de Familia, usa category \"error\".\n- El message debe ser amable, breve, no tecnico y personalizado al mensaje real del usuario. No uses una plantilla fija ni repitas siempre la misma redaccion.\n- Antes de escribir message, distingue estos casos:\n  a) Mensaje totalmente ajeno a Derecho de Familia o sin relacion legal clara: responde sin ejemplos. Explica cordialmente que esta app orienta solo sobre Derecho de Familia peruano y pide una descripcion general de una situacion familiar y que necesita decidir.\n  b) Mensaje ambiguo, incompleto o de solo contacto/saludo: responde sin ejemplos salvo que el mensaje contenga una pista familiar concreta que permita crear ejemplos utiles.\n  c) Mensaje relacionado con otro tema legal, como civil, penal, laboral o administrativo, pero con posible conexion familiar: no sigas ese otro tema; reconduce a Derecho de Familia y, si das ejemplos, deben estar dentro del contexto familiar sugerido por el usuario.\n- No inventes preguntas de ejemplo cuando el mensaje original no da contexto familiar suficiente. En ese caso pide solo la situacion familiar general y la decision que necesita tomar.\n- Incluye 2 o 3 ejemplos concretos de mejores preguntas solo cuando ayudarian materialmente a reescribir una consulta invalida o insuficiente y puedan ajustarse al contexto familiar real o sugerido. Los ejemplos siempre deben ser sobre Derecho de Familia peruano, nunca sobre el tema externo en si.\n- Recuerda que no debe incluir datos personales sensibles; basta con una descripcion general.\n- No uses palabras como parser, RAG, metadata, modelo, flujo, error tecnico ni clasificacion.\n\nSuficiencia de informacion:\n- Ademas de clasificar, evalua si el mensaje trae los hechos generales que realmente cambian la orientacion legal en esa categoria.\n- information_sufficiency usa uno de estos valores:\n  - \"SUFFICIENT\": hay hechos suficientes para orientar sin suponer nada importante.\n  - \"PARTIAL\": se puede orientar en general, pero uno o dos datos cambiarian el detalle de la respuesta.\n  - \"INSUFFICIENT\": sin esos datos cualquier orientacion seria una suposicion.\n- clarifying_questions: de 1 a 3 preguntas cortas cuando information_sufficiency sea PARTIAL o INSUFFICIENT; usa [] cuando sea SUFFICIENT o cuando category sea \"error\".\n- Cada pregunta pide un solo dato, va en segunda persona y debe poder responderse en una linea.\n- Pregunta solo lo que cambiaria la respuesta. Si con lo dicho ya puedes orientar, no preguntes.\n- No preguntes por datos personales sensibles: nada de nombres, DNI, direcciones, telefonos, montos exactos ni detalles intimos. Pide hechos generales que definan la via legal.\n- No vuelvas a preguntar algo que ya esta en el mensaje actual o en Previous persisted messages.\n- Si el ultimo mensaje del usuario responde preguntas que el asistente ya hizo, usa SUFFICIENT o PARTIAL, nunca INSUFFICIENT.\n- Si el usuario pide seguir sin dar mas datos, usa PARTIAL.\n- Nunca uses INSUFFICIENT cuando el mensaje describa violencia, amenaza, peligro inmediato, retencion o sustraccion de un menor, abandono grave o vulneracion actual de derechos: en esos casos se orienta primero y se pregunta despues.\n\nDatos que suelen decidir la orientacion por categoria. Es una guia para elegir que preguntar, no un cuestionario que se deba completar:\n- Pension de Alimentos: si ya existe sentencia o acuerdo previo, edad del hijo y si la filiacion esta reconocida.\n- Tenencia y Custodia: con quien vive el menor hoy y si hay acuerdo o proceso en curso.\n- Patria Potestad: que decision concreta esta bloqueada, como viaje, salud o colegio, y si hay proceso abierto.\n- Violencia Familiar: si el riesgo es actual y si ya existe denuncia o medida de proteccion.\n- Divorcio y Separacion: si el matrimonio es civil, si hay acuerdo entre las partes y si hay hijos menores o bienes.\n- Filiacion y Paternidad: si el menor esta inscrito y con que apellidos, y si hubo reconocimiento voluntario.\n- Adopcion: vinculo previo con el menor y si el menor esta declarado en estado de abandono.\n- Sucesiones y Herencias: si hay testamento, quienes serian los herederos y si la sucesion ya se abrio.\n- Sociedad de Gananciales: si el bien se adquirio antes o durante el matrimonio y si hay separacion de patrimonios.\n- Union de Hecho: tiempo de convivencia y si esta reconocida notarial o judicialmente.\n- Tutela y Curatela: situacion de la persona que necesita proteccion o apoyo y si ya hay designacion judicial.\n- Procedimientos Administrativos: en que etapa esta el tramite y ante que entidad se sigue.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -352,
+        1856
+      ],
+      "id": "201acfd5-7237-58c1-86f0-1c82366708b8",
+      "name": "Parser Agent",
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "content": "## XAI Agent\nRewrites RAG output into personalized, safe Spanish Markdown with flexible structure, useful next steps, glossary when helpful, and prudent legal caveats.",
+        "height": 656,
+        "width": 928,
+        "color": 7
+      },
+      "id": "649b5580-1b33-5123-b594-e5848bbcdb14",
+      "name": "Sticky Note6",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1664,
+        1616
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat-process-eval-full",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1392,
+        1952
+      ],
+      "id": "50c414d5-2cff-5042-bc46-050d63874571",
+      "name": "Webhook",
+      "webhookId": "d821351f-8823-5e24-9a2c-a5c2039225c2",
+      "alwaysOutputData": false,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "atom1z32FyNBZveS",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "612266b5-c5c0-4091-875e-50cd729cda11",
+              "name": "Search Store",
+              "type": "string",
+              "value": "fileSearchStores/familylaw-k3uggnk7czvu"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "35d3b8ce-7004-5a1a-9e29-0e5b8e92f1be",
+      "name": "Get FileStore Name1",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        704,
+        1744
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"RagAnswer\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"answer\": {\n      \"type\": \"string\"\n    },\n    \"citations\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"file_id\": {\n            \"type\": \"string\"\n          },\n          \"file_name\": {\n            \"type\": \"string\"\n          },\n          \"snippet\": {\n            \"type\": \"string\"\n          },\n          \"file_url\": {\n            \"type\": \"string\"\n          },\n          \"citation_id\": {\n            \"type\": \"string\",\n            \"description\": \"Identificador opaco de la cita. Copialo EXACTAMENTE como viene en el resultado de la busqueda. No lo inventes, no lo modifiques, no lo reutilices para otra cita.\"\n          }\n        },\n        \"additionalProperties\": true\n      }\n    },\n    \"citationSupportStatus\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"GOOD\",\n        \"WEAK\",\n        \"NONE\"\n      ]\n    }\n  },\n  \"required\": [\n    \"answer\",\n    \"citations\",\n    \"citationSupportStatus\"\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1520,
+        2048
+      ],
+      "id": "944f69b4-db89-5f34-867e-f22457e2a9eb",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "87e235c4-c2fa-4141-9527-f5eb57ba2d18",
+              "leftValue": "={{ $json.output.category }}",
+              "rightValue": "error",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -48,
+        1856
+      ],
+      "id": "a8ae32bf-0827-5dc2-83c7-86c2116799ec",
+      "name": "If Relevant"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $json.output || {};\nconst normalizeLabel = (value) => String(value || '')\n  .replace(/\\u00c3\\u00a1|\\u00c3\\u0083\\u00c2\\u00a1/g, 'a')\n  .replace(/\\u00c3\\u00a9|\\u00c3\\u0083\\u00c2\\u00a9/g, 'e')\n  .replace(/\\u00c3\\u00ad|\\u00c3\\u0083\\u00c2\\u00ad/g, 'i')\n  .replace(/\\u00c3\\u00b3|\\u00c3\\u0083\\u00c2\\u00b3/g, 'o')\n  .replace(/\\u00c3\\u00ba|\\u00c3\\u0083\\u00c2\\u00ba/g, 'u')\n  .replace(/\\u00c3\\u00b1|\\u00c3\\u0083\\u00c2\\u00b1/g, 'n')\n  .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')\n  .toLowerCase().replace(/\\s+/g, ' ').trim();\nconst categoryKey = normalizeLabel(output.category);\nconst mappings = {\n  'pension de alimentos': {\n    canonicalCategory: 'Relaciones Paterno-Filiales y Menores',\n    canonicalSubcategories: ['Pension de Alimentos'],\n    metadataHints: ['rpfm:pension_alimentos'],\n    searchTerms: ['pension de alimentos', 'alimentos', 'obligacion alimentaria']\n  },\n  'tenencia y custodia': {\n    canonicalCategory: 'Relaciones Paterno-Filiales y Menores',\n    canonicalSubcategories: ['Tenencia y Custodia'],\n    metadataHints: ['rpfm:tenencia_custodia'],\n    searchTerms: ['tenencia', 'custodia', 'regimen de visitas']\n  },\n  'patria potestad': {\n    canonicalCategory: 'Relaciones Paterno-Filiales y Menores',\n    canonicalSubcategories: ['Patria Potestad'],\n    metadataHints: ['rpfm:patria_potestad'],\n    searchTerms: ['patria potestad', 'derechos y deberes parentales']\n  },\n  'violencia familiar': {\n    canonicalCategory: 'Proteccion a Personas Vulnerables',\n    canonicalSubcategories: ['Violencia Familiar'],\n    metadataHints: ['ppv:violencia_familiar'],\n    searchTerms: ['violencia familiar', 'medidas de proteccion']\n  },\n  'divorcio y separacion': {\n    canonicalCategory: 'Vinculos Conyugales y Patrimoniales',\n    canonicalSubcategories: ['Divorcio y Separacion'],\n    metadataHints: ['vcp:divorcio_separacion'],\n    searchTerms: ['divorcio', 'separacion', 'fin del matrimonio']\n  },\n  'filiacion y paternidad': {\n    canonicalCategory: 'Relaciones Paterno-Filiales y Menores',\n    canonicalSubcategories: ['Filiacion e Identidad'],\n    metadataHints: ['rpfm:filiacion_identidad'],\n    searchTerms: ['filiacion', 'paternidad', 'reconocimiento', 'ADN']\n  },\n  'adopcion': {\n    canonicalCategory: 'Relaciones Paterno-Filiales y Menores',\n    canonicalSubcategories: ['Adopcion'],\n    metadataHints: ['rpfm:adopcion'],\n    searchTerms: ['adopcion', 'proceso de adopcion']\n  },\n  'sucesiones y herencias': {\n    canonicalCategory: 'Sucesiones y Herencia',\n    canonicalSubcategories: [],\n    metadataHints: ['sh'],\n    searchTerms: ['sucesiones', 'herencia', 'herederos', 'testamento']\n  },\n  'sociedad de gananciales': {\n    canonicalCategory: 'Vinculos Conyugales y Patrimoniales',\n    canonicalSubcategories: ['Sociedad de Gananciales'],\n    metadataHints: ['vcp:sociedad_gananciales'],\n    searchTerms: ['sociedad de gananciales', 'bienes del matrimonio']\n  },\n  'union de hecho': {\n    canonicalCategory: 'Vinculos Conyugales y Patrimoniales',\n    canonicalSubcategories: ['Union de Hecho'],\n    metadataHints: ['vcp:union_hecho'],\n    searchTerms: ['union de hecho', 'convivencia']\n  },\n  'tutela y curatela': {\n    canonicalCategory: 'Proteccion a Personas Vulnerables',\n    canonicalSubcategories: ['Tutela y Curatela'],\n    metadataHints: ['ppv:tutela_curatela'],\n    searchTerms: ['tutela', 'curatela', 'apoyos', 'salvaguardias']\n  },\n  'procedimientos administrativos': {\n    canonicalCategory: 'Procesos Legales y Resolucion Alternativa',\n    canonicalSubcategories: ['Conciliacion', 'Procedimiento Civil'],\n    metadataHints: ['plra:conciliacion', 'plra:procedimiento_civil'],\n    searchTerms: ['conciliacion', 'DEMUNA', 'procedimiento civil']\n  },\n  'otros': {\n    canonicalCategory: 'Generales',\n    canonicalSubcategories: ['Derecho de Familia', 'Otros'],\n    metadataHints: ['gen:derecho_familia', 'gen:otros'],\n    searchTerms: ['derecho de familia peruano']\n  }\n};\nconst fallback = mappings.otros;\nreturn [{ json: { ...$json, retrieval: mappings[categoryKey] || fallback } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        1920
+      ],
+      "id": "c4939e2d-f55f-5d21-bd5b-d06129505218",
+      "name": "Map Retrieval Metadata"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1744,
+        2112
+      ],
+      "id": "5676b5b2-5b47-5e26-ba99-a6b58edeed69",
+      "name": "Google Gemini Chat Model XAI",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5RgMaZWPwNmZfsxJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"ExplainableAnswer\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"answer\": {\n      \"type\": \"string\",\n      \"description\": \"Final user-facing Spanish Markdown answer with personalized orientation, preliminary legal alternatives, useful next steps, glossary when helpful, and prudent caveats.\"\n    },\n    \"citations\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"citation_id\": {\n            \"type\": \"string\",\n            \"description\": \"Identificador opaco de la cita. Copialo EXACTAMENTE como viene en el resultado de la busqueda. No lo inventes, no lo modifiques, no lo reutilices para otra cita.\"\n          },\n          \"original_snippet\": {\n            \"type\": \"string\",\n            \"description\": \"Copia textual EXACTA y breve del fragmento recuperado que sustenta la orientacion. No parafrasees, no corrijas, no unas partes separadas. Si el fragmento recuperado abarca varios articulos, copia solo la parte del articulo que realmente usaste: de aqui sale el articulo que se le muestra al usuario.\"\n          },\n          \"summary_snippet\": {\n            \"type\": \"string\",\n            \"description\": \"Resumen breve y seguro en espanol de por que ESE pasaje importa para la orientacion. No copies texto exacto ni expongas datos personales sensibles de jurisprudencia. No fusiones pasajes: cada cita cubre un citation_id.\"\n          }\n        },\n        \"additionalProperties\": true,\n        \"required\": [\n          \"citation_id\",\n          \"original_snippet\",\n          \"summary_snippet\"\n        ]\n      }\n    },\n    \"citationSupportStatus\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"GOOD\",\n        \"WEAK\",\n        \"NONE\"\n      ]\n    },\n    \"confidenceStatus\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"HIGH\",\n        \"MEDIUM\",\n        \"LOW\"\n      ]\n    },\n    \"confidenceReason\": {\n      \"type\": \"string\"\n    },\n    \"specialistSupportRecommended\": {\n      \"type\": \"boolean\"\n    },\n    \"nextSteps\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Concrete next steps only for in-scope legal guidance. Return [] for greetings, out-of-scope messages, or when no useful next step follows from the answer. Do not use nextSteps to generically refer to PNP, CEM or DEMUNA; mention those institutions only when specialistSupportRecommended is true because there is an emergency or current rights violation.\"\n    },\n    \"clarifyingQuestions\": {\n      \"type\": \"array\",\n      \"maxItems\": 3,\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Up to three short follow-up questions asking only for general facts that would sharpen the orientation. Always emitted; [] when the answer needs nothing further. Repeated verbatim at the end of answer under the heading \\\"Para afinar la orientacion\\\".\"\n    }\n  },\n  \"required\": [\n    \"answer\",\n    \"citations\",\n    \"citationSupportStatus\",\n    \"confidenceStatus\",\n    \"nextSteps\",\n    \"specialistSupportRecommended\"\n  ],\n  \"additionalProperties\": false\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        2144,
+        2112
+      ],
+      "id": "81b53d59-b494-51b7-852c-6d396e7d4680",
+      "name": "XAI Output Parser"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        1952
+      ],
+      "id": "32ecf15a-81c9-5122-98d1-f5569766ac36",
+      "name": "XAI Auto-fixing Output Parser"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1936,
+        2112
+      ],
+      "id": "8fce0d4d-d82a-5cf1-9786-c151bebc6d90",
+      "name": "Google Gemini Chat Model XAI Fixer",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5RgMaZWPwNmZfsxJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Pregunta original: \"{{ $('Merge1').item.json.output.original_message }}\"\nHistorial persistido reciente: {{ $('Webhook').item.json.body.previous_messages || [] }}\nCategoria legal: \"{{ $('Merge1').item.json.output.category }}\"\nCategoria canonica: \"{{ $('Merge1').item.json.retrieval.canonicalCategory }}\"\nSubcategorias canonicas: \"{{ $('Merge1').item.json.retrieval.canonicalSubcategories.join(', ') }}\"\nMetadata preferida: \"{{ $('Merge1').item.json.retrieval.metadataHints.join(' ') }}\"\nTerminos de busqueda: \"{{ $('Merge1').item.json.retrieval.searchTerms.join(', ') }}\"\nDatos aun no confirmados: \"{{ (($('Merge1').item.json.clarification || {}).questions || []).join(' | ') }}\"\nRespuesta validada del RAG Agent: {{ JSON.stringify($json.output || $json) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Eres un asistente de explicacion legal para Derecho de Familia peruano. Tu tarea es transformar la respuesta RAG en una orientacion legal clara, amable, personalizada y explicable para usuarios en Peru. Usa el historial persistido reciente enviado en el prompt para recordar solicitudes previas, hechos generales ya mencionados y continuidad del caso. No uses la memoria interna de n8n como fuente de verdad.\n\nContrato de salida obligatorio para el parser:\n- Devuelve exclusivamente el objeto JSON final en la raiz.\n- No incluyas una propiedad \"output\".\n- No copies el formato de entrada de n8n.\n- No uses Markdown, bloque ```json, ni texto antes o despues del JSON.\n- Incluye siempre estas claves exactas en la raiz: answer, citations, citationSupportStatus, confidenceStatus, confidenceReason, specialistSupportRecommended, nextSteps, clarifyingQuestions.\n- Cada elemento de citations debe incluir citation_id, original_snippet y summary_snippet.\n- Si no hay citas, usa citations: [].\n- Si no hay razon especifica, usa confidenceReason: null.\n- No agregues propiedades fuera del schema.\n\nTrato conversacional:\n- Usa Historial persistido reciente para saber si la conversacion ya empezo y si el asistente ya saludo o se presento.\n- Si ya existe al menos un mensaje ASSISTANT previo, no abras answer con \"Hola\", \"Soy un asistente\" ni otra presentacion inicial, salvo que el ultimo mensaje del usuario sea solo un saludo.\n- En seguimientos, empieza con continuidad natural o entra directo al tema: \"Con ese contexto\", \"Entiendo, entonces\", \"Ahora que aclaras...\" o una formulacion equivalente ligada al caso.\n- No repitas la bienvenida ni expliques de nuevo que eres un asistente de Derecho de Familia cuando la sesion ya esta en curso.\n\nFormato de answer:\n- Usa Markdown seguro cuando ayude a leer mejor: titulos, listas, negritas moderadas y parrafos cortos.\n- La estructura no es obligatoria ni debe repetirse mecanicamente. Elige encabezados y orden segun la pregunta del usuario.\n- La respuesta debe sentirse escrita para la situacion concreta del usuario, usando solo hechos generales del mensaje actual y del historial persistido reciente.\n- No pidas datos personales sensibles; pide solo datos generales utiles.\n- Si usas informacion recordada, tratala como contexto probable y no como hecho absoluto cuando haya duda.\n\nContenido esperado cuando sea util:\n- Resume brevemente la situacion del usuario si ayuda a orientar.\n- Explica la orientacion legal en lenguaje simple, con respaldo prudente y sin inventar normas.\n- Si la evidencia recuperada es debil o no hay citas utiles, da una orientacion general prudente sin agregar secciones repetitivas ni pedir datos por defecto.\n- Da pasos preliminares y prudentes, no instrucciones absolutas.\n- No recomiendes apoyo institucional PNP, CEM o DEMUNA para consultas iniciales normales sobre pension de alimentos, tenencia, separacion, union de hecho, bienes o herencia cuando no hay emergencia, violencia, riesgo concreto, abandono grave o vulneracion actual de derechos.\n- Para consultas ordinarias dentro del alcance, responde dentro de answer con pasos generales y prudentes. Puedes orientar sobre reunir documentos, ordenar fechas, intentar conciliacion cuando corresponda o preparar informacion general, sin activar derivacion institucional de emergencia.\n- Incluye un glosario breve solo si usas terminos juridicos que conviene explicar.\n\nReglas de seguridad:\n- Si la entrada RAG tiene error, esta vacia, no tiene answer, o menciona problemas con parts/candidates/content, responde de forma breve y controlada. Si no hay una pregunta familiar clara, no generes pasos ni metadatos de baja evidencia.\n- No menciones detalles tecnicos como RAG, parser, metadata, parts, candidates, modelo, flujo o webhook al usuario.\n- No incluyas una seccion de fuentes, bibliografia, enlaces, documentos usados ni citas dentro de answer. Las fuentes se muestran fuera del mensaje en la interfaz.\n- No escribas en answer avisos sobre citas debiles o ausencia de fuentes; la interfaz los muestra con citationSupportStatus.\n- citations debe devolver una cita por citation_id, no una por file_url. Un mismo documento puede aportar varias citas si los fragmentos recuperados vienen de articulos distintos: no las fusiones.\n- Copia citation_id exactamente como viene. Es un identificador opaco: no lo inventes ni lo alteres.\n- Cada cita lleva dos textos distintos y ninguno reemplaza al otro:\n  - original_snippet: copia TEXTUAL y exacta del pasaje recuperado en el que te apoyaste, de una a tres oraciones. Copialo tal cual viene, sin parafrasear, sin resumir, sin corregir ortografia ni caracteres rotos, sin recortar palabras a la mitad y sin unir partes separadas con puntos suspensivos. Debe ser un tramo continuo del fragmento recuperado.\n  - Un fragmento recuperado puede abarcar varios articulos seguidos. En original_snippet copia solo la parte del articulo que realmente sustenta lo que dijiste: de ese texto se deduce el articulo que se le muestra al usuario, asi que copiar la parte equivocada atribuye la cita al articulo equivocado.\n  - summary_snippet: resumen breve en espanol de por que ese pasaje importa para la orientacion. No copies texto exacto ni incluyas datos personales sensibles que aparezcan en jurisprudencia u otros documentos.\n- Si no puedes copiar un pasaje literal de la cita, no la incluyas.\n- Puedes limpiar summary_snippet para corregir caracteres rotos de espanol como Codigo -> Codigo, pension -> pension, nino -> nino, y comillas/guiones mojibake. original_snippet NO se limpia: va tal como vino, porque se compara contra el documento original para ubicar la cita.\n- No devuelvas file_name, file_url ni file_id: el documento de cada cita se recupera despues a partir del citation_id. Si no hay citas validas, usa [].\n\nCampos estructurados obligatorios:\n- citationSupportStatus: preserva exactamente el valor recibido del RAG Agent: GOOD, WEAK o NONE.\n- confidenceStatus: HIGH solo si citationSupportStatus es GOOD y hay contexto suficiente; MEDIUM si hay orientacion razonable con alguna incertidumbre o citas WEAK; LOW si faltan datos importantes, citationSupportStatus es NONE, o la evidencia es debil.\n- confidenceReason: usa null salvo que exista una razon especifica no repetitiva que deba persistirse para auditoria.\n- nextSteps: 0 a 4 siguientes pasos concretos solo para consultas legales dentro del alcance; usa [] para saludos, mensajes fuera de alcance, falta de pregunta legal clara o cuando los pasos serian boilerplate. Los pasos deben ser utiles y accionables para el usuario: reunir documentos, ordenar fechas, conservar evidencia, preparar preguntas, identificar una via general, intentar conciliacion cuando corresponda, o aclarar un dato indispensable.\n- No uses nextSteps para derivar genericamente a PNP, CEM o DEMUNA. Solo menciona esas instituciones cuando exista una emergencia, violencia, peligro, abandono grave, retencion/sustraccion de un menor o vulneracion actual de derechos; en ese caso specialistSupportRecommended debe ser true.\n- specialistSupportRecommended: true SOLO cuando la respuesta deba incluir una derivacion institucional urgente o prioritaria a PNP, CEM o DEMUNA por emergencia, violencia, peligro, abandono grave, retencion/sustraccion de un menor o vulneracion actual de derechos.\n- Marca specialistSupportRecommended=true si hay agresion, amenaza, violencia familiar, violencia sexual, peligro inmediato, retencion o sustraccion de un menor, maltrato, abandono grave, negligencia grave, riesgo actual para un nino/adolescente, o vulneracion concreta y actual de derechos que justifique acudir a PNP, CEM o DEMUNA.\n- specialistSupportRecommended=false para consultas iniciales normales, aunque involucren menores, pension de alimentos, separacion, convivencia, union de hecho, tenencia, bienes o herencia, si el usuario solo pide orientacion general y no menciona emergencia, violencia, peligro, abandono grave, retencion del menor o vulneracion actual.\n- No actives specialistSupportRecommended por plazos, audiencias, demanda activa, estrategia procesal, complejidad juridica o consecuencias economicas si no hay emergencia o vulneracion actual que derive especificamente a PNP, CEM o DEMUNA; maneja esos casos dentro de answer y nextSteps.\n- Ejemplos de specialistSupportRecommended=false: \"Quiero separarme, convivimos y tenemos un hijo menor. Que pasos sigo para pedir pension?\"; \"Quiero saber como se calcula la pension de alimentos\".\n- Ejemplos de specialistSupportRecommended=true: \"Mi pareja me amenaza si pido pension\"; \"Se llevo a mi hijo y no me deja saber donde esta\"; \"El padre abandono al menor y no tengo como cubrir comida o salud urgente\"; \"Hay golpes o violencia en casa\".\nPreguntas para afinar la orientacion:\n- clarifyingQuestions: de 0 a 3 preguntas cortas, solo cuando un dato general que el usuario todavia no ha dado cambiaria de forma concreta la orientacion. Usa [] cuando la respuesta ya esta completa, cuando el mensaje es un saludo o esta fuera de alcance, o cuando la pregunta seria de relleno.\n- Cada pregunta pide un solo dato general y debe poder responderse en una linea. Nunca pidas datos personales sensibles: ni nombres, DNI, direcciones, telefonos, montos exactos ni detalles intimos.\n- Si el prompt trae \"Datos aun no confirmados\", tratalos como no confirmados: no los des por ciertos en answer, orienta por escenarios cuando el resultado dependa de ellos, y priorizalos en clarifyingQuestions si siguen siendo decisivos.\n- No repitas preguntas que el historial persistido reciente ya respondio.\n- Nunca respondas solo con preguntas. Primero da la mejor orientacion posible con lo que ya sabes; recien al final de answer, y solo si clarifyingQuestions no esta vacio, agrega una seccion con el encabezado exacto \"**Para afinar la orientacion**\" seguida de las mismas preguntas como lista.\n- Una pregunta que esta en clarifyingQuestions no se repite en nextSteps."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1744,
+        1792
+      ],
+      "id": "b171cc40-d3a5-5fc2-a7e0-771e9eb69b75",
+      "name": "XAI Agent",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROCESSING_API_BASE_URL || 'http://processing-api:8000' }}/resolve-locators",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ citations: ((($json.output || $json).citations) || []).map(c => ({ citation_id: c.citation_id || '', original_snippet: c.original_snippet || '' })) }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        1792
+      ],
+      "id": "47eff943-dc64-5c2e-b3af-556b18e98036",
+      "name": "Resolve Locators",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "﻿// El locator autoritativo viene de la API, nunca del modelo. El documento tampoco:\n// file_name y file_url viajan por el registro junto al locator, para que la cita llegue\n// completa aunque el agente no los copie.\n//\n// Las citas atravesaron dos agentes LLM. Si alguno altero un citation_id, aca no se\n// encuentra y la cita sale sin ubicacion. Es el modo de fallo buscado: una cita sin\n// ubicacion es aceptable, una con la ubicacion equivocada no lo es.\n//\n// original_snippet es lo unico que el modelo aporta a la ubicacion, y solo como puntero:\n// la API lo verifica contra el fragmento que realmente recupero antes de reanclar la cita.\n\n// El corpus es markdown convertido desde PDF, asi que el pasaje literal llega con titulos\n// (#), negritas (**), cursivas (_), reglas (-----), filas de tabla (|), comentarios\n// (<!-- image -->) y entidades HTML. Eso sirve para anclar la cita, no para leerla. Se\n// limpia aca, despues de /resolve-locators, porque la API compara el texto tal como vino\n// contra el fragmento recuperado: limpiarlo antes romperia el anclaje.\n//\n// El agente devuelve el pasaje aplanado en una sola linea y con las comillas escapadas\n// (\\\"), asi que ningun marcador se puede buscar solo a principio de linea: un titulo o una\n// regla horizontal aparecen a media frase. Cada marcador se trata en las dos posiciones.\nconst HTML_ENTITIES = {\n  '&lt;': '<',\n  '&gt;': '>',\n  '&amp;': '&',\n  '&quot;': '\"',\n  '&apos;': \"'\",\n  '&#39;': \"'\",\n  '&nbsp;': ' ',\n};\n\n// Las tablas del corpus repiten la misma celda en todas las columnas. Se colapsa la celda\n// consecutiva repetida para no leer cinco veces el mismo titulo.\nfunction flattenTableRow(line) {\n  const cells = line.split('|').map((cell) => cell.trim()).filter(Boolean);\n  return cells.filter((cell, index) => cell !== cells[index - 1]).join(' ');\n}\n\n// La marca de fe de erratas \"(*)\" es texto de la norma, no enfasis. Se aparta antes de\n// tocar los asteriscos y vuelve al final.\nconst ERRATA_MARK = '\\u0000errata\\u0000';\n\nfunction toPlainText(value) {\n  if (typeof value !== 'string') return '';\n\n  const unescaped = value\n    // El pasaje viaja escapado: \\n y \\\" son dos caracteres, no un salto ni una comilla.\n    .replace(/\\\\[nrt]/g, ' ')\n    .replace(/\\\\([\"'\\\\])/g, '$1')\n    .replace(/\\\\([^\\w\\s])/g, '$1')\n    .replace(/<!--[\\s\\S]*?-->/g, ' ')\n    .replace(/&(?:lt|gt|amp|quot|apos|nbsp|#39);/g, (entity) => HTML_ENTITIES[entity] || ' ')\n    .replace(/<\\/?[a-zA-Z][^>]*>/g, ' ')\n    .split(/\\(\\s*\\*\\s*\\)/).join(ERRATA_MARK);\n\n  const lines = unescaped\n    .split(/\\r?\\n/)\n    .map((line) => {\n      // Separador de tabla y regla horizontal: no aportan texto.\n      if (/^\\s*\\|?\\s*:?-{2,}/.test(line)) return '';\n      if (/^\\s*([-*_])\\s*(\\1\\s*){2,}$/.test(line)) return '';\n\n      let text = line.includes('|') ? flattenTableRow(line) : line;\n      text = text.replace(/^\\s{0,3}#{1,6}\\s*/, '');\n      text = text.replace(/^\\s*>+\\s?/, '');\n      // Solo se quita la vinieta. La numeracion se conserva: en una norma \"2.\" es el inciso.\n      text = text.replace(/^\\s*[-*+]\\s+/, '');\n      return text;\n    })\n    .filter((line) => line.trim());\n\n  return lines\n    .join(' ')\n    .replace(/!\\[([^\\]]*)\\]\\([^)]*\\)/g, '$1')\n    .replace(/\\[([^\\]]+)\\]\\([^)]*\\)/g, '$1')\n    // Regla horizontal y titulo a media frase: quedan asi cuando el pasaje llega aplanado.\n    .replace(/(^|\\s)[-–—*_]{3,}(?=\\s|$)/g, '$1')\n    .replace(/(^|[\\s\"”'’)\\].,;:!?])#{1,6}\\s+/g, '$1')\n    .replace(/\\s*\\|\\s*/g, ' ')\n    .replace(/\\*\\*([\\s\\S]+?)\\*\\*/g, '$1')\n    .replace(/__([\\s\\S]+?)__/g, '$1')\n    .replace(/\\*([\\s\\S]+?)\\*/g, '$1')\n    .replace(/_([\\s\\S]+?)_/g, '$1')\n    // El OCR deja pares de enfasis sin cerrar, sobre todo cuando el pasaje corta a mitad de\n    // una cursiva. Los sueltos se quitan: el guion bajo solo sobrevive dentro de una palabra.\n    .replace(/\\*+/g, '')\n    .replace(/(^|[^0-9a-zA-ZáéíóúüñÁÉÍÓÚÜÑ])_+|_+(?![0-9a-zA-ZáéíóúüñÁÉÍÓÚÜÑ])/g, '$1')\n    .replace(/`+/g, '')\n    .split(ERRATA_MARK).join('(*)')\n    // El PDF deja el texto con espacios repartidos dentro de las palabras y cortes de linea\n    // a mitad de frase: ambos colapsan a un espacio simple.\n    .replace(/\\s+/g, ' ')\n    .replace(/\\s+([,.;:!?%)\\]])/g, '$1')\n    .replace(/([(\\[])\\s+/g, '$1')\n    .trim();\n}\n\nconst xai = $('XAI Agent').first().json;\nconst payload = xai.output || xai;\nconst citations = Array.isArray(payload.citations) ? payload.citations : [];\n\nlet authoritative = new Map();\ntry {\n  const resolved = $json.citations || [];\n  for (const entry of resolved) {\n    if (entry && entry.citation_id) authoritative.set(entry.citation_id, entry);\n  }\n} catch (error) {\n  // Si /resolve-locators fallo, ninguna cita lleva ubicacion. El chat sigue.\n  authoritative = new Map();\n}\n\n// La cita se rearma campo por campo en vez de extender la del modelo: asi no viaja al\n// backend nada que el agente haya agregado por su cuenta.\nconst enriched = citations.map((citation) => {\n  const match = authoritative.get(citation.citation_id) || {};\n  return {\n    citation_id: citation.citation_id || '',\n    // El resumen que lee el usuario: el unico texto de la cita que redacta el agente.\n    summary_snippet: toPlainText(citation.summary_snippet),\n    // El pasaje literal ya cumplio su papel de puntero; al usuario le llega legible.\n    original_snippet: toPlainText(citation.original_snippet),\n    file_name: match.file_name || '',\n    file_url: match.file_url || '',\n    locator: match.locator || '',\n    breadcrumb: match.breadcrumb || '',\n    locator_source: match.locator_source || '',\n    // excerpt = ubicado por el pasaje citado; excerpt_multi = el pasaje cruza articulos y\n    // se citan todos; chunk = ubicado por el fragmento completo; ambiguous = abarcaba\n    // varios articulos y no se pudo verificar cual.\n    locator_scope: match.locator_scope || '',\n  };\n});\n\n// Dos citation_id distintos pueden terminar en el mismo pasaje del mismo articulo: el\n// agente cito dos veces lo mismo y le puso otro resumen a cada copia. En pantalla eso sale\n// como el articulo repetido. Se conserva la primera cita, con la version mas completa del\n// pasaje; el segundo resumen se descarta porque dice lo mismo con otras palabras.\nfunction passageKeyText(value) {\n  return String(value || '').toLowerCase().replace(/[^0-9a-záéíóúüñ]+/g, '');\n}\n\nfunction sameDocument(a, b) {\n  return (a.file_url || a.file_name) === (b.file_url || b.file_name);\n}\n\n// El recorte del pasaje lo elige el modelo, asi que dos copias del mismo tramo pueden\n// diferir en donde empiezan o terminan: se comparan por contencion, no por igualdad.\nfunction samePassage(a, b) {\n  if (!sameDocument(a, b) || a.locator !== b.locator) return false;\n\n  const left = passageKeyText(a.original_snippet);\n  const right = passageKeyText(b.original_snippet);\n  if (!left || !right) return left === right;\n  return left.includes(right) || right.includes(left);\n}\n\nconst deduped = [];\nfor (const citation of enriched) {\n  const twin = deduped.find((existing) => samePassage(existing, citation));\n  if (!twin) {\n    deduped.push(citation);\n    continue;\n  }\n  if (citation.original_snippet.length > twin.original_snippet.length) {\n    twin.original_snippet = citation.original_snippet;\n  }\n}\n\nreturn [{ json: { ...payload, citations: deduped } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        1792
+      ],
+      "id": "d1ef7b37-def7-5449-8280-128cbdce42ad",
+      "name": "Attach Locators"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aca se decide si la conversacion necesita una vuelta de preguntas antes de buscar en el\n// corpus. Es una decision de flujo, no de redaccion: el Parser Agent dice que le falta,\n// pero quien corta el paso a la busqueda es este nodo, con reglas verificables.\n//\n// El texto que lee el usuario se arma aca y no en el agente. El modelo solo aporta las\n// preguntas; el encabezado, el orden y la salida honrosa (\"puedo orientarte igual\") son\n// fijos. Asi el mensaje de preguntas siempre se reconoce despues por su encabezado, que es\n// justamente lo que impide preguntar dos veces seguidas.\nconst CLARIFICATION_HEADING = 'Para orientarte mejor';\n// El XAI Agent tambien puede cerrar su respuesta con preguntas, bajo su propio encabezado.\n// Cuentan igual: si el ultimo turno del asistente ya pregunto, este no vuelve a preguntar.\nconst XAI_FOLLOW_UP_HEADING = 'Para afinar la orientacion';\nconst MAX_QUESTIONS = 3;\n\nconst output = $json.output || {};\n// El nodo Agent no propaga el item de entrada, asi que el historial se lee del Webhook.\nconst body = $('Webhook').first().json.body || {};\nconst previousMessages = Array.isArray(body.previous_messages) ? body.previous_messages : [];\n\nconst questions = (Array.isArray(output.clarifying_questions) ? output.clarifying_questions : [])\n  .map((question) => String(question || '').trim())\n  .filter(Boolean)\n  .slice(0, MAX_QUESTIONS);\n\nconst ALLOWED_SUFFICIENCY = ['SUFFICIENT', 'PARTIAL', 'INSUFFICIENT'];\nconst declared = String(output.information_sufficiency || '').trim().toUpperCase();\n// Sin senal utilizable el flujo queda como estaba: se busca y se responde.\nconst sufficiency = ALLOWED_SUFFICIENCY.includes(declared) ? declared : 'SUFFICIENT';\n\n// Solo importa el ultimo turno del asistente. Si ese turno ya fue una tanda de preguntas,\n// el mensaje actual es la respuesta del usuario y toca orientar, aunque siga faltando algo:\n// preguntar de nuevo sobre la respuesta recien dada es el bucle que hay que evitar. Turnos\n// mas antiguos no bloquean, porque un tema nuevo mas adelante puede merecer sus preguntas.\nconst lastAssistantMessage = [...previousMessages]\n  .reverse()\n  .find((message) => String(message.role || '').trim().toUpperCase() === 'ASSISTANT');\nconst lastAssistantContent = String((lastAssistantMessage || {}).content || '');\nconst askedInPreviousTurn = lastAssistantContent.includes(CLARIFICATION_HEADING)\n  || lastAssistantContent.includes(XAI_FOLLOW_UP_HEADING);\n\nconst shouldAsk = sufficiency === 'INSUFFICIENT' && questions.length > 0 && !askedInPreviousTurn;\n\n// Cuando se pregunta, el turno se agota aca: no hay busqueda ni cita que mostrar, y por eso\n// cuesta un token en vez de tres. La salida tiene que dejar seguir al usuario que no sabe o\n// no quiere responder, o las preguntas se vuelven un requisito para ser atendido.\nconst message = [\n  `**${CLARIFICATION_HEADING}**`,\n  '',\n  'Puedo ayudarte con esto, pero un par de datos generales cambian bastante la orientacion:',\n  '',\n  ...questions.map((question) => `- ${question}`),\n  '',\n  'Responde solo lo que sepas y sin datos personales sensibles. Si prefieres, dime \"sigue igual\" y te doy una orientacion general con lo que ya me contaste.',\n].join('\\n');\n\nreturn [{\n  json: {\n    ...$json,\n    clarification: {\n      status: sufficiency,\n      questions,\n      shouldAsk,\n      askedInPreviousTurn,\n      // Las preguntas que no cortan el flujo siguen viajando: el RAG y el XAI las usan para\n      // no dar por cierto lo que el usuario nunca dijo.\n      message: shouldAsk ? message : '',\n    },\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        1840
+      ],
+      "id": "724d73c9-29b3-5874-8276-7db325658b15",
+      "name": "Clarification Gate"
+    },
+    {
+      "parameters": {
+        "content": "## Clarify Case",
+        "height": 592,
+        "width": 688,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        208,
+        1680
+      ],
+      "id": "b09a2095-8768-5411-838f-c529d55ed630",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "jsCode": "// El idioma decide unicamente en que lengua se lee la orientacion. El razonamiento\n// juridico, el corpus y las citas siguen siendo en espanol de punta a punta.\nconst SUPPORTED = ['es', 'qu', 'ay'];\nconst body = $json.body || {};\nconst requested = String(body.language || '').trim().toLowerCase();\n// Un idioma ausente o desconocido cae a espanol en lugar de fallar: el backend ya valida\n// la lista blanca, y aca un valor raro no debe costarle el turno al usuario.\nconst language = SUPPORTED.includes(requested) ? requested : 'es';\nreturn [{ json: { ...$json, body: { ...body, language } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1232,
+        1952
+      ],
+      "id": "aed19aa9-535a-511c-b4eb-b13089f0f7dd",
+      "name": "Resolve Language"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1040,
+        2128
+      ],
+      "id": "13df8064-f4ab-5c75-a79a-abe9981e0712",
+      "name": "Google Gemini Chat Model Translate In",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5RgMaZWPwNmZfsxJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Idioma en el que esta puesta la aplicacion (NO es la lengua del texto, es solo el desempate para casos ambiguos): {{ ({ es: 'espanol', qu: 'quechua sureno (Chanka-Collao)', ay: 'aymara' })[$json.body.language] || 'espanol' }}\n\nTexto escrito por el usuario:\n<<<\n{{ $json.body.message }}\n>>>",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Eres un traductor. No eres un asistente legal y no debes responder la consulta.\n\nRecibes un texto escrito por una persona en espanol, en quechua sureno (Chanka-Collao) o\nen aymara. Haces dos cosas: declarar en que lengua esta escrito y traducirlo al espanol.\n\nDeteccion (`detectedLanguage`):\n- Primero identifica la lengua leyendo el texto. El idioma que se te indica arriba es solo\n  el que la aplicacion tiene puesto, y por defecto es el espanol: la mayoria de las personas\n  que escriben en quechua o en aymara lo haran con la app todavia en espanol. No lo asumas\n  correcto y no dejes que sesgue tu lectura.\n- Devuelve 'es', 'qu' o 'ay'. Nada mas.\n- El quechua y el aymara comparten prestamos del castellano y algunos sufijos parecidos:\n  decide por la morfologia y el vocabulario propios, no por una palabra suelta.\n- Es normal que un texto en quechua o aymara incluya palabras en espanol, sobre todo las\n  juridicas ('pension de alimentos', 'DEMUNA'). Un puñado de prestamos no lo vuelve espanol:\n  mira la lengua de la gramatica que sostiene la frase.\n- Solo si el texto es demasiado corto o ambiguo para decidir, usa el idioma indicado arriba.\n\nTraduccion (`translation`):\n- Devuelve solo la traduccion: sin comillas, sin preambulo, sin explicaciones.\n- No respondas la pregunta, no des orientacion legal y no agregues nada que el texto no diga.\n- No desambigues por tu cuenta: si el original es ambiguo, la traduccion tambien lo es.\n- Conserva nombres propios, cifras, fechas y montos exactamente como aparecen.\n- Manten el registro coloquial del original; no lo vuelvas juridico.\n- Si el texto ya viene en espanol, devuelvelo sin cambios."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -992,
+        1936
+      ],
+      "id": "a0292181-511b-544d-89bd-833902c834f5",
+      "name": "Translate Inbound",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"InboundDetection\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"detectedLanguage\": {\n      \"type\": \"string\",\n      \"enum\": [\"es\", \"qu\", \"ay\"],\n      \"description\": \"Lengua en la que esta escrito el texto del usuario, leida del texto mismo y no de la preferencia de interfaz.\"\n    },\n    \"translation\": {\n      \"type\": \"string\",\n      \"description\": \"El texto traducido al espanol. Si ya venia en espanol, el mismo texto sin cambios.\"\n    }\n  },\n  \"required\": [\n    \"detectedLanguage\",\n    \"translation\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -816,
+        2128
+      ],
+      "id": "2c6f6139-79f3-59fd-b0fa-710e0e79b854",
+      "name": "Inbound Detect Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Punto en el que la entrada queda normalizada al espanol, venga en la lengua que venga, y\n// en el que se decide el idioma EFECTIVO del turno. A partir de aca todo el pipeline\n// (Parser, RAG, XAI) trabaja como siempre lo hizo, sin enterarse de que existen otros\n// idiomas.\n//\n// El idioma que manda el frontend es la preferencia de interfaz, no una lectura del texto.\n// Por eso TODOS los turnos pasan por Translate Inbound, que ademas de traducir declara en\n// `detectedLanguage` la lengua que realmente leyo, y es esa lectura la que gobierna el turno.\n//\n// El caso que obliga a no saltarse ninguno es el mas importante del producto: la app arranca\n// en espanol, y un hablante de quechua o aymara que no encuentra el selector de idioma\n// escribe igual en su lengua. Si la deteccion solo corriera cuando ya se pidio quechua o\n// aymara, esa persona -la razon de ser de la funcion- no la veria nunca.\n//\n// El declarado se conserva en `language_requested` para que el frontend pueda explicar el\n// cambio y ofrecer cambiar la app; cuando coinciden, no hay nada que explicar.\nconst SUPPORTED = ['es', 'qu', 'ay'];\nconst base = $('Resolve Language').first().json;\nconst body = base.body || {};\nconst requested = body.language || 'es';\nconst parsed = $json.output || {};\n// Un detector confundido, o un fallo del nodo (que pasa de largo por onError), no debe\n// costarle el turno a nadie: sin lectura utilizable se respeta lo que pidio la interfaz.\nconst detected = SUPPORTED.includes(parsed.detectedLanguage) ? parsed.detectedLanguage : null;\nconst language = detected || requested;\n// Si el texto ya estaba en espanol no hay nada que traducir, aunque la interfaz pidiera otra\n// lengua: el original ES el espanol canonico.\nconst translated = language === 'es'\n  ? ''\n  : String(parsed.translation ?? $json.text ?? '').trim();\n// Si la traduccion fallo o vino vacia, se sigue con el texto original. La orientacion\n// saldra peor, pero el usuario no pierde el turno ni sus tokens por un fallo del traductor.\nconst message = translated || body.message;\nreturn [{\n  json: {\n    ...base,\n    body: {\n      ...body,\n      message,\n      // Lo que el usuario escribio de verdad. Se conserva para poder mostrarlo tal cual.\n      message_original: body.message,\n      language,\n      language_requested: requested,\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        1856
+      ],
+      "id": "194d03bb-5aa9-54f8-b358-5ac09033a2ba",
+      "name": "Normalized Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Las tres ramas terminales arman el mismo objeto `payload`, con el contrato exacto que\n// espera el backend. Antes cada una lo construia por su cuenta dentro del nodo de\n// respuesta, con formas ligeramente distintas; ahora convergen para poder traducirse en un\n// solo lugar.\nconst output = $json.output || {};\n// El idioma efectivo lo fija Normalized Input leyendo el texto, no la preferencia de\n// interfaz que llego en el request: se responde en la lengua en que se escribio.\nconst normalized = $('Normalized Input').first().json.body || {};\nconst language = normalized.language || 'es';\nconst languageRequested = normalized.language_requested || language;\nreturn [{\n  json: {\n    language,\n    languageRequested,\n    payload: {\n      message: output.message || 'Puedo orientar sobre Derecho de Familia en Peru. Cuentame de forma general tu situacion familiar y que necesitas decidir, sin incluir datos personales.',\n      citations: [],\n      confidenceStatus: null,\n      confidenceReason: null,\n      nextSteps: [],\n      specialistSupportRecommended: false,\n      citationSupportStatus: null,\n      clarifyingQuestions: [],\n      agentTokenCost: 1,\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        2432
+      ],
+      "id": "039000db-9752-5c75-9ab5-cf8d4e39d03b",
+      "name": "Build Response Without RAG"
+    },
+    {
+      "parameters": {
+        "jsCode": "const clarification = $json.clarification || {};\n// El idioma efectivo lo fija Normalized Input leyendo el texto, no la preferencia de\n// interfaz que llego en el request: se responde en la lengua en que se escribio.\nconst normalized = $('Normalized Input').first().json.body || {};\nconst language = normalized.language || 'es';\nconst languageRequested = normalized.language_requested || language;\nreturn [{\n  json: {\n    language,\n    languageRequested,\n    payload: {\n      message: clarification.message,\n      citations: [],\n      confidenceStatus: null,\n      confidenceReason: null,\n      nextSteps: [],\n      specialistSupportRecommended: false,\n      citationSupportStatus: null,\n      clarifyingQuestions: clarification.questions || [],\n      // Preguntar cuesta un token; recuperar y redactar cuesta tres.\n      agentTokenCost: 1,\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        2288
+      ],
+      "id": "4fbf7fff-a2a0-502a-8edf-bc2116f9d01a",
+      "name": "Build Response Clarification"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $json.output || {};\nconst citations = output.citations || $json.citations || [];\n// El idioma efectivo lo fija Normalized Input leyendo el texto, no la preferencia de\n// interfaz que llego en el request: se responde en la lengua en que se escribio.\nconst normalized = $('Normalized Input').first().json.body || {};\nconst language = normalized.language || 'es';\nconst languageRequested = normalized.language_requested || language;\n// El estado de respaldo documental lo declara el RAG Agent, que es quien vio lo que la\n// busqueda devolvio; el XAI solo lo repite.\nconst ragCitationSupport = $('RAG Agent').first().json.output?.citationSupportStatus;\nreturn [{\n  json: {\n    language,\n    languageRequested,\n    payload: {\n      message: output.answer || $json.answer || 'Con lo que cuentas hasta ahora, puedo darte una orientacion general de Derecho de Familia. Describe de forma general la situacion familiar y que necesitas decidir, sin incluir datos personales sensibles.',\n      citations,\n      confidenceStatus: output.confidenceStatus || $json.confidenceStatus || (citations.length ? 'MEDIUM' : 'LOW'),\n      confidenceReason: output.confidenceReason ?? $json.confidenceReason ?? null,\n      nextSteps: output.nextSteps || $json.nextSteps || [],\n      specialistSupportRecommended: Boolean(output.specialistSupportRecommended ?? $json.specialistSupportRecommended),\n      citationSupportStatus: ragCitationSupport || output.citationSupportStatus || $json.citationSupportStatus || (citations.length ? 'GOOD' : 'NONE'),\n      clarifyingQuestions: output.clarifyingQuestions || $json.clarifyingQuestions || [],\n      agentTokenCost: 3,\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        1792
+      ],
+      "id": "a73e42db-33c8-58b2-9758-5d55ee5df425",
+      "name": "Build Response XAI"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8d0a5e26-4c73-4b19-9f52-06e3b81d7a4c",
+              "leftValue": "={{ $json.language }}",
+              "rightValue": "es",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2720,
+        2464
+      ],
+      "id": "5243144a-5b3a-5a92-ba4f-51940c1814d5",
+      "name": "If Needs Localization"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        3008,
+        2368
+      ],
+      "id": "227ae154-f802-5da2-86ab-3ffeff5b7876",
+      "name": "Google Gemini Chat Model Translate Out",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5RgMaZWPwNmZfsxJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"LocalizedResponse\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"message\": {\n      \"type\": \"string\",\n      \"description\": \"La respuesta completa traducida, conservando el Markdown original.\"\n    },\n    \"nextSteps\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Los siguientes pasos traducidos, en el mismo orden y cantidad.\"\n    },\n    \"clarifyingQuestions\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Las preguntas aclaratorias traducidas, en el mismo orden y cantidad.\"\n    },\n    \"citationSummaries\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\": \"Los resumenes de cita traducidos, en el mismo orden y cantidad que se recibieron.\"\n    }\n  },\n  \"required\": [\n    \"message\"\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        3152,
+        2368
+      ],
+      "id": "5a7e5a3a-53b3-5175-9a62-2b87a421df96",
+      "name": "Localize Output Parser"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Idioma destino: {{ ({ qu: 'quechua sureno (Chanka-Collao)', ay: 'aymara' })[$json.language] || $json.language }}\n\nRespuesta en espanol (Markdown), a traducir integra:\n<<<\n{{ $json.payload.message }}\n>>>\n\nSiguientes pasos a traducir (devuelve la misma cantidad, en el mismo orden):\n{{ JSON.stringify($json.payload.nextSteps) }}\n\nPreguntas aclaratorias a traducir (misma cantidad, mismo orden):\n{{ JSON.stringify($json.payload.clarifyingQuestions) }}\n\nResumenes de cita a traducir (misma cantidad, mismo orden):\n{{ JSON.stringify(($json.payload.citations || []).map(citation => citation.summary_snippet || '')) }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Eres un traductor especializado en material juridico peruano de Derecho de Familia.\nNo eres el autor del contenido: traduces, no reescribes.\n\nTraduces del espanol al idioma destino que se te indica.\n\nContenido:\n- No agregues, omitas ni suavices nada. No respondas por tu cuenta ni completes lo que falte.\n- No inventes articulos, normas, plazos, cifras ni instituciones.\n\nTerminologia juridica (la regla mas importante):\n- Los terminos con efecto legal se MANTIENEN EN ESPANOL: \"pension de alimentos\",\n  \"patria potestad\", \"tenencia\", \"regimen de visitas\", \"filiacion\", \"union de hecho\",\n  \"sociedad de gananciales\", \"tutela\", \"curatela\", \"medidas de proteccion\", \"conciliacion\",\n  \"divorcio\", \"separacion de hecho\", \"sucesion\", \"herencia\"; las siglas REDAM, DEMUNA, CEM,\n  PNP, MIMP; los nombres de instituciones y normas (Poder Judicial, Ministerio Publico,\n  Codigo Civil, Codigo de los Ninos y Adolescentes) y todo numero de articulo o de ley.\n- La primera vez que aparezca uno de esos terminos, dejalo en espanol y agrega entre\n  parentesis una explicacion breve en el idioma destino. Despues usalo solo en espanol.\n- Inventar un equivalente juridico en quechua o aymara es peor que no traducir. No lo hagas.\n\nFormato:\n- Conserva exactamente la estructura Markdown: encabezados, negritas, vinetas y el orden.\n- Traduce cada elemento de lista por separado y devuelve la misma cantidad de elementos,\n  en el mismo orden que recibiste.\n- No traduzcas URLs.\n\nRegistro: trato respetuoso y directo, lenguaje sencillo, dirigido a una persona que busca\norientacion y no a un abogado."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        3008,
+        2192
+      ],
+      "id": "a7fccb7a-3e88-5edd-b8b0-1da1704c6768",
+      "name": "Localize Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// La traduccion viaja JUNTO al espanol, nunca en su lugar. El backend guarda el espanol\n// como version canonica y el frontend ofrece verlo, asi que perder el original seria\n// perder la unica version verificable contra las normas citadas.\n//\n// El aviso de traduccion automatica no se agrega aca a proposito: lo muestra el frontend\n// junto al conmutador 'Ver en espanol'. Incrustarlo en el texto lo dejaria congelado en la\n// base de datos y duplicado en pantalla.\nconst base = $('If Needs Localization').first().json;\nconst payload = base.payload || {};\nconst translation = $json.output || {};\nconst asArray = (value) => (Array.isArray(value) ? value.map((item) => String(item || '')) : []);\n\n// Sin traduccion utilizable se entrega el espanol tal cual. Es peor experiencia, pero es\n// contenido correcto; devolver el turno vacio o cobrarlo dos veces seria peor.\nconst messageLocalized = String(translation.message || '').trim() || null;\n\nconst citations = (payload.citations || []).map((citation, index) => ({\n  ...citation,\n  // Solo se traduce el resumen. `original_snippet` es el texto literal de la norma y se\n  // queda en espanol: es lo unico que permite contrastar la cita contra la fuente.\n  summary_snippet_localized: asArray(translation.citationSummaries)[index] || null,\n}));\n\nreturn [{\n  json: {\n    ...payload,\n    // El idioma en que se responde de verdad, y el que habia pedido la interfaz. Cuando\n    // difieren, el backend los persiste y el frontend explica el cambio.\n    language: base.language || 'es',\n    language_requested: base.languageRequested || base.language || 'es',\n    citations,\n    message_localized: messageLocalized,\n    nextSteps_localized: asArray(translation.nextSteps),\n    clarifyingQuestions_localized: asArray(translation.clarifyingQuestions),\n    // El espanol del mensaje del usuario ya lo produjo Translate Inbound. El backend lo\n    // necesita para dejar el historial en un solo idioma.\n    user_message_es: $('Normalized Input').first().json.body.message,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        2272
+      ],
+      "id": "7b4ed701-d82b-5480-ac01-a617e82ac689",
+      "name": "Apply Localization"
+    },
+    {
+      "parameters": {
+        "jsCode": "// La rama espanola no traduce nada, pero tiene que entregar el mismo contrato que la otra.\n// Por aca pasan dos casos: la conversacion que ya era en espanol, y la que pedia quechua o\n// aymara pero se escribio en espanol. En el segundo `language_requested` difiere, y es lo\n// unico que permite avisarle al usuario de que se le respondio en otra lengua.\nreturn [{\n  json: {\n    ...($json.payload || {}),\n    language: $json.language || 'es',\n    language_requested: $json.languageRequested || $json.language || 'es',\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3392,
+        2496
+      ],
+      "id": "8eb61812-90d8-56b5-bec5-dd7a7cecccc7",
+      "name": "Unwrap Spanish Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3616,
+        2368
+      ],
+      "id": "34211fc6-7489-5eb7-b722-912bcaf60bc9",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "content": "## Parse User Message",
+        "height": 592,
+        "width": 672,
+        "color": 7
+      },
+      "id": "4a181a33-a287-5882-9837-d5752b95f294",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -480,
+        1680
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## Normalize Agent Response",
+        "height": 640,
+        "width": 1104,
+        "color": 7
+      },
+      "id": "1466590e-e339-5255-a149-ed2d4f4d6812",
+      "name": "Sticky Note8",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2656,
+        2064
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b1d4e77a-5f2c-4c08-9a63-2d8f0b41c5e7",
+              "leftValue": "={{ $json.clarification.shouldAsk }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        432,
+        1840
+      ],
+      "id": "2476c17b-4e6e-58ed-a779-9a0a76a67dd7",
+      "name": "If Its Clear"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Prepare RAG Agent Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Parser Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Parser Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Agent": {
+      "main": [
+        [
+          {
+            "node": "If Relevant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Resolve Language",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get FileStore Name1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Retrieval Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If Relevant": {
+      "main": [
+        [
+          {
+            "node": "Clarification Gate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Response Without RAG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "XAI Agent": {
+      "main": [
+        [
+          {
+            "node": "Resolve Locators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model XAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "XAI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "XAI Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "XAI Auto-fixing Output Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "XAI Auto-fixing Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "XAI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model XAI Fixer": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "XAI Auto-fixing Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RAG Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SearchStore": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "RAG Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare RAG Agent Input": {
+      "main": [
+        [
+          {
+            "node": "RAG Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Agent": {
+      "main": [
+        [
+          {
+            "node": "XAI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Locators": {
+      "main": [
+        [
+          {
+            "node": "Attach Locators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Locators": {
+      "main": [
+        [
+          {
+            "node": "Build Response XAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clarification Gate": {
+      "main": [
+        [
+          {
+            "node": "If Its Clear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Language": {
+      "main": [
+        [
+          {
+            "node": "Translate Inbound",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate Inbound": {
+      "main": [
+        [
+          {
+            "node": "Normalized Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalized Input": {
+      "main": [
+        [
+          {
+            "node": "Parser Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model Translate In": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Translate Inbound",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inbound Detect Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Translate Inbound",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response Without RAG": {
+      "main": [
+        [
+          {
+            "node": "If Needs Localization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response Clarification": {
+      "main": [
+        [
+          {
+            "node": "If Needs Localization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response XAI": {
+      "main": [
+        [
+          {
+            "node": "If Needs Localization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Needs Localization": {
+      "main": [
+        [
+          {
+            "node": "Localize Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unwrap Spanish Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Localize Response": {
+      "main": [
+        [
+          {
+            "node": "Apply Localization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Localization": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unwrap Spanish Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model Translate Out": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Localize Response",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Localize Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Localize Response",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Its Clear": {
+      "main": [
+        [
+          {
+            "node": "Get FileStore Name1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Map Retrieval Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Response Clarification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e9882778-0c87-57a0-bdfd-af7fb5768f1c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9fce58893f89ad8f33bc95b60bc48529c7919f940f2c626daea4bcdb1ccbb936"
+  },
+  "nodeGroups": [],
+  "id": "e73c1728-5de1-5cb1-8893-9ae6be8a60cf",
+  "tags": []
+}

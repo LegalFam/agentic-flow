@@ -67,10 +67,15 @@ def format_row(name: str, counts: Counter, headings: int | None = None) -> str:
     return " ".join(parts)
 
 
-# Una linea que "parece" encabezado de articulo, sin importar el enfasis que traiga.
+# Una linea que "parece" encabezado de articulo, sin importar la decoracion que traiga.
 # La cobertura por si sola no detecta un encabezado perdido: el fragmento igual resuelve,
 # solo que al articulo anterior. Este chequeo es el que ve ese error.
-ARTICLE_LIKE = re.compile(r"^[\s*_#>]{0,10}art[ií]culo\s+\d", re.IGNORECASE)
+#
+# El juego de caracteres tiene que ser mas ancho que el de `locator._ARTICULO_RE`, o el
+# chequeo se vuelve ciego justo a los encabezados que el resolver todavia no toma: las
+# comillas y la vineta de lista quedaban fuera de ambos y por eso 631 encabezados reales
+# nunca aparecieron en esta lista.
+ARTICLE_LIKE = re.compile(r"^[\s*_#>\-–—•\"'“”‘’]{0,12}art[ií]culo\s+\d", re.IGNORECASE)
 
 
 def undetected_article_headings(path: Path) -> list[str]:

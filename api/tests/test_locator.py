@@ -262,5 +262,59 @@ def test_prose_reference_to_an_article_is_still_not_a_heading():
         "_artículo 402, inciso 4, cuando fueren varios los autores._",
         "**Artículo 2 de la Resolución N°**",
         "artículo 44 en los numerales 4 al 7 sin declaración judicial.",
+        # Las mismas referencias en prosa, ahora con las decoraciones que el prefijo
+        # aprendio a aceptar: lo que las deja fuera es el separador, no el prefijo.
+        "\"Artículo 23 de este Código.\"",
+        "“artículo 8, de conformidad con la ley de la materia” .",
+        "- Artículo 310, en lo que fuera aplicable.",
+        "## \"Artículo 465 El juez puede autorizar a los hijos.",
     ):
         assert L._ARTICULO_RE.match(prose) is None, prose
+
+
+def test_quoted_article_heading_is_detected():
+    """El texto unico ordenado transcribe entre comillas los articulos sustituidos por
+    leyes posteriores. Con el prefijo antiguo esos 595 encabezados se perdian y su texto
+    pasaba a colgar del articulo anterior: el Art. 345-A del Codigo Civil se leia como 345."""
+    doc = (
+        "**Artículo 345.- Patria potestad en separación convencional**\n\n"
+        "En caso de separación convencional el juez fija el régimen.\n\n"
+        "**\"Artículo 345-A.- Indemnización en caso de perjuicio\"**\n\n"
+        "El juez velará por la estabilidad económica del cónyuge perjudicado.\n"
+    )
+    index = L.build_index(doc)
+    assert L.resolve(index, "velará por la estabilidad económica").label == "Art. 345-A"
+    assert L.resolve(index, "el juez fija el régimen").label == "Art. 345"
+
+
+@pytest.mark.parametrize(
+    "heading",
+    (
+        '**“ Artículo 21.- Regulación de la capacidad jurídica**',
+        '**"Artículo 345-A.- Indemnización en caso de perjuicio"**',
+        '## "Artículo 7. Sujetos de protección de la Ley',
+        "## 'Artículo 6.- Carácter obligatorio",
+        '**“** **Artículo 66.- Falta del representante**',
+        '#       "Artículo 386. Procedencia',
+        "- Artículo 93º",
+        '- "Artículo 22.- Requisitos para ser acreditado como conciliador',
+    ),
+)
+def test_decorated_article_headings_from_the_corpus(heading):
+    """Formas reales del corpus, una por documento de origen."""
+    assert L._ARTICULO_RE.match(heading) is not None
+
+
+def test_bulleted_article_heading_is_detected():
+    """El Codigo de los Ninos y Adolescentes numera con vineta y pone el nombre debajo."""
+    doc = (
+        "- Artículo 92º\n\n"
+        "## Definición\n\n"
+        "Se considera alimentos lo necesario para el sustento.\n\n"
+        "- Artículo 93º\n\n"
+        "## Obligados a prestar alimentos\n\n"
+        "Es obligación de los padres prestar alimentos a sus hijos.\n"
+    )
+    index = L.build_index(doc)
+    assert L.resolve(index, "obligación de los padres prestar alimentos").label == "Art. 93º"
+    assert L.resolve(index, "lo necesario para el sustento").label == "Art. 92º"

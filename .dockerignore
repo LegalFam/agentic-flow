@@ -6,3 +6,8 @@
 !n8n/workflows/*.json
 !scripts/
 !scripts/sync-n8n-workflows.sh
+
+# Los brazos de la ablacion se versionan pero NUNCA se despliegan: el patron de arriba
+# no cruza el "/" y ya los dejaria fuera, pero la exclusion va explicita porque el coste
+# de equivocarse es publicar en produccion un workflow con la recuperacion desactivada.
+n8n/workflows/eval/
