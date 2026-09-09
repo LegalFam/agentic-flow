@@ -101,6 +101,11 @@ def apply_common(workflow: dict, arm: str) -> None:
     webhook = node(workflow, "Webhook")
     webhook["parameters"]["path"] = f"chat-process-eval-{arm}"
     webhook["webhookId"] = stable_id(arm, "webhook")
+    # Los brazos corren en una instancia local que no esta expuesta, y la cabecera de
+    # autenticacion se comprueba antes de que el flujo arranque: quitarla no toca nada de
+    # lo que se mide, y evita que el runner tenga que manejar el secreto de produccion.
+    webhook["parameters"].pop("authentication", None)
+    webhook.pop("credentials", None)
 
     for item in workflow["nodes"]:
         item["id"] = stable_id(arm, item["name"])

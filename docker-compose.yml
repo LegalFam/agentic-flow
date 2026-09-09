@@ -40,6 +40,12 @@ services:
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-change-me}
       GENERIC_TIMEZONE: America/Lima
       TZ: America/Lima
+      # n8n 2.x bloquea $env dentro de las expresiones. El nodo Resolve Locators arma su
+      # URL con $env.PROCESSING_API_BASE_URL y, como continua ante error, sin esto falla
+      # en silencio: las citas salen sin localizador y sin documento, como si el corpus no
+      # las hubiera reconocido. El deploy de Cloud Run ya define las dos.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: ${N8N_BLOCK_ENV_ACCESS_IN_NODE:-false}
+      PROCESSING_API_BASE_URL: ${PROCESSING_API_BASE_URL:-http://processing-api:8000}
     volumes:
       - n8n_data:/home/node/.n8n
 

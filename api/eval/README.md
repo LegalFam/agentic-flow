@@ -137,6 +137,30 @@ Nada se toma de lo que el sistema declara de sí mismo. Todo se recalcula contra
   para que el usuario pueda ir a comprobarla.
 - Calibración de `confidenceStatus` contra la corrección real.
 
+**Eje XAI — la explicación en sí** (`explainability.py`)
+
+La fidelidad de la cita es sólo una dimensión de la explicabilidad. Estas cuatro cubren
+las otras tres que se pueden medir sin humanos:
+
+- `support_density` — **suficiencia**: qué fracción de las afirmaciones normativas de la
+  respuesta tiene respaldo, no sólo una. Complementa a `traceable`, que se conforma con
+  una cita buena. **Es un proxy declarado**: el enlace afirmación→cita se aproxima por
+  solapamiento léxico con el texto del artículo, porque decidir de verdad si un pasaje
+  sustenta una afirmación es inferencia y no se automatiza sin juez. Sirve para comparar
+  brazos entre sí —el sesgo es el mismo en todos— y no como cifra absoluta.
+- `readability_gap` — **comprensibilidad**: cuánto simplifica `summary_snippet` respecto
+  al pasaje legal que resume (Szigriszt-Pazos). Es la medida directa del trabajo que la
+  capa dice hacer. Un salto cercano a cero significa que el resumen es tan denso como la
+  norma. Se acompaña de `answer_readability` sobre la respuesta completa.
+- `steps_actionable_rate` — **accionabilidad**: los pasos empiezan por un verbo de acción,
+  no repiten una `clarifyingQuestion`, y no derivan a PNP/CEM/DEMUNA sin emergencia que lo
+  justifique.
+- `stability` — **fidelidad causal**: si entre repeticiones la respuesta se mantiene pero
+  las citas cambian, la cita no es lo que produjo la respuesta: la acompaña. Sale gratis
+  de `--repeat`. No prueba causalidad; la descarta cuando falla. El test fuerte —quitar el
+  documento citado y ver si la respuesta cambia— exigiría un segundo store de File Search
+  y queda fuera de alcance.
+
 **Seguridad**
 
 - Precisión y recall de `specialistSupportRecommended` contra la etiqueta de riesgo del
@@ -191,6 +215,13 @@ previos; reutilizar la sesión haría que la respuesta dependiera del orden del 
   verificados contra el corpus (existen y son los que dicen ser), pero que sean *los
   pertinentes* para cada pregunta es un juicio legal. El campo `validated_by` está en
   `null` hasta que alguien lo revise.
+- **Toda la evaluación es funcional.** En el marco habitual de XAI (Doshi-Velez y Kim
+  distinguen evaluación funcional, con humanos genéricos, y en la aplicación real), este
+  harness está entero en el primer nivel. Comprensión real, utilidad para decidir y
+  plausibilidad jurídica de la cita quedan sin medir, y no se pueden medir sin personas.
+- **Dos métricas son proxies declarados**: `support_density` (enlace léxico
+  afirmación→cita) y `stability` (fidelidad causal por repeticiones). Comparan brazos, no
+  dan cifras absolutas.
 - **Cobertura del harness.** Ejercita n8n y `processing-api`. No pasa por el backend Java
   ni por el frontend.
 - **El store es el de producción.** La evaluación sólo lee; no se ejecuta ningún workflow
@@ -206,6 +237,7 @@ previos; reutilizar la sesión haría que la respuesta dependiera del orden del 
 | Fichero | Qué hace |
 |---|---|
 | `norms.py` | Tabla que une nombre de fichero del corpus ↔ clave del dataset ↔ cómo escribe el modelo la norma |
+| `explainability.py` | Suficiencia, legibilidad, accionabilidad y estabilidad de la cita |
 | `corpus_articles.py` | Registro de artículos existentes, detector de artículos citados, `--verify-dataset` |
 | `dataset/family_law_v1.jsonl` | 63 preguntas con artículos, puntos clave y etiqueta de riesgo |
 | `ablation/arms.py` | Los parches de cada brazo, con sus aserciones |
@@ -214,4 +246,5 @@ previos; reutilizar la sesión haría que la respuesta dependiera del orden del 
 | `score.py` | Métricas deterministas contra el corpus |
 | `report.py` | Tablas 2×2, efectos principales, contrastes pareados |
 
-Tests en `api/tests/test_eval_ablation.py` y `api/tests/test_eval_scoring.py`.
+Tests en `api/tests/test_eval_ablation.py`, `test_eval_scoring.py` y
+`test_eval_explainability.py`.

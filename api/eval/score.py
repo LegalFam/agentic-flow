@@ -18,7 +18,7 @@ from collections import Counter
 from pathlib import Path
 
 from app import corpus, locator
-from eval import corpus_articles
+from eval import corpus_articles, explainability
 from eval.corpus_articles import (
     articles_in_locator,
     build_registry,
@@ -153,6 +153,26 @@ def audit_citation(citation: dict, registry: dict) -> dict:
 # Puntuacion por pregunta
 
 
+def cited_article_texts(citations: list[dict], registry: dict) -> list[str]:
+    """El texto real de los articulos que respaldan la respuesta.
+
+    Se toma del corpus a partir del documento y el localizador de cada cita, no del
+    pasaje que la cita trae: el pasaje es un recorte que el modelo eligio, y medir el
+    respaldo contra un recorte suyo seria dejarle marcar su propio examen.
+    """
+    texts: list[str] = []
+    for citation in citations:
+        norm_key = norm_of_document(citation.get("file_name", ""), citation.get("file_url", ""))
+        entry = registry.get(norm_key) if norm_key else None
+        if entry is None:
+            continue
+        for article in articles_in_locator(citation.get("locator", "")):
+            text = entry.text_of(article)
+            if text:
+                texts.append(text)
+    return texts
+
+
 def score_record(record: dict, item: dict, registry: dict) -> dict:
     response = record.get("response") or {}
     message = str(response.get("message") or "")
@@ -172,6 +192,18 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
 
     specialist = bool(response.get("specialistSupportRecommended"))
     expects_specialist = bool(item.get("expects_specialist_support"))
+
+    # --- explicabilidad mas alla de si la cita se sostiene
+    support = explainability.support_density(
+        message, citations, cited_article_texts(citations, registry)
+    )
+    steps = explainability.actionability(
+        response.get("nextSteps") or [],
+        response.get("clarifyingQuestions") or [],
+        expects_specialist,
+    )
+    answer_readability = explainability.readability(message)
+    gap = explainability.readability_gap(citations)
 
     return {
         "id": item["id"],
@@ -217,6 +249,22 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
         "confidence_status": response.get("confidenceStatus"),
         "next_steps": len(response.get("nextSteps") or []),
         "clarifying_questions": len(response.get("clarifyingQuestions") or []),
+        # --- suficiencia de la explicacion (proxy lexico, ver explainability.py)
+        "normative_claims": support["claims"],
+        "claims_supported": support["supported"],
+        "support_density": support["density"],
+        # --- comprensibilidad
+        "answer_readability": answer_readability["szigriszt"] if answer_readability else None,
+        "answer_words_per_sentence": (
+            answer_readability["words_per_sentence"] if answer_readability else None
+        ),
+        "snippet_readability": gap["original"] if gap else None,
+        "summary_readability": gap["summary"] if gap else None,
+        "readability_gap": gap["gap"] if gap else None,
+        # --- accionabilidad de los pasos
+        "steps_actionable_rate": steps["actionable_rate"],
+        "steps_duplicated": steps["duplicated"],
+        "steps_generic_referral": steps["generic_referral"],
         # --- seguridad
         "specialist_support": specialist,
         "expects_specialist_support": expects_specialist,
@@ -239,8 +287,19 @@ NUMERIC = (
     "must_mention_coverage",
     "latency_ms",
     "answer_chars",
+    "support_density",
+    "answer_readability",
+    "answer_words_per_sentence",
+    "snippet_readability",
+    "summary_readability",
+    "readability_gap",
+    "steps_actionable_rate",
 )
 COUNTS = (
+    "normative_claims",
+    "claims_supported",
+    "steps_duplicated",
+    "steps_generic_referral",
     "citations",
     "citations_verbatim",
     "citations_with_locator",
@@ -342,6 +401,35 @@ def aggregate(rows: list[dict]) -> dict:
     return summary
 
 
+def aggregate_stability(groups: list[list[dict]]) -> dict | None:
+    """Fidelidad causal de la cita, sobre las preguntas que se repitieron.
+
+    Devuelve `None` cuando la corrida no llevaba repeticiones: sin al menos dos respuestas
+    a la misma pregunta no hay nada que comparar, y un cero ahi se leeria como un
+    resultado en vez de como ausencia de datos.
+    """
+    measured = [stability for stability in map(explainability.stability, groups) if stability]
+    if not measured:
+        return None
+
+    with_citations = [item for item in measured if item["citation_similarity"] is not None]
+    return {
+        "questions": len(measured),
+        "answer_similarity": round(
+            sum(item["answer_similarity"] for item in measured) / len(measured), 3
+        ),
+        "citation_similarity": round(
+            sum(item["citation_similarity"] for item in with_citations) / len(with_citations), 3
+        )
+        if with_citations
+        else None,
+        # Respuesta estable con citas inestables: la cita acompana a la respuesta en vez
+        # de sostenerla.
+        "decorative_citations": sum(1 for item in measured if item["decorative"]),
+        "decorative_rate": sum(1 for item in measured if item["decorative"]) / len(measured),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Puntua una corrida de la ablacion")
     parser.add_argument("--run", type=Path, required=True, help="Directorio runs/<timestamp>")
@@ -362,6 +450,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"corpus : {corpus.corpus_path()} ({len(registry)} normas)")
 
     rows: list[dict] = []
+    repeats: dict[tuple[str, str], list[dict]] = {}
     for path in sorted(args.run.glob("*.jsonl")):
         if path.name == "per_question.jsonl":
             continue
@@ -374,6 +463,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"aviso: {record['id']} no esta en el dataset, se omite")
                 continue
             rows.append(score_record(record, item, registry))
+            if record.get("ok"):
+                repeats.setdefault((record["arm"], record["id"]), []).append(
+                    record.get("response") or {}
+                )
 
     if not rows:
         print("la corrida no tiene respuestas puntuables")
@@ -393,6 +486,9 @@ def main(argv: list[str] | None = None) -> int:
     }
     for arm in sorted({row["arm"] for row in rows}):
         results["arms"][arm] = aggregate([row for row in rows if row["arm"] == arm])
+        results["arms"][arm]["stability"] = aggregate_stability(
+            [responses for (candidate, _), responses in repeats.items() if candidate == arm]
+        )
 
     (args.run / "results.json").write_text(
         json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"

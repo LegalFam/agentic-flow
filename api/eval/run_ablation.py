@@ -103,6 +103,39 @@ def already_done(path: Path) -> set[tuple[str, int]]:
     return done
 
 
+def write_manifest(run_dir: Path, run_id: str, args, questions: int) -> None:
+    """Registra la fase que se acaba de lanzar, sin borrar las anteriores.
+
+    Una corrida completa son horas, asi que se hace por fases sobre el mismo `--run-id`.
+    Si el manifiesto se sobrescribiera, al final diria "16 preguntas" —el tamano de la
+    ultima fase— y no lo que de verdad se corrio.
+    """
+    path = run_dir / "manifest.json"
+    manifest = {"run_id": run_id, "dataset": str(args.dataset), "phases": []}
+    if path.exists():
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest.setdefault("phases", [])
+        except json.JSONDecodeError:
+            pass
+
+    manifest["phases"].append(
+        {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "questions": questions,
+            "limit": args.limit,
+            "arms": args.arms,
+            "repeat": args.repeat,
+            "repeat_sample": args.repeat_sample,
+            "base_url": args.base_url,
+        }
+    )
+    manifest["questions"] = max(
+        (phase.get("questions") or 0) for phase in manifest["phases"]
+    )
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Corre la ablacion contra los webhooks de n8n")
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
@@ -131,23 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     run_dir = args.out / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    (run_dir / "manifest.json").write_text(
-        json.dumps(
-            {
-                "run_id": run_id,
-                "dataset": str(args.dataset),
-                "questions": len(items),
-                "arms": args.arms,
-                "base_url": args.base_url,
-                "repeat": args.repeat,
-                "repeat_sample": args.repeat_sample,
-                "started_at": datetime.now(timezone.utc).isoformat(),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    write_manifest(run_dir, run_id, args, len(items))
 
     print(f"run      : {run_dir}")
     print(f"dataset  : {len(items)} preguntas")

@@ -87,6 +87,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Falla si los brazos en disco no coinciden con el workflow de produccion",
     )
     parser.add_argument("--arm", action="append", help="Genera solo estos brazos")
+    parser.add_argument(
+        "--bind-credential",
+        action="append",
+        metavar="NOMBRE=ID",
+        help="Reasigna una credencial por nombre al id que tenga la instancia destino. "
+        "Usalo con --out hacia un directorio temporal: los ficheros versionados deben "
+        "conservar los ids de produccion.",
+    )
     args = parser.parse_args(argv)
 
     original = load_source(args.source)
@@ -108,6 +116,10 @@ def main(argv: list[str] | None = None) -> int:
             print("   Revisa eval/ablation/arms.py antes de correr nada: un parche que no")
             print("   aplica produce un brazo que no esta ablacionado y no se nota.")
             return 2
+        if args.bind_credential:
+            rebound = bind_credentials(variant, parse_bindings(args.bind_credential))
+            if rebound:
+                print(f"  {arm:<16} credenciales reasignadas: {rebound}")
         variants.append((arm, variant))
         if not args.check:
             print(summarize(original, variant, arm))
@@ -125,6 +137,38 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nescrito: {args.out / f'legalfam-eval-{arm}.json'}")
 
     return 0
+
+
+def parse_bindings(raw: list[str]) -> dict[str, str]:
+    bindings: dict[str, str] = {}
+    for item in raw:
+        name, separator, credential_id = item.partition("=")
+        if not separator or not name.strip() or not credential_id.strip():
+            raise SystemExit(f"--bind-credential espera NOMBRE=ID, no {item!r}")
+        bindings[name.strip()] = credential_id.strip()
+    return bindings
+
+
+def bind_credentials(workflow: dict, bindings: dict[str, str]) -> int:
+    """Reapunta las credenciales al id que tengan en la instancia destino.
+
+    El id de una credencial de n8n es local a la instancia que la creo: el mismo
+    "Google Gemini(PaLM) Api account" tiene un id distinto en produccion y en la maquina
+    de quien corre el experimento, y un workflow importado con el id ajeno arranca sin
+    credencial y falla en cada nodo de modelo.
+
+    Se empareja por nombre, que si es estable. Los ficheros versionados conservan los ids
+    de produccion —son la evidencia de que el brazo sale del workflow real— y esta
+    reasignacion se aplica solo sobre la copia que se importa.
+    """
+    changed = 0
+    for node_item in workflow["nodes"]:
+        for credential in (node_item.get("credentials") or {}).values():
+            target = bindings.get(credential.get("name", ""))
+            if target and credential.get("id") != target:
+                credential["id"] = target
+                changed += 1
+    return changed
 
 
 def serialize(path: Path, variant: dict) -> str:

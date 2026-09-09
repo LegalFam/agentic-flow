@@ -34,6 +34,8 @@ RATE_METRICS = (
     ("article_recall", "Recall de articulos esperados"),
     ("article_precision", "Precision de articulos"),
     ("must_mention_coverage", "Cobertura de puntos clave"),
+    ("support_density", "Densidad de respaldo (proxy)"),
+    ("steps_actionable_rate", "Pasos accionables"),
 )
 COUNT_METRICS = (
     ("hallucinated_explicit", "Articulos inventados por respuesta"),
@@ -42,6 +44,8 @@ COUNT_METRICS = (
     ("articles_from_text", "Articulos nombrados en el texto"),
     ("articles_from_citations", "Articulos aportados por las citas"),
     ("next_steps", "Pasos sugeridos"),
+    ("normative_claims", "Afirmaciones normativas"),
+    ("steps_generic_referral", "Derivaciones institucionales sin causa"),
 )
 BINARY_METRICS = ("traceable", "correct")
 
@@ -305,6 +309,49 @@ def render(run: Path, rows: list[dict], results: dict) -> str:
     add("")
     add("La ubicacion se recalcula sobre el markdown del corpus a partir del pasaje que la")
     add("cita dice haber usado. Una cita bien redactada y mal ubicada cuenta como fallo.\n")
+
+    add("## Comprensibilidad de la explicacion\n")
+    add("| Brazo | Legibilidad de la respuesta | Palabras por frase | Pasaje legal | Resumen | Salto |")
+    add("|---|--:|--:|--:|--:|--:|")
+    for arm in ARM_GRID:
+        summary = results["arms"].get(arm)
+        if not summary or not summary.get("answered"):
+            continue
+        add(
+            f"| `{arm}` | {fmt(summary.get('answer_readability'), 1)} | "
+            f"{fmt(summary.get('answer_words_per_sentence'), 1)} | "
+            f"{fmt(summary.get('snippet_readability'), 1)} | "
+            f"{fmt(summary.get('summary_readability'), 1)} | "
+            f"{fmt(summary.get('readability_gap'), 1)} |"
+        )
+    add("")
+    add("Indice Szigriszt-Pazos, escala 0-100: mas alto, mas facil de leer. El salto es")
+    add("cuanto simplifica el resumen de cada cita respecto al pasaje legal que resume, y")
+    add("es la medida directa del trabajo que la capa dice hacer. Un salto cercano a cero")
+    add("significa que el resumen es tan denso como la norma, y entonces no explica nada")
+    add("que el pasaje no dijera ya.\n")
+
+    add("## Fidelidad de la cita (repeticiones)\n")
+    stability_rows = [
+        (arm, (results["arms"].get(arm) or {}).get("stability"))
+        for arm in ARM_GRID
+        if (results["arms"].get(arm) or {}).get("stability")
+    ]
+    if stability_rows:
+        add("| Brazo | Preguntas | Estabilidad de la respuesta | Estabilidad de la cita | Citas decorativas |")
+        add("|---|--:|--:|--:|--:|")
+        for arm, data in stability_rows:
+            add(
+                f"| `{arm}` | {data['questions']} | {fmt(data['answer_similarity'])} | "
+                f"{fmt(data['citation_similarity'])} | {fmt(data.get('decorative_rate'))} |"
+            )
+        add("")
+        add("Si la respuesta se mantiene entre repeticiones pero las citas cambian, la cita")
+        add("no es lo que produjo la respuesta: la acompana. No prueba causalidad, la")
+        add("descarta cuando falla.\n")
+    else:
+        add("La corrida no llevaba repeticiones, asi que no hay nada que comparar.")
+        add("Correr con `--repeat 3` para medir esto.\n")
 
     add("## Calibracion de la confianza declarada\n")
     add("| Brazo | Nivel | n | Respuestas correctas |")

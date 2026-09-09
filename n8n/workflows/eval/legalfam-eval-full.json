@@ -203,7 +203,6 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "chat-process-eval-full",
-        "authentication": "headerAuth",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -216,13 +215,7 @@
       "id": "50c414d5-2cff-5042-bc46-050d63874571",
       "name": "Webhook",
       "webhookId": "d821351f-8823-5e24-9a2c-a5c2039225c2",
-      "alwaysOutputData": false,
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "atom1z32FyNBZveS",
-          "name": "Header Auth account"
-        }
-      }
+      "alwaysOutputData": false
     },
     {
       "parameters": {
