@@ -46,6 +46,10 @@ services:
       # las hubiera reconocido. El deploy de Cloud Run ya define las dos.
       N8N_BLOCK_ENV_ACCESS_IN_NODE: ${N8N_BLOCK_ENV_ACCESS_IN_NODE:-false}
       PROCESSING_API_BASE_URL: ${PROCESSING_API_BASE_URL:-http://processing-api:8000}
+      # Los nodos Code corren en un proceso aparte con 60 s de timeout por defecto. Bajo
+      # llamadas encadenadas ese broker se congestiona, agota el plazo y n8n se reinicia
+      # entero: se caen tambien las ejecuciones que no tenian nada que ver.
+      N8N_RUNNERS_TASK_TIMEOUT: ${N8N_RUNNERS_TASK_TIMEOUT:-300}
     volumes:
       - n8n_data:/home/node/.n8n
 

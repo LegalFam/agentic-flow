@@ -177,7 +177,8 @@
       "alwaysOutputData": false,
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 1000
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -775,6 +776,19 @@
       ],
       "id": "7c93f4a2-0b16-4de5-9f74-31a5c6e28b40",
       "name": "If Its Clear"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Red de seguridad del Parser Agent. Si el agente muere, la ejecucion termina sin llegar a\n// \"Respond to Webhook\" y el webhook contesta 200 con cuerpo vacio; el backend solo puede\n// traducirlo a UPSTREAM_EMPTY_RESPONSE y el usuario ve un fallo sin explicacion.\n//\n// El caso conocido que llega hasta aca: Gemini bloquea el prompt entero\n// (promptFeedback.blockReason = PROHIBITED_CONTENT) y devuelve cero candidatos. LangChain\n// mapea eso a generations: [] y el nodo agente revienta al leer generations[0][0].message.\n// El disparo depende del texto exacto del prompt que arma n8n, no del mensaje del usuario,\n// asi que no se puede evitar desde el system message ni con reintentos: hay que degradar.\nconst failure = $json.error || {};\nconsole.log('[Build Response Parser Failure]', JSON.stringify({\n  message: failure.message || String(failure),\n  node: failure.node && failure.node.name,\n}));\n\n// Mismo contrato que \"Build Response Without RAG\": las ramas terminales convergen aqui para\n// que la localizacion y la respuesta se armen en un solo lugar.\nconst normalized = $('Normalized Input').first().json.body || {};\nconst language = normalized.language || 'es';\nconst languageRequested = normalized.language_requested || language;\n\nreturn [{\n  json: {\n    language,\n    languageRequested,\n    payload: {\n      message: 'No pude procesar esta consulta por una restriccion tecnica del asistente, no por lo que escribiste. Puedes intentarlo de nuevo o plantear la misma pregunta con otras palabras. Si el problema continua, una DEMUNA o un abogado de familia puede orientarte directamente.',\n      citations: [],\n      confidenceStatus: null,\n      confidenceReason: null,\n      nextSteps: [],\n      specialistSupportRecommended: false,\n      citationSupportStatus: null,\n      clarifyingQuestions: [],\n      agentTokenCost: 1,\n      // Marca de degradacion. El backend ignora las claves que no conoce; el harness de\n      // ablacion la usa para distinguir un turno degradado de una respuesta real.\n      degraded: 'PARSER_AGENT_FAILURE',\n    },\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -172,
+        2176
+      ],
+      "id": "26042946-0270-454b-b437-b6ab646193fe",
+      "name": "Build Response Parser Failure"
     }
   ],
   "pinData": {},
@@ -817,6 +831,13 @@
         [
           {
             "node": "If Relevant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Response Parser Failure",
             "type": "main",
             "index": 0
           }
@@ -1195,6 +1216,17 @@
         [
           {
             "node": "Build Response Clarification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response Parser Failure": {
+      "main": [
+        [
+          {
+            "node": "If Needs Localization",
             "type": "main",
             "index": 0
           }
