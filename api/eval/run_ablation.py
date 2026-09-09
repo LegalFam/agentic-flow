@@ -173,49 +173,77 @@ def main(argv: list[str] | None = None) -> int:
         print("aviso    : sin token; si el webhook exige headerAuth las llamadas daran 403")
     print()
 
-    failures = 0
     for arm in args.arms:
         if arm not in ARMS:
             print(f"brazo desconocido: {arm}")
             return 2
 
-        url = f"{args.base_url.rstrip('/')}/webhook/chat-process-eval-{arm}"
-        path = run_dir / f"{arm}.jsonl"
-        done = already_done(path)
-        if done:
-            print(f"[{arm}] reanudando: {len(done)} respuestas ya guardadas")
+    handles = {arm: (run_dir / f"{arm}.jsonl").open("a", encoding="utf-8") for arm in args.arms}
+    done = {arm: already_done(run_dir / f"{arm}.jsonl") for arm in args.arms}
+    for arm, previous in done.items():
+        if previous:
+            print(f"[{arm}] reanudando: {len(previous)} respuestas ya guardadas")
 
-        with path.open("a", encoding="utf-8") as handle:
-            for position, item in enumerate(items):
-                repeats = args.repeat if position < args.repeat_sample else 1
-                for attempt in range(repeats):
-                    if (item["id"], attempt) in done:
+    failures = 0
+    completed: list[str] = []
+    try:
+        # Pregunta por fuera, brazo por dentro: una corrida que se corta a mitad —cuota
+        # agotada, contenedor caido— deja preguntas con los cuatro brazos hechos en vez de
+        # un brazo entero y los otros a cero. Lo primero sigue siendo un experimento
+        # pareado valido sobre menos preguntas; lo segundo no sirve para comparar nada.
+        for position, item in enumerate(items):
+            repeats = args.repeat if position < args.repeat_sample else 1
+            answered = 0
+            for attempt in range(repeats):
+                for arm in args.arms:
+                    if (item["id"], attempt) in done[arm]:
+                        answered += 1
                         continue
 
                     result = call_webhook(
-                        url, args.token, args.auth_header, item["question"], args.timeout
+                        f"{args.base_url.rstrip('/')}/webhook/chat-process-eval-{arm}",
+                        args.token,
+                        args.auth_header,
+                        item["question"],
+                        args.timeout,
                     )
-                    record = {
-                        "id": item["id"],
-                        "arm": arm,
-                        "repeat": attempt,
-                        "category": item.get("category"),
-                        "question": item["question"],
-                        **result,
-                    }
-                    handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-                    handle.flush()
+                    handles[arm].write(
+                        json.dumps(
+                            {
+                                "id": item["id"],
+                                "arm": arm,
+                                "repeat": attempt,
+                                "category": item.get("category"),
+                                "question": item["question"],
+                                **result,
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
+                    handles[arm].flush()
 
-                    mark = "ok " if result["ok"] else "FAIL"
-                    if not result["ok"]:
+                    if result["ok"]:
+                        answered += 1
+                    else:
                         failures += 1
+                    mark = "ok " if result["ok"] else "FAIL"
                     detail = "" if result["ok"] else f"  {result.get('error') or result.get('status')}"
-                    print(f"[{arm}] {mark} {item['id']:<10} {result['latency_ms']:>6} ms{detail}")
+                    print(f"[{arm:<7}] {mark} {item['id']:<10} {result['latency_ms']:>6} ms{detail}")
 
                     if args.pause:
                         time.sleep(args.pause)
 
+            if answered == repeats * len(args.arms):
+                completed.append(item["id"])
+    finally:
+        for handle in handles.values():
+            handle.close()
+
     print(f"\nguardado en {run_dir}")
+    print(f"preguntas con todos los brazos completos: {len(completed)}/{len(items)}")
+    if completed:
+        print(f"  ultima completa: {completed[-1]}")
     if failures:
         print(f"llamadas fallidas: {failures} (vuelve a correr con --run-id {run_id} para reintentarlas)")
     return 1 if failures else 0
