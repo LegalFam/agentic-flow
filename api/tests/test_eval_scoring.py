@@ -292,3 +292,61 @@ def test_pivot_drops_failed_calls():
         {"id": "q1", "arm": "full", "ok": True, "traceable": True},
     ]
     assert report.pivot(rows, "traceable")["q1"]["full"] == 1.0
+
+
+# --------------------------------------------------------------------------------------
+# Reanudacion: un corte de infraestructura no es una tasa de fallo del sistema
+
+
+def _write_run(tmp_path, records):
+    import json as _json
+
+    (tmp_path / "full.jsonl").write_text(
+        "\n".join(_json.dumps(record) for record in records), encoding="utf-8"
+    )
+    return tmp_path
+
+
+def test_successful_retry_replaces_the_failed_attempt(tmp_path, capsys):
+    run = _write_run(
+        tmp_path,
+        [
+            {"id": "alim-001", "arm": "full", "repeat": 0, "ok": False, "error": "URLError"},
+            {"id": "alim-001", "arm": "full", "repeat": 0, "ok": True, "response": {"message": "x"}},
+        ],
+    )
+    records = score.load_records(run, {"alim-001": ITEM})
+    assert len(records) == 1
+    assert records[0]["ok"] is True
+
+
+def test_attempt_that_never_succeeded_stays_a_failure(tmp_path, capsys):
+    run = _write_run(
+        tmp_path,
+        [
+            {"id": "alim-001", "arm": "full", "repeat": 0, "ok": False, "error": "timeout"},
+            {"id": "alim-001", "arm": "full", "repeat": 0, "ok": False, "error": "timeout"},
+        ],
+    )
+    records = score.load_records(run, {"alim-001": ITEM})
+    assert len(records) == 1
+    assert records[0]["ok"] is False
+
+
+def test_repeats_are_kept_apart(tmp_path, capsys):
+    run = _write_run(
+        tmp_path,
+        [
+            {"id": "alim-001", "arm": "full", "repeat": 0, "ok": True, "response": {"message": "a"}},
+            {"id": "alim-001", "arm": "full", "repeat": 1, "ok": True, "response": {"message": "b"}},
+        ],
+    )
+    assert len(score.load_records(run, {"alim-001": ITEM})) == 2
+
+
+def test_questions_outside_the_dataset_are_skipped(tmp_path, capsys):
+    run = _write_run(
+        tmp_path,
+        [{"id": "no-existe", "arm": "full", "repeat": 0, "ok": True, "response": {"message": "x"}}],
+    )
+    assert score.load_records(run, {"alim-001": ITEM}) == []

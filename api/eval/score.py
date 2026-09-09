@@ -401,6 +401,46 @@ def aggregate(rows: list[dict]) -> dict:
     return summary
 
 
+def load_records(run: Path, dataset: dict) -> list[dict]:
+    """Las respuestas de la corrida, con un solo intento por (brazo, pregunta, repeticion).
+
+    Una corrida larga se hace por fases y se reanuda, asi que un mismo intento puede
+    aparecer varias veces: primero fallido —se cayo el contenedor, venció el timeout— y
+    despues correcto. Gana el intento correcto.
+
+    Sin esto, un corte de infraestructura quedaria registrado como tasa de fallo del
+    sistema evaluado, que es una cosa completamente distinta. Un intento que nunca llego a
+    salir bien si se conserva como fallo: eso si es un resultado.
+    """
+    best: dict[tuple[str, str, int], dict] = {}
+    order: list[tuple[str, str, int]] = []
+    skipped = 0
+
+    for path in sorted(run.glob("*.jsonl")):
+        if path.name == "per_question.jsonl":
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if record["id"] not in dataset:
+                skipped += 1
+                continue
+            key = (record["arm"], record["id"], record.get("repeat", 0))
+            if key not in best:
+                order.append(key)
+                best[key] = record
+            elif record.get("ok") and not best[key].get("ok"):
+                best[key] = record
+
+    if skipped:
+        print(f"aviso: {skipped} respuestas de preguntas que no estan en el dataset, omitidas")
+
+    retried = sum(1 for key in order if best[key].get("ok"))
+    print(f"intentos unicos: {len(order)}  (correctos: {retried})")
+    return [best[key] for key in order]
+
+
 def aggregate_stability(groups: list[list[dict]]) -> dict | None:
     """Fidelidad causal de la cita, sobre las preguntas que se repitieron.
 
@@ -449,24 +489,16 @@ def main(argv: list[str] | None = None) -> int:
     registry = build_registry()
     print(f"corpus : {corpus.corpus_path()} ({len(registry)} normas)")
 
+    records = load_records(args.run, dataset)
+
     rows: list[dict] = []
     repeats: dict[tuple[str, str], list[dict]] = {}
-    for path in sorted(args.run.glob("*.jsonl")):
-        if path.name == "per_question.jsonl":
-            continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            record = json.loads(line)
-            item = dataset.get(record["id"])
-            if item is None:
-                print(f"aviso: {record['id']} no esta en el dataset, se omite")
-                continue
-            rows.append(score_record(record, item, registry))
-            if record.get("ok"):
-                repeats.setdefault((record["arm"], record["id"]), []).append(
-                    record.get("response") or {}
-                )
+    for record in records:
+        rows.append(score_record(record, dataset[record["id"]], registry))
+        if record.get("ok"):
+            repeats.setdefault((record["arm"], record["id"]), []).append(
+                record.get("response") or {}
+            )
 
     if not rows:
         print("la corrida no tiene respuestas puntuables")
