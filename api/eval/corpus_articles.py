@@ -217,6 +217,56 @@ def norm_of_document(file_name: str, file_url: str = "") -> str | None:
     return None
 
 
+# "CASACION N° 3496 - 2016", "1189-2018", "000588-2016", "CASACION N° 588 2016".
+# El año se acota a 19xx/20xx porque el separador tambien puede ser un espacio: con
+# `\d{4}` a secas, un "articulo 472 2016" cualquiera habria pasado por expediente.
+_CASE_RE = re.compile(r"\b(\d{1,6})\s*(?:[-–]\s*|\s+)((?:19|20)\d{2})\b")
+
+
+def case_numbers(text: str) -> set[str]:
+    """Expedientes citados en un texto, normalizados a `numero-año` sin ceros a la izquierda.
+
+    El corpus guarda la jurisprudencia por numero de expediente ("3023-2017-<hash>.md",
+    "resolucion-001532-2013-patty-<hash>.md") mientras que la cita la nombra por su
+    caratula ("CASACION 3023-2017 LIMA TENENCIA Y CUSTODIA"). El numero es lo unico que
+    aparece igual en los dos sitios.
+    """
+    found = set()
+    for number, year in _CASE_RE.findall(text or ""):
+        found.add(f"{number.lstrip('0') or '0'}-{year}")
+    return found
+
+
+@lru_cache(maxsize=1)
+def _case_index() -> dict[str, Path]:
+    """Expediente -> fichero del corpus. Solo para la jurisprudencia."""
+    index: dict[str, Path] = {}
+    for path in corpus.iter_corpus_files():
+        for case in case_numbers(path.stem):
+            index.setdefault(case, path)
+    return index
+
+
+def find_corpus_path(file_name: str, file_url: str = "") -> Path | None:
+    """El fichero del corpus que respalda una cita, sea norma o jurisprudencia.
+
+    Sin esto, toda cita a una casacion quedaba sin documento y por tanto sin verificar:
+    eran 29 de 157 citas marcadas como no verificables por una carencia del evaluador, no
+    por un fallo del sistema evaluado.
+    """
+    norm_key = norm_of_document(file_name, file_url)
+    if norm_key:
+        entry = build_registry().get(norm_key)
+        if entry is not None:
+            return entry.path
+
+    index = _case_index()
+    for case in case_numbers(f"{file_name} {file_url}"):
+        if case in index:
+            return index[case]
+    return None
+
+
 def articles_in_locator(label: str) -> list[str]:
     """`"Arts. 562 y 563"` -> `["562", "563"]`. Un locator combinado cubre varios."""
     if not label:

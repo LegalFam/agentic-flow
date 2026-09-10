@@ -18,6 +18,7 @@ from collections import Counter
 from pathlib import Path
 
 from app import corpus, locator
+from app.text_utils import clean_user_text
 from eval import corpus_articles, explainability
 from eval.corpus_articles import (
     articles_in_locator,
@@ -27,7 +28,7 @@ from eval.corpus_articles import (
     detect_mentions,
     norm_of_document,
 )
-from eval.norms import normalize_article
+from eval.norms import BY_KEY, normalize_article
 
 EVAL_DIR = Path(__file__).resolve().parent
 DEFAULT_DATASET = EVAL_DIR / "dataset" / "family_law_v1.jsonl"
@@ -89,13 +90,27 @@ def hallucination_counts(message: str, registry: dict) -> dict:
 
 
 def _index_for(citation: dict, registry: dict):
-    """El markdown original del documento que la cita dice haber usado."""
+    """El markdown original del documento que la cita dice haber usado.
+
+    Tres intentos, de mas a menos preciso: el manifiesto del corpus, la tabla de normas, y
+    el numero de expediente para la jurisprudencia, que es lo unico que se escribe igual
+    en la caratula de la cita y en el nombre del fichero.
+    """
     index = corpus.get_index(citation.get("file_name"), citation.get("file_id"))
     if index is not None:
         return index
+
+    path = corpus_articles.find_corpus_path(
+        citation.get("file_name", ""), citation.get("file_url", "")
+    )
+    return corpus.load_index(path) if path is not None else None
+
+
+def _has_articles(citation: dict) -> bool:
+    """Si el documento citado tiene articulado que un localizador pueda señalar."""
     norm_key = norm_of_document(citation.get("file_name", ""), citation.get("file_url", ""))
-    entry = registry.get(norm_key) if norm_key else None
-    return entry.index if entry else None
+    norm = BY_KEY.get(norm_key) if norm_key else None
+    return bool(norm and norm.articulated)
 
 
 def audit_citation(citation: dict, registry: dict) -> dict:
@@ -118,23 +133,43 @@ def audit_citation(citation: dict, registry: dict) -> dict:
 
     index = _index_for(citation, registry)
     if index is None or not snippet:
+        # No es lo mismo "el pasaje no esta" que "no supe que documento es": lo segundo es
+        # una carencia del evaluador y contarlo como sospecha del sistema seria injusto.
+        audit["locator_verdict"] = "document_unknown"
         return audit
 
     audit["document_resolved"] = True
-    offset, strategy = locator.find_offset(index, snippet)
+    query = clean_user_text(snippet)
+    position, strategy = locator.find_in_folded(index.folded, query)
     # Solo `exact` y `prefix` prueban que el pasaje esta copiado tal cual. `fuzzy` acepta
     # un parecido alto, que es util para ubicar pero no para afirmar literalidad.
-    audit["verbatim"] = offset is not None and strategy in ("exact", "prefix")
+    audit["verbatim"] = position is not None and strategy in ("exact", "prefix")
     audit["match_strategy"] = strategy
 
-    if offset is None:
+    if position is None:
         return audit
 
-    recomputed = locator.build_locator(index, offset, strategy)
-    expected = set(articles_in_locator(recomputed.label))
+    # Los articulos que cubre el pasaje entero, no solo el de su primer caracter.
+    #
+    # Un fragmento recuperado cruza a menudo dos articulos seguidos, y el sistema lo
+    # etiqueta con los dos ("Arts. 478 y 479"), que es lo correcto. Comparar eso contra el
+    # articulo del offset inicial marcaba como fallo 31 de 157 citas que estaban bien, y
+    # convertia una tasa de acierto real del 85% en un 47% inventado por la metrica.
+    start = index.offset_map[position]
+    last = min(position + max(1, len(query)) - 1, len(index.offset_map) - 1)
+    end = index.offset_map[last] + 1
+    expected = {normalize_article(label) for label in locator.articles_in_span(index, start, end)}
     declared = set(articles_in_locator(reported))
 
-    if not declared:
+    articulated = _has_articles(citation)
+
+    if not articulated:
+        # Una casacion o un protocolo no tienen articulado al que apuntar, traigan o no
+        # una etiqueta: el sistema les pone el encabezado del documento, y el propio
+        # codigo de produccion ya advierte que eso "no es una ubicacion juridica".
+        # Exigirles un articulo mide la composicion del corpus, no el sistema.
+        audit["locator_verdict"] = "not_applicable"
+    elif not declared:
         audit["locator_verdict"] = "missing"
     elif not expected:
         audit["locator_verdict"] = "unverifiable"
@@ -145,7 +180,7 @@ def audit_citation(citation: dict, registry: dict) -> dict:
     else:
         audit["locator_verdict"] = "wrong"
 
-    audit["recomputed_locator"] = recomputed.label
+    audit["recomputed_articles"] = sorted(expected)
     return audit
 
 
@@ -238,6 +273,12 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
         "locator_partial": sum(1 for audit in audits if audit["locator_verdict"] == "partial"),
         "locator_wrong": sum(1 for audit in audits if audit["locator_verdict"] == "wrong"),
         "locator_unverifiable": sum(1 for audit in audits if audit["locator_verdict"] == "unverifiable"),
+        "locator_not_applicable": sum(
+            1 for audit in audits if audit["locator_verdict"] == "not_applicable"
+        ),
+        "locator_document_unknown": sum(
+            1 for audit in audits if audit["locator_verdict"] == "document_unknown"
+        ),
         "locator_scopes": Counter(audit["locator_scope"] for audit in audits if audit["locator_scope"]),
         "locator_sources": Counter(audit["locator_source"] for audit in audits if audit["locator_source"]),
         # Una respuesta es trazable si al menos una cita esta copiada literalmente y
@@ -307,6 +348,8 @@ COUNTS = (
     "locator_partial",
     "locator_wrong",
     "locator_unverifiable",
+    "locator_not_applicable",
+    "locator_document_unknown",
     "articles_surfaced",
     "articles_from_text",
     "articles_from_citations",
@@ -357,13 +400,21 @@ def aggregate(rows: list[dict]) -> dict:
     # pesan igual en la media por respuesta, y aca interesa la calidad de la cita.
     total_citations = sum(row["citations"] for row in answered)
     summary["total_citations"] = total_citations
+    # Las citas a documentos sin articulado no pueden llevar localizador de articulo, asi
+    # que se sacan del denominador de la tasa de ubicacion: incluirlas mediria cuanta
+    # jurisprudencia hay en el corpus.
+    locatable = total_citations - sum(
+        row.get("locator_not_applicable", 0) + row.get("locator_document_unknown", 0)
+        for row in answered
+    )
+    summary["locatable_citations"] = locatable
     if total_citations:
         summary["verbatim_rate"] = sum(row["citations_verbatim"] for row in answered) / total_citations
         summary["locator_resolution_rate"] = (
             sum(row["citations_with_locator"] for row in answered) / total_citations
         )
         summary["locator_correctness_rate"] = (
-            sum(row["locator_correct"] for row in answered) / total_citations
+            sum(row["locator_correct"] for row in answered) / locatable if locatable else None
         )
     else:
         summary["verbatim_rate"] = None

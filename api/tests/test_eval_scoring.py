@@ -141,12 +141,27 @@ def test_citation_without_locator_is_reported_as_missing(registry):
     assert audit["locator_verdict"] == "missing"
 
 
-def test_citation_from_an_unknown_document_is_unverifiable(registry):
+def test_citation_from_an_unknown_document_is_set_apart(registry):
+    """No supe que documento es: es carencia del evaluador, no sospecha sobre el sistema.
+
+    Se separa de `unverifiable` —el pasaje no aparece en un documento que si resolvi—
+    porque solo el segundo dice algo sobre la calidad de la cita.
+    """
     citation = _citation("cualquier texto", "Art. 481")
     citation["file_name"] = "Documento desconocido"
     citation["file_url"] = ""
     audit = score.audit_citation(citation, registry)
     assert audit["document_resolved"] is False
+    assert audit["locator_verdict"] == "document_unknown"
+
+
+def test_passage_missing_from_a_resolved_document_is_unverifiable(registry):
+    """Esta si es la senal real: el documento existe y el pasaje declarado no esta en el."""
+    audit = score.audit_citation(
+        _citation("Este pasaje no aparece en ningun documento del corpus", "Art. 481"), registry
+    )
+    assert audit["document_resolved"] is True
+    assert audit["verbatim"] is False
     assert audit["locator_verdict"] == "unverifiable"
 
 
@@ -350,3 +365,25 @@ def test_questions_outside_the_dataset_are_skipped(tmp_path, capsys):
         [{"id": "no-existe", "arm": "full", "repeat": 0, "ok": True, "response": {"message": "x"}}],
     )
     assert score.load_records(run, {"alim-001": ITEM}) == []
+
+
+def test_snippet_spanning_two_articles_accepts_the_combined_locator(registry):
+    """Un pasaje que cruza dos articulos se cita con los dos, y eso es correcto.
+
+    Comparar el locator combinado contra el articulo del primer caracter marcaba como
+    fallo citas que estaban bien, y hundia artificialmente la tasa de acierto.
+    """
+    spanning = (
+        "disminucion que experimenten las necesidades del alimentista"
+    )
+    audit = score.audit_citation(_citation(spanning, "Art. 482"), registry)
+    assert audit["locator_verdict"] == "correct"
+
+
+def test_combined_locator_that_overreaches_is_partial(registry):
+    """Declarar dos articulos cuando el pasaje solo cubre uno no es correcto del todo."""
+    audit = score.audit_citation(
+        _citation("Los alimentos se regulan por el juez en proporcion", "Arts. 481 y 482"),
+        registry,
+    )
+    assert audit["locator_verdict"] == "partial"
