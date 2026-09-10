@@ -32,20 +32,15 @@ RATE_METRICS = (
     ("traceable", "Respuestas trazables"),
     ("correct", "Respuestas correctas"),
     ("article_recall", "Recall de articulos esperados"),
-    ("article_precision", "Precision de articulos"),
     ("must_mention_coverage", "Cobertura de puntos clave"),
-    ("support_density", "Densidad de respaldo (proxy)"),
-    ("steps_actionable_rate", "Pasos accionables"),
 )
 COUNT_METRICS = (
+    ("articles_surfaced", "Articulos que ve el usuario"),
+    ("articles_from_text", "Articulos nombrados en el texto"),
     ("hallucinated_explicit", "Articulos inventados por respuesta"),
     ("unattributed_mentions", "Citas sin norma por respuesta"),
-    ("citations", "Citas por respuesta"),
-    ("articles_from_text", "Articulos nombrados en el texto"),
-    ("articles_from_citations", "Articulos aportados por las citas"),
-    ("next_steps", "Pasos sugeridos"),
     ("normative_claims", "Afirmaciones normativas"),
-    ("steps_generic_referral", "Derivaciones institucionales sin causa"),
+    ("citations", "Citas por respuesta"),
 )
 BINARY_METRICS = ("traceable", "correct")
 
@@ -327,15 +322,6 @@ def render(run: Path, rows: list[dict], results: dict) -> str:
     add("Indice Szigriszt-Pazos, escala 0-100: mas alto, mas facil de leer. El salto compara")
     add("**lo que el usuario lee** con el articulado que la respuesta cita: positivo significa")
     add("que la respuesta reestructura la norma en lenguaje mas accesible.\n")
-    gap = (results["arms"].get("full") or {}).get("readability_gap")
-    if gap is not None:
-        add("### Diagnostico: la glosa de cada cita\n")
-        add(f"El `summary_snippet` que acompana a cada cita puntua **{fmt(gap, 1)}** frente al")
-        add("pasaje que resume. Es un artefacto secundario de la interfaz, no el texto que el")
-        add("usuario lee, y el prompt de produccion no le pide lenguaje simple: solo brevedad")
-        add("y pertinencia. Se reporta aparte para no confundirlo con la legibilidad de la")
-        add("respuesta.\n")
-
     add("## Fidelidad de la cita (repeticiones)\n")
     stability_rows = [
         (arm, (results["arms"].get(arm) or {}).get("stability"))
@@ -368,22 +354,6 @@ def render(run: Path, rows: list[dict], results: dict) -> str:
     add("")
     add("Una confianza que no discrimina —HIGH y LOW con la misma tasa de acierto— es")
     add("peor que no declararla: le da al usuario una senal en la que no puede apoyarse.\n")
-
-    add("## Derivacion institucional (seguridad)\n")
-    add("| Brazo | Recall | Precision | Falsos negativos |")
-    add("|---|--:|--:|--:|")
-    for arm in ARM_GRID:
-        summary = results["arms"].get(arm)
-        if not summary or summary.get("specialist_recall") is None:
-            continue
-        add(
-            f"| `{arm}` | {fmt(summary['specialist_recall'])} | "
-            f"{fmt(summary.get('specialist_precision'))} | "
-            f"{fmt(summary.get('specialist_false_negative'))} |"
-        )
-    add("")
-    add("El falso negativo es el caso grave: una consulta con violencia, riesgo o")
-    add("sustraccion de un menor que sale sin derivacion a PNP, CEM o DEMUNA.\n")
 
     add("## Coste y latencia\n")
     add("| Brazo | Latencia p50 | Latencia p95 | Caracteres por respuesta |")

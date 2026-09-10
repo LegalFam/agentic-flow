@@ -100,8 +100,8 @@
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
       "typeVersion": 1.3,
       "position": [
-        -176,
-        2080
+        -208,
+        2096
       ],
       "id": "e1fb94f4-6d04-4114-a6f8-f53a023cc119",
       "name": "Structured Output Parser"
@@ -114,7 +114,7 @@
       "typeVersion": 1,
       "position": [
         -384,
-        2080
+        2096
       ],
       "id": "afe2e2d7-6894-48ad-aa51-668a27d629ee",
       "name": "Google Gemini Chat Model1",
@@ -547,8 +547,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        144,
-        2432
+        464,
+        2352
       ],
       "id": "0c9e4b71-8d32-4a56-bf09-3e175c2a8d64",
       "name": "Build Response Without RAG"
@@ -560,7 +560,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        832,
+        720,
         2288
       ],
       "id": "2b76d0f5-9a41-4e83-8c25-6f0d9b3e714a",
@@ -784,8 +784,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -172,
-        2176
+        224,
+        2432
       ],
       "id": "26042946-0270-454b-b437-b6ab646193fe",
       "name": "Build Response Parser Failure"
@@ -1239,7 +1239,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "fcbf493b-f484-4838-bd9c-a93e1dafcee0",
+  "versionId": "75f365ea-a091-4037-b583-cbd7c64aea58",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "9fce58893f89ad8f33bc95b60bc48529c7919f940f2c626daea4bcdb1ccbb936"
