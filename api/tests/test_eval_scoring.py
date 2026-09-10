@@ -387,3 +387,43 @@ def test_combined_locator_that_overreaches_is_partial(registry):
         registry,
     )
     assert audit["locator_verdict"] == "partial"
+
+
+# --------------------------------------------------------------------------------------
+# Via de aclaracion: no responder no es responder mal
+
+
+def _clarification(message: str) -> dict:
+    record = _record(message, [])
+    record["response"]["agentTokenCost"] = 1
+    return record
+
+
+def test_clarification_answer_is_not_judged_as_incorrect(registry):
+    """El flujo pidio datos en vez de responder: no hay respuesta que juzgar."""
+    row = score.score_record(
+        _clarification("Para orientarte mejor, ¿existe una sentencia previa?"), ITEM, registry
+    )
+    assert row["substantive"] is False
+    assert row["correct"] is None
+    assert row["must_mention_coverage"] is None
+
+
+def test_substantive_answer_is_still_judged(registry):
+    row = score.score_record(
+        _record("La pension se fija en proporcion a las necesidades.", []), ITEM, registry
+    )
+    assert row["substantive"] is True
+    assert row["correct"] is True
+
+
+def test_rates_exclude_unjudgeable_answers_from_the_denominator(registry):
+    """Contarlas como fallo hundiria la metrica por un motivo que no es calidad."""
+    rows = [
+        score.score_record(_record("proporcion y necesidades", []), ITEM, registry),
+        score.score_record(_clarification("¿que edad tiene?"), ITEM, registry),
+    ]
+    summary = score.aggregate(rows)
+    assert summary["correct"] == 1.0
+    assert summary["correct_n"] == 1
+    assert summary["clarification_rate"] == 0.5

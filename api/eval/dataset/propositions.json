@@ -1,0 +1,238 @@
+{
+  "_comentario": [
+    "Que debe transmitir una respuesta para dar por cubierto cada termino de `must_mention`.",
+    "",
+    "Redactadas desde el texto del articulo esperado en `work/corpus/`, SIN mirar las",
+    "respuestas del sistema. Ese orden importa: escribirlas viendo lo que el sistema",
+    "contesto convertiria la metrica en circular —ajustar el examen a lo que el alumno",
+    "respondio— y las cifras dejarian de significar nada.",
+    "",
+    "Pendiente de revision juridica, igual que `expected_articles`."
+  ],
+
+  "alim-001": {
+    "proporción": "El monto se fija en proporción, ponderando ambos lados, y no con una tabla fija",
+    "necesidades": "El juez toma en cuenta lo que el menor necesita para vivir",
+    "posibilidades": "El juez toma en cuenta cuánto puede pagar realmente el obligado"
+  },
+  "alim-002": {
+    "sustento": "Los alimentos cubren la comida y el sustento diario",
+    "habitación": "Los alimentos cubren la vivienda o habitación",
+    "vestido": "Los alimentos cubren la ropa o vestido",
+    "educación": "Los alimentos cubren la educación e instrucción del menor",
+    "salud": "Los alimentos cubren la asistencia médica y la atención de salud"
+  },
+  "alim-003": {
+    "recíprocamente": "La obligación de darse alimentos es recíproca entre los familiares que la ley señala",
+    "ascendientes": "Los ascendientes, como los abuelos, quedan obligados a prestar alimentos",
+    "descendientes": "Los descendientes, como los hijos o nietos, quedan obligados a prestar alimentos"
+  },
+  "alim-004": {
+    "mayor de edad": "Al cumplir los dieciocho años la obligación no termina automáticamente",
+    "estudios": "La obligación subsiste si el hijo sigue con éxito estudios, una profesión u oficio"
+  },
+  "alim-005": {
+    "reducción": "La pensión puede reducirse si cambian las circunstancias",
+    "necesidades": "El ajuste depende de las necesidades del alimentista y de las posibilidades del obligado"
+  },
+  "alim-006": {
+    "exoneración": "El obligado puede pedir que se le exonere de seguir pagando la pensión"
+  },
+  "alim-007": {
+    "juez de paz letrado": "El juez de paz letrado es competente para conocer la demanda de alimentos",
+    "demandante": "La demanda puede presentarse ante el juez del domicilio del demandante, a su elección"
+  },
+  "alim-008": {
+    "asignación anticipada": "Se puede obtener una asignación anticipada de alimentos mientras dura el proceso",
+    "medida cautelar": "Se trata de una medida cautelar que se pide antes de la sentencia"
+  },
+  "alim-009": {
+    "extingue": "La obligación alimentaria se extingue en ese supuesto",
+    "muerte": "La obligación termina con la muerte del obligado o del alimentista"
+  },
+  "ten-001": {
+    "tenencia": "La tenencia determina con cuál de los padres vive el menor",
+    "acuerdo": "Los padres pueden determinarla de común acuerdo",
+    "juez": "A falta de acuerdo la determina el juez"
+  },
+  "ten-002": {
+    "tenencia compartida": "En la tenencia compartida ambos padres asumen el cuidado del menor"
+  },
+  "ten-003": {
+    "opinión": "El juez debe escuchar la opinión del niño y tomar en cuenta la del adolescente"
+  },
+  "ten-004": {
+    "variación": "La tenencia ya fijada puede variarse posteriormente"
+  },
+  "ten-005": {
+    "régimen de visitas": "El padre que no tiene la tenencia puede pedir un régimen de visitas para ver a su hijo"
+  },
+  "ten-006": {
+    "incumplimiento": "El incumplimiento del régimen de visitas da lugar a apremios y puede motivar la variación de la tenencia"
+  },
+  "ten-007": {
+    "parientes": "El régimen de visitas puede extenderse a otros parientes, como los abuelos"
+  },
+  "pp-001": {
+    "patria potestad": "La patria potestad es el conjunto de derechos y deberes de los padres sobre sus hijos menores",
+    "deber": "Comprende el deber de cuidar de la persona y los bienes del hijo y de proveer a su sostenimiento"
+  },
+  "pp-002": {
+    "patria potestad": "Tras el divorcio la patria potestad la ejerce el cónyuge a quien se confían los hijos, y el otro queda suspendido"
+  },
+  "pp-003": {
+    "suspende": "La patria potestad se suspende en los casos que la ley señala"
+  },
+  "pp-004": {
+    "extingue": "La patria potestad se extingue o se pierde en los casos que la ley señala"
+  },
+  "pp-005": {
+    "restitución": "Los padres pueden pedir la restitución de la patria potestad cuando cesa la causa que la motivó"
+  },
+  "vf-001": {
+    "denuncia": "Puede presentarse una denuncia por los hechos de violencia",
+    "medidas de protección": "El juzgado puede dictar medidas de protección a favor de la víctima"
+  },
+  "vf-002": {
+    "medidas de protección": "El juez puede dictar medidas de protección en los procesos por violencia",
+    "retiro del agresor": "Entre las medidas está el retiro del agresor del domicilio y la prohibición de acercarse a la víctima"
+  },
+  "vf-003": {
+    "grupo familiar": "La violencia contra los integrantes del grupo familiar también está protegida por la ley",
+    "psicológica": "La violencia puede ser psicológica, además de física, sexual o económica"
+  },
+  "vf-004": {
+    "setenta y dos horas": "El juzgado debe resolver dentro de las setenta y dos horas siguientes a la denuncia"
+  },
+  "vf-005": {
+    "incumple": "Desobedecer o incumplir una medida de protección tiene consecuencias legales",
+    "delito": "El incumplimiento configura el delito de resistencia o desobediencia a la autoridad"
+  },
+  "vf-006": {
+    "verbalmente": "La denuncia puede presentarse verbalmente, sin necesidad de escrito ni de abogado"
+  },
+  "vf-007": {
+    "grupo familiar": "Están protegidas las mujeres en todo su ciclo de vida y los integrantes del grupo familiar"
+  },
+  "vf-008": {
+    "denuncia": "Puede presentarse una denuncia por los hechos de violencia contra el menor",
+    "protección": "El juzgado puede dictar medidas de protección a favor del menor"
+  },
+  "div-001": {
+    "causales": "La ley enumera causales tasadas para pedir la separación de cuerpos",
+    "adulterio": "El adulterio es una de esas causales"
+  },
+  "div-002": {
+    "divorcio": "El divorcio puede demandarse directamente por las causales que la ley señala",
+    "causales": "Las causales de divorcio son las mismas de la separación de cuerpos, salvo las excluidas"
+  },
+  "div-003": {
+    "disuelve": "El divorcio disuelve el matrimonio",
+    "vínculo": "Lo que se extingue es el vínculo matrimonial"
+  },
+  "div-004": {
+    "seis meses": "Deben transcurrir seis meses desde la sentencia de separación",
+    "disolución": "Después cualquiera de los cónyuges puede pedir que se declare disuelto el vínculo"
+  },
+  "div-005": {
+    "patria potestad": "El juez fija el régimen de ejercicio de la patria potestad sobre los hijos",
+    "alimentos": "El juez fija también los alimentos de los hijos y del cónyuge"
+  },
+  "div-006": {
+    "incapaz": "Si uno de los cónyuges es incapaz por enfermedad mental o ausencia, no ejerce la acción por sí mismo",
+    "ascendientes": "En ese caso la acción puede ejercerla cualquiera de sus ascendientes"
+  },
+  "div-007": {
+    "conciliación": "La conciliación extrajudicial no procede para el divorcio, porque no versa sobre derechos disponibles"
+  },
+  "fil-001": {
+    "presume": "La ley presume la paternidad del marido",
+    "matrimonio": "La presunción alcanza al hijo nacido durante el matrimonio o dentro de los trescientos días siguientes a su disolución"
+  },
+  "fil-002": {
+    "paternidad extramatrimonial": "La paternidad extramatrimonial puede declararse judicialmente",
+    "judicialmente": "Hay que interponer una demanda ante el juez para que la declare"
+  },
+  "fil-003": {
+    "extramatrimoniales": "Son hijos extramatrimoniales los concebidos y nacidos fuera del matrimonio",
+    "fuera del matrimonio": "Se trata de hijos nacidos de una relación no matrimonial"
+  },
+  "fil-004": {
+    "embarazo": "La madre tiene derecho a alimentos durante el embarazo",
+    "parto": "El derecho cubre los sesenta días anteriores y los sesenta posteriores al parto, y los gastos del parto"
+  },
+  "fil-005": {
+    "alimentos": "El hijo extramatrimonial no reconocido puede reclamar una pensión alimenticia a quien tuvo relaciones con la madre en la época de la concepción"
+  },
+  "sg-001": {
+    "bienes propios": "Son bienes propios los que cada cónyuge aportó al matrimonio o adquirió a título gratuito",
+    "bienes sociales": "Son bienes sociales los adquiridos durante el matrimonio por el trabajo de cualquiera de los cónyuges"
+  },
+  "sg-002": {
+    "separación de patrimonios": "Antes de casarse se puede optar por el régimen de separación de patrimonios",
+    "escritura pública": "Hace falta escritura pública e inscripción registral"
+  },
+  "sg-003": {
+    "sustituir": "Durante el matrimonio los cónyuges pueden sustituir un régimen patrimonial por el otro",
+    "registro personal": "El convenio requiere escritura pública e inscripción en el registro personal"
+  },
+  "sg-004": {
+    "fenece": "La sociedad de gananciales termina en los supuestos que la ley señala",
+    "divorcio": "El divorcio es uno de esos supuestos, junto con la separación, la muerte y la declaración de ausencia"
+  },
+  "sg-005": {
+    "sostenimiento de la familia": "Son de cargo de la sociedad el sostenimiento de la familia y la educación de los hijos comunes"
+  },
+  "uh-001": {
+    "unión de hecho": "La convivencia estable puede reconocerse como unión de hecho",
+    "sociedad de gananciales": "La unión de hecho origina una sociedad de bienes sujeta al régimen de sociedad de gananciales",
+    "dos años": "Se exige un mínimo de dos años continuos de convivencia"
+  },
+  "uh-002": {
+    "dos años": "Se exigen al menos dos años continuos de convivencia"
+  },
+  "uh-003": {
+    "indemnización": "Al terminar la unión de hecho por decisión unilateral, el otro puede pedir una indemnización",
+    "alimentos": "Alternativamente puede pedir una pensión de alimentos"
+  },
+  "uh-004": {
+    "unión de hecho": "La unión de hecho se reconoce judicial o notarialmente cuando se cumplen los requisitos legales"
+  },
+  "proc-001": {
+    "conciliación": "Son materia de conciliación las pretensiones sobre derechos disponibles",
+    "disponibles": "Sólo se concilian derechos disponibles de las partes, como alimentos, tenencia o régimen de visitas"
+  },
+  "proc-002": {
+    "requisito de procedibilidad": "La conciliación extrajudicial es un requisito previo para demandar en los casos que la ley señala"
+  },
+  "proc-003": {
+    "sumarísimo": "Esos asuntos se tramitan en la vía del proceso sumarísimo",
+    "alimentos": "Los alimentos se tramitan en proceso sumarísimo"
+  },
+  "proc-004": {
+    "representación": "El padre o la madre ejerce la representación procesal del menor alimentista, aunque sea menor de edad"
+  },
+  "tut-001": {
+    "curatela": "Se nombra un curador para la persona mayor de edad incapaz",
+    "declaración judicial": "Antes hace falta una declaración judicial de interdicción"
+  },
+  "tut-002": {
+    "curatela": "La curatela se instituye para los mayores de edad incapaces y para administrar bienes en los casos que la ley señala"
+  },
+  "tut-003": {
+    "consejo de familia": "Habrá consejo de familia para velar por el menor que no tenga padre ni madre"
+  },
+  "ado-001": {
+    "desprotección familiar": "El procedimiento por desprotección familiar protege al niño cuyos padres no pueden cuidarlo"
+  },
+  "suc-001": {
+    "herederos": "La ley señala quiénes son herederos cuando no hay testamento",
+    "orden": "Los hijos y descendientes son el primer orden, los padres y ascendientes el segundo, y el cónyuge el tercero"
+  },
+  "suc-002": {
+    "unión de hecho": "El conviviente de una unión de hecho reconocida tiene derechos sucesorios semejantes a los del cónyuge"
+  },
+  "gen-003": {
+    "familia": "La regulación jurídica de la familia busca su consolidación y fortalecimiento"
+  }
+}

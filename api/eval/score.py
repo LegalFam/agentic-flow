@@ -19,7 +19,7 @@ from pathlib import Path
 
 from app import corpus, locator
 from app.text_utils import clean_user_text
-from eval import corpus_articles, explainability
+from eval import corpus_articles, explainability, semantic
 from eval.corpus_articles import (
     articles_in_locator,
     build_registry,
@@ -32,6 +32,7 @@ from eval.norms import BY_KEY, normalize_article
 
 EVAL_DIR = Path(__file__).resolve().parent
 DEFAULT_DATASET = EVAL_DIR / "dataset" / "family_law_v1.jsonl"
+DEFAULT_PROPOSITIONS = EVAL_DIR / "dataset" / "propositions.json"
 
 
 # --------------------------------------------------------------------------------------
@@ -217,9 +218,18 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
     surfaced = surfaced_articles(message, citations, registry)
     hit = expected & surfaced["all"]
 
+    # `agentTokenCost: 1` marca las respuestas que salieron por la via de aclaracion: el
+    # flujo pidio datos en vez de responder, sin llegar a recuperar ni a explicar. Ahi la
+    # ausencia de los terminos exigidos no mide una respuesta incompleta, mide que no hubo
+    # respuesta, y contarla como incorrecta mezcla dos cosas distintas.
+    substantive = response.get("agentTokenCost") != 1
+
     folded = deaccent(message)
     must = [term for term in item.get("must_mention", [])]
-    covered = [term for term in must if deaccent(term) in folded]
+    # El dataset puede traer una proposicion por termino; con ella la comparacion es
+    # semantica, sin ella se queda en literal. Ver `eval/semantic.py`.
+    props = item.get("must_mention_propositions") or {}
+    covered = [term for term in must if semantic.mentions(message, term, props.get(term))]
     violations = [term for term in item.get("must_not_mention", []) if deaccent(term) in folded]
 
     audits = [audit_citation(citation, registry) for citation in citations]
@@ -263,7 +273,7 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
         "unattributed_mentions": hallucination.get("unattributed", 0),
         "must_mention_total": len(must),
         "must_mention_covered": len(covered),
-        "must_mention_coverage": (len(covered) / len(must)) if must else None,
+        "must_mention_coverage": (len(covered) / len(must)) if (must and substantive) else None,
         "must_not_violations": len(violations),
         # --- eje XAI
         "citations": len(citations),
@@ -313,8 +323,14 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
         "specialist_false_negative": expects_specialist and not specialist,
         "specialist_false_positive": specialist and not expects_specialist,
         # --- correccion, para la calibracion
-        "correct": hallucination.get("hallucinated_explicit", 0) == 0
-        and (len(covered) / len(must) >= 0.5 if must else True),
+        # Sin respuesta sustantiva no hay nada que juzgar como correcto o incorrecto.
+        "correct": None
+        if not substantive
+        else (
+            hallucination.get("hallucinated_explicit", 0) == 0
+            and (len(covered) / len(must) >= 0.5 if must else True)
+        ),
+        "substantive": substantive,
     }
 
 
@@ -391,7 +407,17 @@ def aggregate(rows: list[dict]) -> dict:
     for field in NUMERIC + COUNTS:
         summary[field] = _mean([row.get(field) for row in answered])
     for field in RATES:
-        summary[field] = sum(1 for row in answered if row.get(field)) / len(answered)
+        # Excluye los `None`: una respuesta que salio por la via de aclaracion no es un
+        # fallo de la metrica, es una respuesta que no se puede juzgar con ella.
+        aplicables = [row for row in answered if row.get(field) is not None]
+        summary[field] = (
+            sum(1 for row in aplicables if row[field]) / len(aplicables) if aplicables else None
+        )
+        summary[f"{field}_n"] = len(aplicables)
+
+    summary["clarification_rate"] = 1 - sum(
+        1 for row in answered if row.get("substantive")
+    ) / len(answered)
 
     summary["latency_p50"] = _percentile([row["latency_ms"] for row in answered], 0.5)
     summary["latency_p95"] = _percentile([row["latency_ms"] for row in answered], 0.95)
@@ -525,7 +551,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Puntua una corrida de la ablacion")
     parser.add_argument("--run", type=Path, required=True, help="Directorio runs/<timestamp>")
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
+    parser.add_argument("--propositions", type=Path, default=DEFAULT_PROPOSITIONS)
+    parser.add_argument(
+        "--semantic",
+        action="store_true",
+        help="Usa las proposiciones para comparar por significado. NO es el modo reportado: "
+        "medido sobre esta corrida satura la cobertura en 1.000 y la metrica deja de "
+        "discriminar. Ver eval/semantic.py.",
+    )
     args = parser.parse_args(argv)
+    if not args.semantic:
+        args.propositions = None
 
     if not args.run.exists():
         print(f"no existe la corrida: {args.run}")
@@ -536,6 +572,19 @@ def main(argv: list[str] | None = None) -> int:
         if line.strip() and not line.startswith("#"):
             item = json.loads(line)
             dataset[item["id"]] = item
+
+    # Las proposiciones viven en su propio fichero: son una capa de interpretacion sobre
+    # el ground truth —que debe transmitir una respuesta para dar por cubierto un
+    # termino— y conviene poder revisarlas y versionarlas aparte de las preguntas.
+    if args.propositions and args.propositions.exists():
+        props = json.loads(args.propositions.read_text(encoding="utf-8"))
+        con = 0
+        for qid, mapping in props.items():
+            if qid.startswith("_") or qid not in dataset:
+                continue
+            dataset[qid]["must_mention_propositions"] = mapping
+            con += 1
+        print(f"proposiciones: {con} preguntas con criterio semantico")
 
     registry = build_registry()
     print(f"corpus : {corpus.corpus_path()} ({len(registry)} normas)")

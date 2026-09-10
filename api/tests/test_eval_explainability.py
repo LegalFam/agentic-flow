@@ -209,3 +209,35 @@ def test_answer_without_citations_is_never_decorative():
 
 def test_single_response_cannot_be_compared():
     assert explainability.stability([_response("una sola", ["Art. 481"])]) is None
+
+
+# --------------------------------------------------------------------------------------
+# Coincidencia semantica
+
+
+def test_literal_match_needs_no_embedding():
+    """Si la palabra esta, el concepto esta: no se gasta una llamada a la API."""
+    from eval import semantic
+
+    assert semantic.mentions("Se fija en proporción a las necesidades", "proporción") is True
+
+
+def test_literal_match_ignores_accents():
+    from eval import semantic
+
+    assert semantic.mentions("Se fija en PROPORCION al ingreso", "proporción") is True
+
+
+def test_without_a_proposition_it_stays_literal():
+    """La comparacion semantica sobre el termino suelto separa mal (margen 0.03 medido),
+    asi que no se aplica: sin proposicion en el dataset, coincidencia literal."""
+    from eval import semantic
+
+    assert semantic.mentions("la obligación recae en los abuelos", "ascendientes") is False
+
+
+def test_sentences_drops_fragments_too_short_to_compare():
+    from eval import semantic
+
+    pieces = semantic.sentences("Sí. El juez fija el monto mirando las necesidades del menor.")
+    assert all(len(p.split()) >= semantic.MIN_WORDS for p in pieces)
