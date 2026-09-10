@@ -241,3 +241,22 @@ def test_sentences_drops_fragments_too_short_to_compare():
 
     pieces = semantic.sentences("Sí. El juez fija el monto mirando las necesidades del menor.")
     assert all(len(p.split()) >= semantic.MIN_WORDS for p in pieces)
+
+
+def test_both_indices_penalise_long_sentences():
+    """Cross-check real: los dos indices tienen que moverse en el mismo sentido.
+
+    Con `F` leido como "frases por 100 palabras", Fernandez-Huerta quedaba invertido y
+    premiaba la frase larga, que es justo el defecto que la metrica busca detectar.
+    """
+    corto = (
+        "El juez mira dos cosas. Primero mira lo que necesita el menor. Despues mira lo "
+        "que puede pagar el padre. Con eso fija el monto de la pension."
+    )
+    largo = (
+        "El juez mira dos cosas, primero mira lo que necesita el menor y despues mira lo "
+        "que puede pagar el padre, y con eso fija el monto de la pension."
+    )
+    a, b = explainability.readability(corto), explainability.readability(largo)
+    assert a["szigriszt"] > b["szigriszt"]
+    assert a["fernandez_huerta"] > b["fernandez_huerta"]

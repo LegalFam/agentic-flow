@@ -88,9 +88,10 @@ def readability(text: str) -> dict | None:
     syllables_per_word = syllables / len(words)
     words_per_sentence = len(words) / sentence_count
 
-    fernandez_huerta = (
-        206.84 - 0.60 * (syllables * 100 / len(words)) - 1.02 * (sentence_count * 100 / len(words))
-    )
+    # F es la longitud media de frase, no "frases por 100 palabras". Con la segunda
+    # lectura el termino queda invertido —una frase de 41 palabras puntuaba 100, lo mas
+    # facil posible, y las frases cortas 89— y el indice deja de medir legibilidad.
+    fernandez_huerta = 206.84 - 0.60 * (syllables * 100 / len(words)) - 1.02 * words_per_sentence
     szigriszt = 206.835 - 62.3 * syllables_per_word - words_per_sentence
 
     return {
@@ -100,6 +101,26 @@ def readability(text: str) -> dict | None:
         "words_per_sentence": round(words_per_sentence, 1),
         "syllables_per_word": round(syllables_per_word, 2),
     }
+
+
+def answer_vs_sources(answer: str, citations: list[dict]) -> float | None:
+    """Cuanto simplifica la respuesta respecto al articulado que cita.
+
+    Es la comparacion que corresponde a la promesa de "reestructurar en lenguaje
+    ciudadano": lo que el usuario lee es la respuesta, no la glosa que acompana a cada
+    cita. Medir solo `summary_snippet` respondia a otra pregunta.
+    """
+    target = readability(answer)
+    if not target:
+        return None
+    fuentes = [
+        r["szigriszt"]
+        for r in (readability(c.get("original_snippet") or "") for c in citations or [])
+        if r
+    ]
+    if not fuentes:
+        return None
+    return round(target["szigriszt"] - sum(fuentes) / len(fuentes), 1)
 
 
 def readability_gap(citations: list[dict]) -> dict | None:

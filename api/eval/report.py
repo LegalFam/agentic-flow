@@ -310,26 +310,31 @@ def render(run: Path, rows: list[dict], results: dict) -> str:
     add("La ubicacion se recalcula sobre el markdown del corpus a partir del pasaje que la")
     add("cita dice haber usado. Una cita bien redactada y mal ubicada cuenta como fallo.\n")
 
-    add("## Comprensibilidad de la explicacion\n")
-    add("| Brazo | Legibilidad de la respuesta | Palabras por frase | Pasaje legal | Resumen | Salto |")
-    add("|---|--:|--:|--:|--:|--:|")
+    add("## Comprensibilidad\n")
+    add("| Brazo | Respuesta | Articulado citado | **Salto** | Palabras por frase |")
+    add("|---|--:|--:|--:|--:|")
     for arm in ARM_GRID:
         summary = results["arms"].get(arm)
         if not summary or not summary.get("answered"):
             continue
         add(
             f"| `{arm}` | {fmt(summary.get('answer_readability'), 1)} | "
-            f"{fmt(summary.get('answer_words_per_sentence'), 1)} | "
             f"{fmt(summary.get('snippet_readability'), 1)} | "
-            f"{fmt(summary.get('summary_readability'), 1)} | "
-            f"{fmt(summary.get('readability_gap'), 1)} |"
+            f"**{fmt(summary.get('answer_vs_sources_gap'), 1)}** | "
+            f"{fmt(summary.get('answer_words_per_sentence'), 1)} |"
         )
     add("")
-    add("Indice Szigriszt-Pazos, escala 0-100: mas alto, mas facil de leer. El salto es")
-    add("cuanto simplifica el resumen de cada cita respecto al pasaje legal que resume, y")
-    add("es la medida directa del trabajo que la capa dice hacer. Un salto cercano a cero")
-    add("significa que el resumen es tan denso como la norma, y entonces no explica nada")
-    add("que el pasaje no dijera ya.\n")
+    add("Indice Szigriszt-Pazos, escala 0-100: mas alto, mas facil de leer. El salto compara")
+    add("**lo que el usuario lee** con el articulado que la respuesta cita: positivo significa")
+    add("que la respuesta reestructura la norma en lenguaje mas accesible.\n")
+    gap = (results["arms"].get("full") or {}).get("readability_gap")
+    if gap is not None:
+        add("### Diagnostico: la glosa de cada cita\n")
+        add(f"El `summary_snippet` que acompana a cada cita puntua **{fmt(gap, 1)}** frente al")
+        add("pasaje que resume. Es un artefacto secundario de la interfaz, no el texto que el")
+        add("usuario lee, y el prompt de produccion no le pide lenguaje simple: solo brevedad")
+        add("y pertinencia. Se reporta aparte para no confundirlo con la legibilidad de la")
+        add("respuesta.\n")
 
     add("## Fidelidad de la cita (repeticiones)\n")
     stability_rows = [

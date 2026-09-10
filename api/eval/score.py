@@ -249,6 +249,7 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
     )
     answer_readability = explainability.readability(message)
     gap = explainability.readability_gap(citations)
+    answer_gap = explainability.answer_vs_sources(message, citations)
 
     return {
         "id": item["id"],
@@ -312,6 +313,10 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
         "snippet_readability": gap["original"] if gap else None,
         "summary_readability": gap["summary"] if gap else None,
         "readability_gap": gap["gap"] if gap else None,
+        # Lo que el usuario lee frente al articulado citado. Es la medida que responde a
+        # si la respuesta reestructura en lenguaje accesible; `readability_gap` mide solo
+        # la glosa de cada cita, que es otra cosa.
+        "answer_vs_sources_gap": answer_gap,
         # --- accionabilidad de los pasos
         "steps_actionable_rate": steps["actionable_rate"],
         "steps_duplicated": steps["duplicated"],
@@ -350,6 +355,7 @@ NUMERIC = (
     "snippet_readability",
     "summary_readability",
     "readability_gap",
+    "answer_vs_sources_gap",
     "steps_actionable_rate",
 )
 COUNTS = (
