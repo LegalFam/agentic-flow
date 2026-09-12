@@ -260,8 +260,11 @@ def find_corpus_path(file_name: str, file_url: str = "") -> Path | None:
         if entry is not None:
             return entry.path
 
+    # En el orden en que aparecen en la cita: recorrer el set de `case_numbers` dejaba la
+    # eleccion entre dos expedientes al orden de hash, distinto en cada proceso.
     index = _case_index()
-    for case in case_numbers(f"{file_name} {file_url}"):
+    for number, year in _CASE_RE.findall(f"{file_name} {file_url}"):
+        case = f"{number.lstrip('0') or '0'}-{year}"
         if case in index:
             return index[case]
     return None

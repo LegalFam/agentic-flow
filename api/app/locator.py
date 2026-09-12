@@ -351,23 +351,30 @@ def _fuzzy_offset(haystack: str, folded_query: str) -> int | None:
     if window < 40:
         return None
 
-    # Anclas: los tokens mas largos del inicio del snippet, que son los mas discriminantes.
-    anchors = sorted(
-        {token for token in folded_query[: window // 2].split(" ") if len(token) >= 7},
-        key=len,
-        reverse=True,
-    )[:5]
+    # Anclas: los tokens del inicio del snippet que menos aparecen en el documento, que son
+    # los que de verdad discriminan. Ordenar solo por largo dejaba los empates al orden de
+    # iteracion del set, que depende de PYTHONHASHSEED: segun el proceso entraban anclas
+    # como "articulo" (miles de apariciones), llenaban el tope de 200 candidatos y la
+    # ventana buena nunca se evaluaba. La misma cita salia con otros articulos en cada
+    # corrida. Frecuencia, largo y texto dejan un orden total.
+    tokens = {token for token in folded_query[: window // 2].split(" ") if len(token) >= 7}
+    ranked = sorted(tokens, key=lambda token: (haystack.count(token), -len(token), token))
+    anchors = [token for token in ranked if token in haystack][:5]
     if not anchors:
         return None
 
-    candidates: list[int] = []
+    candidates: set[int] = set()
     for anchor in anchors:
+        # Cada aparicion del ancla fija donde empezaria el snippet: se alinea con la
+        # posicion del ancla dentro del query, no con un margen fijo que desplaza la
+        # ventana y la hace cruzar al articulo siguiente.
+        shift = folded_query.find(anchor)
         start = 0
         while len(candidates) < 200:
             found = haystack.find(anchor, start)
             if found < 0:
                 break
-            candidates.append(max(0, found - 40))
+            candidates.add(max(0, found - shift))
             start = found + len(anchor)
         if len(candidates) >= 200:
             break
@@ -377,7 +384,8 @@ def _fuzzy_offset(haystack: str, folded_query: str) -> int | None:
     matcher = SequenceMatcher(autojunk=False)
     matcher.set_seq2(folded_query)
 
-    for candidate in candidates:
+    # En orden de posicion y con `>` estricto: a igual parecido gana la primera aparicion.
+    for candidate in sorted(candidates):
         chunk = haystack[candidate : candidate + window]
         matcher.set_seq1(chunk)
         if matcher.real_quick_ratio() < best_ratio or matcher.quick_ratio() < best_ratio:
