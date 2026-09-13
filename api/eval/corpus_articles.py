@@ -129,31 +129,41 @@ class Mention:
     attribution: str = "none"
 
 
-def _nearest_norm(folded: str, start: int, end: int, direction: str) -> str | None:
-    """El alias de norma mas cercano a la cita dentro de la ventana `[start, end)`.
+# Lo unico que puede separar una norma de la cita que la sigue para contar como pegada:
+# "Codigo Civil (Articulo 423)", "Codigo Civil, art. 481". Un punto no vale: detras de un
+# punto empieza otra frase y la norma puede ser de la cita anterior.
+_ADJACENT_BEFORE_GAP_RE = re.compile(r"[\s(\[,:;]*")
+# Una norma que sigue a la cita y va enganchada con "del"/"de la" es suya sin discusion
+# ("art. 5 del Codigo Procesal Civil"), aunque haya otra norma justo antes.
+_ATTACHED_AFTER_GAP_RE = re.compile(r"[\s)\],]*(?:del|de la|de los|de)\s+(?:(?:el|la|los)\s+)?")
+
+
+def _find_alias(window: str, direction: str) -> tuple[int, str, int] | None:
+    """(distancia a la cita, clave de norma, offset del hueco) del alias mas cercano.
 
     Gana el mas cercano y no el ultimo del tramo. Con "el ultimo" una cita se llevaba la
     norma de la frase siguiente: en "art. 92 del Codigo de los Ninos y Adolescentes. El
     art. 9999 del Codigo Civil" la ventana de la primera cita alcanzaba a "Codigo Civil"
     y le atribuia el 92 al codigo equivocado, que es exactamente el error que este modulo
     tiene que detectar y no cometer.
-    """
-    window = folded[start:end]
-    if not window:
-        return None
 
-    best: tuple[int, str] | None = None
+    El offset marca donde empieza el texto entre la cita y el alias dentro de `window`:
+    hacia adelante el hueco es `window[:position]`; hacia atras, `window[offset:]`.
+    """
+    best: tuple[int, str, int] | None = None
     for norm in NORMS:
         for alias in norm.aliases:
-            # Hacia adelante interesa donde empieza el alias; hacia atras, donde termina.
             position = window.find(alias) if direction == "after" else window.rfind(alias)
             if position < 0:
                 continue
-            distance = position if direction == "after" else len(window) - (position + len(alias))
+            if direction == "after":
+                distance, gap = position, position
+            else:
+                gap = position + len(alias)
+                distance = len(window) - gap
             if best is None or distance < best[0]:
-                best = (distance, norm.key)
-
-    return best[1] if best else None
+                best = (distance, norm.key, gap)
+    return best
 
 
 def detect_mentions(text: str) -> list[Mention]:
@@ -176,15 +186,28 @@ def detect_mentions(text: str) -> list[Mention]:
         previous_end = matches[position - 1].end() if position else 0
         next_start = matches[position + 1].start() if position + 1 < len(matches) else len(folded)
 
-        norm_key = _nearest_norm(
-            folded, match.end(), min(next_start, match.end() + _LOOKAHEAD), "after"
+        after_window = folded[match.end() : min(next_start, match.end() + _LOOKAHEAD)]
+        before_window = folded[max(previous_end, match.start() - _LOOKBEHIND) : match.start()]
+        after = _find_alias(after_window, "after") if after_window else None
+        before = _find_alias(before_window, "before") if before_window else None
+
+        # "Codigo Civil (Articulo 423) y el Codigo de los Ninos...": la norma pegada por
+        # delante es la de la cita; la de adelante ya es de la siguiente, pasado el ") y".
+        before_adjacent = before is not None and _ADJACENT_BEFORE_GAP_RE.fullmatch(
+            before_window[before[2] :]
         )
-        attribution = "explicit" if norm_key else "none"
-        if norm_key is None:
-            norm_key = _nearest_norm(
-                folded, max(previous_end, match.start() - _LOOKBEHIND), match.start(), "before"
-            )
-            attribution = "inferred" if norm_key else "none"
+        after_attached = after is not None and _ATTACHED_AFTER_GAP_RE.fullmatch(
+            after_window[: after[2]]
+        )
+
+        if before_adjacent and not after_attached:
+            norm_key, attribution = before[1], "explicit"
+        elif after is not None:
+            norm_key, attribution = after[1], "explicit"
+        elif before is not None:
+            norm_key, attribution = before[1], "inferred"
+        else:
+            norm_key, attribution = None, "none"
 
         for number in _NUMBER_RE.finditer(match.group(1)):
             mentions.append(

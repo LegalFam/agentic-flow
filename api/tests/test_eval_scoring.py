@@ -50,6 +50,27 @@ def test_article_is_attributed_to_the_nearest_norm():
     ]
 
 
+def test_norm_named_before_a_parenthesized_article_wins_over_the_next_norm():
+    mentions = corpus_articles.detect_mentions(
+        "segun lo establecido en el Código Civil (Artículo 423) y el Código de los Niños y "
+        "Adolescentes (Artículo 74)"
+    )
+    assert [(item.article, item.norm_key, item.attribution) for item in mentions] == [
+        ("423", "codigo_civil", "explicit"),
+        ("74", "codigo_ninos_adolescentes", "explicit"),
+    ]
+
+
+def test_forward_norm_still_wins_after_a_sentence_break():
+    mentions = corpus_articles.detect_mentions(
+        "El art. 92 del Codigo de los Ninos y Adolescentes. El art. 9999 del Codigo Civil."
+    )
+    assert [(item.article, item.norm_key, item.attribution) for item in mentions] == [
+        ("92", "codigo_ninos_adolescentes", "explicit"),
+        ("9999", "codigo_civil", "explicit"),
+    ]
+
+
 def test_enumeration_expands_to_every_article():
     mentions = corpus_articles.detect_mentions("Los articulos 472, 474 y 481 del Codigo Civil.")
     assert [item.article for item in mentions] == ["472", "474", "481"]

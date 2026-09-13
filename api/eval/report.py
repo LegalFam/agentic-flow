@@ -27,6 +27,10 @@ ARM_GRID = {
     "base": (False, False),
 }
 
+# Control fuera del 2x2: `no_xai` con permiso para citar dentro de la respuesta. Separa
+# la ablacion de la capa XAI del sesgo de la instruccion de no nombrar fuentes.
+CONTROL_ARM = "no_xai_inline"
+
 # Metricas que se leen como tasa por respuesta.
 RATE_METRICS = (
     ("traceable", "Respuestas trazables"),
@@ -190,22 +194,33 @@ def factorial_table(table: dict[str, dict[str, float]]) -> dict:
     }
 
 
+def arm_mean(table: dict[str, dict[str, float]], arm: str) -> float | None:
+    values = [row[arm] for row in table.values() if arm in row]
+    return statistics.fmean(values) if values else None
+
+
+def contrast(table: dict[str, dict[str, float]], metric: str, left: str, right: str) -> dict | None:
+    """Contraste pareado `left - right`: McNemar si la metrica es binaria, Wilcoxon si no."""
+    pairs = paired(table, left, right)
+    if not pairs:
+        return None
+    if metric in BINARY_METRICS:
+        wins, losses, p_value = mcnemar([(bool(l), bool(r)) for l, r in pairs])
+        result = {"test": "McNemar", "n": len(pairs), "wins": wins, "losses": losses, "p": p_value}
+    else:
+        result = {"test": "Wilcoxon", "n": len(pairs), "p": wilcoxon(pairs)}
+    differences = [l - r for l, r in pairs]
+    result["difference"] = statistics.fmean(differences)
+    result["ci95"] = bootstrap_ci(differences)
+    return result
+
+
 def significance(table: dict[str, dict[str, float]], metric: str) -> dict:
     result = {}
     for label, left, right in (("rag", "full", "no_rag"), ("xai", "full", "no_xai")):
-        pairs = paired(table, left, right)
-        if not pairs:
-            continue
-        if metric in BINARY_METRICS:
-            wins, losses, p_value = mcnemar([(bool(l), bool(r)) for l, r in pairs])
-            result[label] = {"test": "McNemar", "n": len(pairs), "wins": wins, "losses": losses, "p": p_value}
-        else:
-            result[label] = {
-                "test": "Wilcoxon",
-                "n": len(pairs),
-                "p": wilcoxon(pairs),
-            }
-        result[label]["ci95"] = bootstrap_ci([l - r for l, r in pairs])
+        data = contrast(table, metric, left, right)
+        if data is not None:
+            result[label] = data
     return result
 
 
@@ -282,12 +297,41 @@ def render(run: Path, rows: list[dict], results: dict) -> str:
             pairs = paired(table, "full", "no_rag" if axis == "rag" else "no_xai")
             difference = statistics.fmean(l - r for l, r in pairs) if pairs else None
             low, high = data["ci95"]
-            contrast = "full vs no_rag" if axis == "rag" else "full vs no_xai"
+            contrast_label = "full vs no_rag" if axis == "rag" else "full vs no_xai"
             add(
-                f"| {label} | {contrast} | {data['test']} | {data['n']} | {fmt(difference)} | "
+                f"| {label} | {contrast_label} | {data['test']} | {data['n']} | {fmt(difference)} | "
                 f"[{fmt(low)}, {fmt(high)}] | {fmt_p(data['p'])} |"
             )
     add("")
+
+    if (results["arms"].get(CONTROL_ARM) or {}).get("answered"):
+        add(f"## Control de formato: `{CONTROL_ARM}`\n")
+        add("`no_xai` conserva la instruccion de no nombrar fuentes dentro de la respuesta, pero")
+        add(f"se queda sin la interfaz que las muestra. `{CONTROL_ARM}` es el mismo brazo con")
+        add("permiso para citar en el texto. Lo que recupera frente a `no_xai` es sesgo de")
+        add("formato; lo que aun le falta frente a `full` es el aporte propio de la capa XAI.\n")
+        add(
+            f"| Metrica | no_xai | {CONTROL_ARM} | full | Recupera (inline - no_xai) | IC 95% | p "
+            "| Falta (full - inline) | IC 95% | p |"
+        )
+        add("|---|--:|--:|--:|--:|---|--:|--:|---|--:|")
+        for metric, label in RATE_METRICS + COUNT_METRICS:
+            table = pivot(rows, metric)
+            if not table:
+                continue
+            cells = [label] + [fmt(arm_mean(table, arm)) for arm in ("no_xai", CONTROL_ARM, "full")]
+            for left, right in ((CONTROL_ARM, "no_xai"), ("full", CONTROL_ARM)):
+                data = contrast(table, metric, left, right)
+                if data is None:
+                    cells += ["—", "—", "—"]
+                    continue
+                low, high = data["ci95"]
+                cells += [fmt(data["difference"]), f"[{fmt(low)}, {fmt(high)}]", fmt_p(data["p"])]
+            add("| " + " | ".join(cells) + " |")
+        add("")
+        add("`traceable` exige citas estructuradas, que ninguno de los dos brazos sin XAI tiene:")
+        add("en este contraste vale 0 por construccion y no dice nada. La senal esta en los")
+        add("articulos nombrados en el texto y en el recall.\n")
 
     add("## Calidad de las citas (solo brazos con capa XAI)\n")
     add("| Brazo | Citas | Pasaje literal | Con ubicacion | Ubicacion correcta |")

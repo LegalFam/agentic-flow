@@ -26,7 +26,7 @@ cd agentic-flow/api
 **1. Verificar el ground truth contra el corpus** (no gasta tokens, no necesita n8n)
 
 ```bash
-(cd .. && docker compose run --rm -v ./api:/app processing-api python -m eval.corpus_articles --verify-dataset eval/dataset/family_law_v1.jsonl)
+(cd .. && docker compose run --rm -w /app -v ./api:/app processing-api python -m eval.corpus_articles --verify-dataset eval/dataset/family_law_v1.jsonl)
 ```
 
 Sale distinto de cero si algún artículo del dataset no existe en `work/corpus/`. Un
@@ -98,8 +98,11 @@ contestado.
 **6. Puntuar y reportar**
 
 ```bash
-(cd .. && docker compose run --rm -v ./api:/app processing-api python -m eval.score --run eval/runs/<timestamp>)
+(cd .. && docker compose run --rm -w /app -v ./api:/app processing-api python -m eval.score --run eval/runs/<timestamp>)
 ```
+
+El `-w /app` es obligatorio: la imagen de `processing-api` arranca en otro directorio de
+trabajo y, sin él, Python no encuentra el paquete `eval` aunque el volumen esté montado.
 
 ```bash
 python -m eval.report --run eval/runs/<timestamp>
