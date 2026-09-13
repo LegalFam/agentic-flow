@@ -497,7 +497,16 @@ def headings_in_span(index: DocumentIndex, start: int, end: int) -> list[Heading
     if current is not None and start - current.offset <= settings.locator_max_article_span:
         spanned.insert(0, current)
 
-    return spanned
+    # Un articulo modificado aparece dos veces seguidas en el corpus: el texto original y,
+    # tras la nota "Articulo modificado por ...", el vigente. Son el mismo articulo, no un
+    # tramo que cruza dos: citarlo como "Arts. 483 y 483" era el sintoma.
+    seen: set[str] = set()
+    unique: list[Heading] = []
+    for heading in spanned:
+        if heading.label not in seen:
+            seen.add(heading.label)
+            unique.append(heading)
+    return unique
 
 
 def articles_in_span(index: DocumentIndex, start: int, end: int) -> list[str]:

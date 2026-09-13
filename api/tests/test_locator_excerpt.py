@@ -187,6 +187,39 @@ def test_excerpt_that_crosses_parents_is_rejected():
     assert found.is_empty()
 
 
+MODIFICADO = """# Codigo Civil
+
+TITULO I
+ALIMENTOS
+
+**_Articulo 483.-_** _El obligado a prestar alimentos puede pedir que se le exonere de seguir
+prestandolos si disminuyen sus ingresos._
+
+**(*) Articulo modificado por el Articulo 1 de la Ley N 27646, publicada el 23 enero 2002, cuyo texto es el siguiente:**
+
+**Causales de exoneracion de alimentos**
+
+**"Articulo 483.-**
+
+El obligado a prestar alimentos puede pedir que se le exonere si disminuyen sus ingresos, de
+modo que no pueda atenderla sin poner en peligro su propia subsistencia.
+"""
+
+
+def test_excerpt_across_a_modified_article_cites_it_once():
+    """El caso real: el fragmento cruza del texto original del 483 a su version vigente."""
+    index = L.build_index(MODIFICADO)
+    chunk = L.clean_user_text(MODIFICADO)
+    excerpt = (
+        "publicada el 23 enero 2002, cuyo texto es el siguiente: Causales de exoneracion de "
+        "alimentos \"Articulo 483.- El obligado a prestar alimentos puede pedir que se le "
+        "exonere si disminuyen sus ingresos"
+    )
+    found, articles = L.resolve_excerpt_span(index, chunk, excerpt)
+    assert articles == ["Art. 483"]
+    assert found.label == "Art. 483"
+
+
 def test_snippet_regex_fallback_refuses_a_multi_article_excerpt():
     """Sin corpus no hay forma de saber donde termina un articulo: no se elige ninguno."""
     chunk = (
