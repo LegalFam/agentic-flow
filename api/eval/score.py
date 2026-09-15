@@ -147,19 +147,26 @@ def audit_citation(citation: dict, registry: dict) -> dict:
     audit["verbatim"] = position is not None and strategy in ("exact", "prefix")
     audit["match_strategy"] = strategy
 
-    if position is None:
-        return audit
-
-    # Los articulos que cubre el pasaje entero, no solo el de su primer caracter.
+    # Los articulos que cubre el pasaje entero, no solo el de su primer caracter, y en cada
+    # sitio del documento donde aparece.
     #
     # Un fragmento recuperado cruza a menudo dos articulos seguidos, y el sistema lo
     # etiqueta con los dos ("Arts. 478 y 479"), que es lo correcto. Comparar eso contra el
-    # articulo del offset inicial marcaba como fallo 31 de 157 citas que estaban bien, y
-    # convertia una tasa de acierto real del 85% en un 47% inventado por la metrica.
-    start = index.offset_map[position]
-    last = min(position + max(1, len(query)) - 1, len(index.offset_map) - 1)
-    end = index.offset_map[last] + 1
-    expected = {normalize_article(label) for label in locator.articles_in_span(index, start, end)}
+    # articulo del offset inicial marcaba como fallo 31 de 157 citas que estaban bien.
+    #
+    # Todas las apariciones, no la primera: el pasaje se busca sin marcado (el Codigo Civil
+    # esta lleno de `**`), y un texto repetido —el original de un articulo junto a su
+    # version modificada, o la frase "cuyo texto es el siguiente:"— casaba antes por prefijo
+    # en otro articulo y la metrica declaraba mal ubicada una cita correcta. El evaluador no
+    # tiene el chunk para desempatar, asi que acepta cualquiera de las lecturas posibles.
+    readings = [
+        {normalize_article(label) for label in labels}
+        for labels in locator.passage_readings(index, query)
+    ]
+    if position is None and not readings:
+        return audit
+
+    expected = set().union(*readings) if readings else set()
     declared = set(articles_in_locator(reported))
 
     articulated = _has_articles(citation)
@@ -174,7 +181,7 @@ def audit_citation(citation: dict, registry: dict) -> dict:
         audit["locator_verdict"] = "missing"
     elif not expected:
         audit["locator_verdict"] = "unverifiable"
-    elif declared == expected:
+    elif declared in readings:
         audit["locator_verdict"] = "correct"
     elif declared & expected:
         audit["locator_verdict"] = "partial"

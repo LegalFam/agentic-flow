@@ -316,5 +316,6 @@ def test_bulleted_article_heading_is_detected():
         "Es obligación de los padres prestar alimentos a sus hijos.\n"
     )
     index = L.build_index(doc)
-    assert L.resolve(index, "obligación de los padres prestar alimentos").label == "Art. 93º"
-    assert L.resolve(index, "lo necesario para el sustento").label == "Art. 92º"
+    # Sin ordinal: el corpus mezcla "76°" y "77º" y la cita combinada salia con los dos.
+    assert L.resolve(index, "obligación de los padres prestar alimentos").label == "Art. 93"
+    assert L.resolve(index, "lo necesario para el sustento").label == "Art. 92"

@@ -28,7 +28,12 @@ class Settings(BaseSettings):
     locator_require_excerpt_when_ambiguous: bool = True
     # Un excerpt que cruza articulos se cita con todos ellos, no con el primero. Pasado
     # este numero el fragmento ya no ubica nada util y la cita sale sin ubicacion.
-    locator_max_combined_articles: int = 3
+    # En ablacion-v1 los fragmentos reales llegaron a cruzar 4 y 5 articulos consecutivos del
+    # mismo capitulo; con 3 salian sin ubicacion aunque la ubicacion fuera inequivoca.
+    locator_max_combined_articles: int = 5
+    # Fraccion del pasaje que tiene que coincidir, en bloques comunes, para ubicarlo cuando
+    # no casa exacto. Por debajo, el pasaje no se da por verificado.
+    locator_align_min_coverage: float = 0.8
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -174,8 +174,12 @@ def test_excerpt_that_crosses_too_many_articles_is_rejected(index, monkeypatch):
     assert found.is_empty()
 
 
-def test_excerpt_that_crosses_parents_is_rejected():
-    """Cruzar de un titulo a otro ya no ubica nada: mejor una cita sin ubicacion."""
+def test_excerpt_that_crosses_parents_names_every_article_under_the_common_ancestor():
+    """Cruzar de un titulo a otro no vuelve ambigua la etiqueta: nombra los dos articulos.
+
+    El breadcrumb se queda en lo que ambos comparten, que aca es nada. Antes la cita salia
+    sin ubicacion, y en ablacion-v1 eso dejaba sin localizador pasajes inequivocos.
+    """
     index = L.build_index(DOS_TITULOS)
     chunk = L.clean_user_text(DOS_TITULOS)
     excerpt = (
@@ -184,7 +188,8 @@ def test_excerpt_that_crosses_parents_is_rejected():
     )
     found, articles = L.resolve_excerpt_span(index, chunk, excerpt)
     assert articles == ["Art. 472", "Art. 473"]
-    assert found.is_empty()
+    assert found.label == "Arts. 472 y 473"
+    assert found.breadcrumb == "Arts. 472 y 473"
 
 
 MODIFICADO = """# Codigo Civil

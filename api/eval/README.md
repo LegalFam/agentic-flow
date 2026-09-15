@@ -135,7 +135,28 @@ Nada se toma de lo que el sistema declara de sí mismo. Todo se recalcula contra
   documento. Mide si la capa puede sostener lo que dice haber usado.
 - `locator_correctness_rate` — se recalcula el artículo que contiene el pasaje **desde
   cero** sobre el markdown y se compara con el localizador entregado. Una cita bien
-  redactada y mal ubicada cuenta como fallo.
+  redactada y mal ubicada cuenta como fallo. El pasaje se busca sin marcado ni
+  puntuación, en **todos** los sitios donde aparece (el Código Civil repite el texto
+  original de un artículo junto a su versión modificada): la cita es correcta si coincide
+  con alguna de esas lecturas. Con la primera aparición sola, frases repetidas como
+  «cuyo texto es el siguiente:» casaban en otro artículo y la métrica daba por mal ubicada
+  una cita correcta.
+
+**Banco del localizador** (`locator_bench.py`)
+
+`locator_correctness_rate` depende de lo que se recuperó en una corrida. Para medir el
+localizador en sí, sin gastar cuota, el banco fabrica la verdad: corta un chunk y un
+fragmento del markdown real, sabe en qué caracteres está, y le pide al localizador que lo
+ubique a partir del texto. El fragmento se altera como en las citas reales (puntos
+suspensivos, palabras cortadas, puntuación, erratas) y se incluyen negativos que deben
+quedar sin ubicación (fragmentos de fuera del chunk, palabras barajadas).
+
+```bash
+python -m eval.locator_bench --per-document 150 --failures fallos.json
+```
+
+La meta es `partial = wrong = false_acc = 0`. `abstain` no es un fallo: es el localizador
+negándose a adivinar.
 - `traceable` — la respuesta tiene al menos una cita literal y bien ubicada: lo mínimo
   para que el usuario pueda ir a comprobarla.
 - Calibración de `confidenceStatus` contra la corrección real.
