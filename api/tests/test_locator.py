@@ -294,3 +294,39 @@ def test_bulleted_article_heading_is_detected():
     index = L.build_index(doc)
     assert L.resolve(index, "obligación de los padres prestar alimentos").label == "Art. 93"
     assert L.resolve(index, "lo necesario para el sustento").label == "Art. 92"
+
+
+RULING = """## CASACIÓN N° 359-2017 LIMA NORTE
+
+## 5. SENTENCIA DE VISTA
+
+La Sala Superior revocó la sentencia apelada que declaró fundada la demanda de unión de hecho.
+
+## III. RECURSO DE CASACIÓN :
+
+La demandante interpuso recurso de casación por infracción normativa.
+
+## CASACIÓN N° 1189-2018 LIMA
+
+artículo  5° de  la Constitución  Política  del  Estado …,  y  que  guarda concordancia con lo establecido del artículo 326°  del Código Civil.
+
+Artículo 222° , por tanto, las disposiciones sobre interrupción de la prescripción no se aplican.
+"""
+
+
+def test_numbered_sections_and_cited_articles_of_a_ruling_are_not_article_headings():
+    index = L.build_index(RULING)
+    assert index.articles == []
+    for snippet in (
+        "revocó la sentencia apelada que declaró fundada la demanda",
+        "interpuso recurso de casación por infracción normativa",
+        "guarda concordancia con lo establecido del artículo 326",
+        "disposiciones sobre interrupción de la prescripción",
+    ):
+        assert not L.resolve(index, snippet).label.startswith("Art. 5")
+        assert not L.build_locator(index, L.find_offset(index, snippet)[0], "exact").label.startswith("Art.")
+
+
+@pytest.mark.parametrize("heading", ("## Artículo 168º (*)", "## Artículo 231º - A", "Artículo 5°", "Artículo 5°.- Concubinato"))
+def test_article_headings_ending_in_a_degree_sign_are_still_detected(heading):
+    assert L._ARTICULO_RE.match(heading) is not None
