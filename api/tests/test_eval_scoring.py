@@ -24,9 +24,13 @@ def corpus_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "corpus_dir", str(tmp_path))
     corpus.clear_cache()
     corpus_articles.build_registry.cache_clear()
+    corpus_articles._case_index.cache_clear()
+    corpus_articles._stem_index.cache_clear()
     yield tmp_path
     corpus.clear_cache()
     corpus_articles.build_registry.cache_clear()
+    corpus_articles._case_index.cache_clear()
+    corpus_articles._stem_index.cache_clear()
 
 
 @pytest.fixture
@@ -222,6 +226,68 @@ def test_article_reaches_the_user_through_the_text_channel(registry):
     assert row["article_recall"] == 1.0
     assert row["articles_from_text"] == 1
     assert row["traceable"] is False
+
+
+CASACION = """CASACION 3917-2012
+
+El interes superior del nino obliga al juez a escuchar la opinion del menor antes de
+resolver sobre su tenencia, valorandola segun su edad y grado de madurez.
+"""
+
+
+def _jurisprudence_record(corpus_dir) -> dict:
+    (corpus_dir / "cas-3917-2012-c4a5e5796498.md").write_text(CASACION, encoding="utf-8")
+    corpus.clear_cache()
+    citation = _citation("escuchar la opinion del menor antes de resolver sobre su tenencia", "")
+    citation["file_name"] = "cas-3917-2012-c4a5e5796498.md"
+    citation["file_url"] = ""
+    return _record("El juez debe escuchar la opinion del menor.", [citation])
+
+
+def test_verbatim_passage_from_a_short_ruling_is_traceable(corpus_dir, registry):
+    row = score.score_record(_jurisprudence_record(corpus_dir), ITEM, registry)
+    assert row["locator_not_applicable"] == 1
+    assert row["traceable"] is True
+
+
+def test_verbatim_passage_from_a_long_unarticulated_document_is_not_traceable(
+    corpus_dir, registry, monkeypatch
+):
+    monkeypatch.setattr(score, "SHORT_DOCUMENT_CHARS", 10)
+    row = score.score_record(_jurisprudence_record(corpus_dir), ITEM, registry)
+    assert row["locator_not_applicable"] == 1
+    assert row["traceable"] is False
+
+
+def test_snippet_without_the_markdown_markup_is_still_verbatim(corpus_dir, registry):
+    (corpus_dir / "cas-100-2020-abcdef123456.md").write_text(
+        "**Tenencia.-** El juez **debe** escuchar _la opinion_ del menor <!-- image --> antes de resolver.",
+        encoding="utf-8",
+    )
+    corpus.clear_cache()
+    citation = _citation("Tenencia.- El juez debe escuchar la opinion del menor antes de resolver.", "")
+    citation["file_name"] = "cas-100-2020-abcdef123456.md"
+    citation["file_url"] = ""
+    assert score.audit_citation(citation, registry)["verbatim"] is True
+
+
+def test_url_with_an_underscore_before_the_case_number_resolves(corpus_dir):
+    path = corpus_dir / "resolucion-2702-2015-d774954ad154.md"
+    path.write_text("Resolucion corta", encoding="utf-8")
+    found = corpus_articles.find_corpus_path(
+        "VARIACION DE TENENCIA", "https://www.pj.gob.pe/x/Resolucion_2702-2015.pdf?MOD=AJPERES"
+    )
+    assert found == path
+
+
+def test_url_whose_accent_was_lost_at_indexing_resolves_by_stem(corpus_dir):
+    path = corpus_dir / "2012010065001212-0-162544-p-gina-01-f14a482a3303.md"
+    path.write_text("Casacion escaneada", encoding="utf-8")
+    found = corpus_articles.find_corpus_path(
+        "CASACION 1006-2012 CUSCO",
+        "https://www.pj.gob.pe/x/2012010065001212_0_162544_P%C3%A1gina_01.pdf?MOD=AJPERES",
+    )
+    assert found == path
 
 
 def test_answer_without_sources_has_no_traceability(registry):

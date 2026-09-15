@@ -132,7 +132,10 @@ Nada se toma de lo que el sistema declara de sí mismo. Todo se recalcula contra
 **Eje XAI — verificabilidad**
 
 - `verbatim_rate` — proporción de `original_snippet` que se localiza literalmente en el
-  documento. Mide si la capa puede sostener lo que dice haber usado.
+  documento. Mide si la capa puede sostener lo que dice haber usado. La comparación ignora
+  el marcado del markdown (`**`, `_`, `#`, comentarios HTML), la puntuación y los acentos:
+  basta con que las letras y los dígitos de la cita aparezcan seguidos en el documento. Una
+  paráfrasis o un pasaje que se salta texto intermedio siguen sin contar.
 - `locator_correctness_rate` — se recalcula el artículo que contiene el pasaje **desde
   cero** sobre el markdown y se compara con el localizador entregado. Una cita bien
   redactada y mal ubicada cuenta como fallo. El pasaje se busca sin marcado ni
@@ -158,7 +161,10 @@ python -m eval.locator_bench --per-document 150 --failures fallos.json
 La meta es `partial = wrong = false_acc = 0`. `abstain` no es un fallo: es el localizador
 negándose a adivinar.
 - `traceable` — la respuesta tiene al menos una cita literal y bien ubicada: lo mínimo
-  para que el usuario pueda ir a comprobarla.
+  para que el usuario pueda ir a comprobarla. En una resolución o casación sin articulado
+  y de menos de 100 000 caracteres basta con el pasaje literal: el documento es tan corto
+  que se encuentra sin sección. Los plenos y protocolos (124–630 KB) siguen sin contar,
+  porque ahí un pasaje sin ubicar no se puede comprobar a mano.
 - Calibración de `confidenceStatus` contra la corrección real.
 
 **Eje XAI — la explicación en sí** (`explainability.py`)

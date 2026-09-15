@@ -21,6 +21,9 @@ EVAL_DIR = Path(__file__).resolve().parent
 DEFAULT_DATASET = EVAL_DIR / "dataset" / "family_law_v1.jsonl"
 DEFAULT_PROPOSITIONS = EVAL_DIR / "dataset" / "propositions.json"
 
+SHORT_DOCUMENT_CHARS = 100_000
+MIN_VERBATIM_SKELETON_CHARS = 20
+
 
 
 
@@ -68,6 +71,11 @@ def _index_for(citation: dict, registry: dict):
     return corpus.load_index(path) if path is not None else None
 
 
+def _verbatim_in_skeleton(index, snippet: str) -> bool:
+    skeleton = locator.skeletonize(snippet)
+    return len(skeleton) >= MIN_VERBATIM_SKELETON_CHARS and skeleton in index.skeleton
+
+
 def _has_articles(citation: dict) -> bool:
     norm_key = norm_of_document(citation.get("file_name", ""), citation.get("file_url", ""))
     norm = BY_KEY.get(norm_key) if norm_key else None
@@ -92,9 +100,12 @@ def audit_citation(citation: dict, registry: dict) -> dict:
         return audit
 
     audit["document_resolved"] = True
+    audit["short_document"] = len(index.base) <= SHORT_DOCUMENT_CHARS
     query = clean_user_text(snippet)
     position, strategy = locator.find_in_folded(index.folded, query)
-    audit["verbatim"] = position is not None and strategy in ("exact", "prefix")
+    audit["verbatim"] = (
+        position is not None and strategy in ("exact", "prefix")
+    ) or _verbatim_in_skeleton(index, snippet)
     audit["match_strategy"] = strategy
 
     readings = [
@@ -126,6 +137,14 @@ def audit_citation(citation: dict, registry: dict) -> dict:
     return audit
 
 
+
+
+def _traceable(audit: dict) -> bool:
+    if not audit["verbatim"]:
+        return False
+    if audit["locator_verdict"] == "correct":
+        return True
+    return audit["locator_verdict"] == "not_applicable" and audit.get("short_document", False)
 
 
 def cited_article_texts(citations: list[dict], registry: dict) -> list[str]:
@@ -216,9 +235,7 @@ def score_record(record: dict, item: dict, registry: dict) -> dict:
         ),
         "locator_scopes": Counter(audit["locator_scope"] for audit in audits if audit["locator_scope"]),
         "locator_sources": Counter(audit["locator_source"] for audit in audits if audit["locator_source"]),
-        "traceable": any(
-            audit["verbatim"] and audit["locator_verdict"] == "correct" for audit in audits
-        ),
+        "traceable": any(_traceable(audit) for audit in audits),
         "citation_support_status": response.get("citationSupportStatus"),
         "confidence_status": response.get("confidenceStatus"),
         "next_steps": len(response.get("nextSteps") or []),

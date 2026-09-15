@@ -6,6 +6,7 @@ import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from app import corpus, locator
 from eval.norms import NORMS, Norm, normalize_article
@@ -193,12 +194,31 @@ def find_corpus_path(file_name: str, file_url: str = "") -> Path | None:
         if entry is not None:
             return entry.path
 
+    by_stem = _stem_index().get(_stem_key(Path(urlparse(file_url).path).stem)) if file_url else None
+    if by_stem is not None:
+        return by_stem
+
+    searchable = f"{file_name} {unquote(file_url)}".replace("_", " ")
     index = _case_index()
-    for number, year in _CASE_RE.findall(f"{file_name} {file_url}"):
+    for number, year in _CASE_RE.findall(searchable):
         case = f"{number.lstrip('0') or '0'}-{year}"
         if case in index:
             return index[case]
     return None
+
+
+_DOCUMENT_HASH_RE = re.compile(r"-[0-9a-f]{12}$")
+
+
+def _stem_key(stem: str) -> str:
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]", "-", unquote(stem).lower())).strip("-")
+
+
+@lru_cache(maxsize=1)
+def _stem_index() -> dict[str, Path]:
+    return {
+        _stem_key(_DOCUMENT_HASH_RE.sub("", path.stem)): path for path in corpus.iter_corpus_files()
+    }
 
 
 def articles_in_locator(label: str) -> list[str]:
