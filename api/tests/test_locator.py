@@ -47,14 +47,12 @@ def index():
     return L.build_index(CODIGO)
 
 
-# --- mapa de offsets -------------------------------------------------------------
 
 def test_collapse_maps_back_to_base_positions():
     base = "Articulo 1.-\n\n   Texto   con    espacios\n"
     collapsed, offsets = L.collapse_with_map(base)
     assert collapsed == "Articulo 1.- Texto con espacios"
     assert len(collapsed) == len(offsets)
-    # Cada indice colapsado debe apuntar al mismo caracter en el texto base.
     for position, char in enumerate(collapsed):
         if char != " ":
             assert base[offsets[position]] == char
@@ -73,7 +71,6 @@ def test_collapse_handles_empty_document():
 
 
 def test_offset_map_is_a_compact_array():
-    """list[int] costaba ~36 bytes por caracter; array('i') cuesta 4."""
     from array import array
 
     _, offsets = L.collapse_with_map("Articulo 1.- texto")
@@ -86,7 +83,6 @@ def test_fold_preserves_length():
     assert len(L.fold(text)) == len(text)
 
 
-# --- deteccion de encabezados ----------------------------------------------------
 
 def test_detects_full_legal_hierarchy(index):
     kinds = [heading.kind for heading in index.headings]
@@ -95,7 +91,6 @@ def test_detects_full_legal_hierarchy(index):
 
 
 def test_two_line_heading_keeps_the_number(index):
-    # "TITULO V" + "DISPOSICIONES GENERALES" es un solo encabezado, no dos del mismo nivel.
     titulos = [h.label for h in index.headings if h.kind == "titulo"]
     assert "Titulo V - Disposiciones generales" in titulos
 
@@ -116,7 +111,6 @@ def test_detects_ocr_page_markers():
     assert pages == [1, 12]
 
 
-# --- cascada de resolucion -------------------------------------------------------
 
 def test_exact_match(index):
     found = L.resolve(index, "Son causas de separacion de cuerpos: 1. El adulterio.")
@@ -125,7 +119,6 @@ def test_exact_match(index):
 
 
 def test_match_across_line_breaks(index):
-    # El snippet llega con el whitespace ya colapsado; el markdown tiene saltos de linea.
     found = L.resolve(index, "suspende los deberes relativos al lecho y habitacion y pone fin al regimen")
     assert found.source == "exact"
     assert found.label == "Art. 332"
@@ -149,7 +142,6 @@ def test_fuzzy_match_tolerates_small_drift(index):
 
 
 def test_higher_level_heading_closes_lower_ones(index):
-    # Art. 340 esta bajo TITULO V, no debe arrastrar el CAPITULO PRIMERO del titulo anterior.
     found = L.resolve(index, "Al declararse la separacion se aplica lo dispuesto en este titulo.")
     assert "Titulo V" in found.breadcrumb
     assert "Capitulo Primero" not in found.breadcrumb
@@ -180,7 +172,6 @@ def test_empty_snippet_is_safe(index):
     assert L.resolve(index, "    ").is_empty()
 
 
-# --- fallback sin corpus ---------------------------------------------------------
 
 def test_snippet_regex_fallback_without_index():
     found = L.resolve(None, "Articulo 333.- Son causas de separacion de cuerpos.")
@@ -207,14 +198,11 @@ def test_far_away_article_is_not_attributed(monkeypatch):
 
     monkeypatch.setattr(settings, "locator_max_article_span", 50)
     index = L.build_index(OCR)
-    # El texto de la pagina 12 esta a mas de 50 caracteres del encabezado del articulo.
     found = L.resolve(index, "a las posibilidades del que debe darlos.")
     assert found.label != "Art. 481"
 
 
 def test_markdown_heading_is_labelled_apart():
-    """En resoluciones sin articulado el encabezado markdown no es una ubicacion juridica:
-    se devuelve, pero etiquetado para que el consumidor pueda descartarlo."""
     resolucion = (
         "# Casacion 864-2014 Ica\n\n"
         "## Impugnacion de reconocimiento de paternidad\n\n"
@@ -228,15 +216,11 @@ def test_markdown_heading_is_labelled_apart():
 
 
 def test_legal_hierarchy_keeps_its_own_source(index):
-    # Un documento con articulado conserva la estrategia de busqueda como source.
     found = L.resolve(index, "Son causas de separacion de cuerpos: 1. El adulterio.")
     assert found.source == "exact"
 
 
 def test_bold_italic_article_heading_is_detected():
-    """El Codigo Civil real usa "**_Articulo 333.- ...". Cuando el patron solo aceptaba
-    asteriscos, 223 articulos quedaban invisibles y su texto se atribuia al articulo
-    anterior: un error de una unidad, con total confianza."""
     doc = (
         "**Artículo 332.-**\n\n"
         "La separación de cuerpos suspende los deberes relativos al lecho y habitación.\n\n"
@@ -256,14 +240,11 @@ def test_article_number_with_spaced_letter_suffix():
 
 
 def test_prose_reference_to_an_article_is_still_not_a_heading():
-    """Ampliar el enfasis no debe convertir una cita en prosa en un encabezado."""
     for prose in (
         "Artículo 326 del Código Civil.",
         "_artículo 402, inciso 4, cuando fueren varios los autores._",
         "**Artículo 2 de la Resolución N°**",
         "artículo 44 en los numerales 4 al 7 sin declaración judicial.",
-        # Las mismas referencias en prosa, ahora con las decoraciones que el prefijo
-        # aprendio a aceptar: lo que las deja fuera es el separador, no el prefijo.
         "\"Artículo 23 de este Código.\"",
         "“artículo 8, de conformidad con la ley de la materia” .",
         "- Artículo 310, en lo que fuera aplicable.",
@@ -273,9 +254,6 @@ def test_prose_reference_to_an_article_is_still_not_a_heading():
 
 
 def test_quoted_article_heading_is_detected():
-    """El texto unico ordenado transcribe entre comillas los articulos sustituidos por
-    leyes posteriores. Con el prefijo antiguo esos 595 encabezados se perdian y su texto
-    pasaba a colgar del articulo anterior: el Art. 345-A del Codigo Civil se leia como 345."""
     doc = (
         "**Artículo 345.- Patria potestad en separación convencional**\n\n"
         "En caso de separación convencional el juez fija el régimen.\n\n"
@@ -301,12 +279,10 @@ def test_quoted_article_heading_is_detected():
     ),
 )
 def test_decorated_article_headings_from_the_corpus(heading):
-    """Formas reales del corpus, una por documento de origen."""
     assert L._ARTICULO_RE.match(heading) is not None
 
 
 def test_bulleted_article_heading_is_detected():
-    """El Codigo de los Ninos y Adolescentes numera con vineta y pone el nombre debajo."""
     doc = (
         "- Artículo 92º\n\n"
         "## Definición\n\n"
@@ -316,6 +292,5 @@ def test_bulleted_article_heading_is_detected():
         "Es obligación de los padres prestar alimentos a sus hijos.\n"
     )
     index = L.build_index(doc)
-    # Sin ordinal: el corpus mezcla "76°" y "77º" y la cita combinada salia con los dos.
     assert L.resolve(index, "obligación de los padres prestar alimentos").label == "Art. 93"
     assert L.resolve(index, "lo necesario para el sustento").label == "Art. 92"

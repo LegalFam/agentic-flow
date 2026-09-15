@@ -29,7 +29,6 @@ def test_repairs_mojibake_roundtrip():
 
 
 def test_leaves_clean_text_untouched():
-    # El guard de la funcion evita tocar texto que no tiene marcadores de mojibake.
     assert repair_mojibake("Sección Segunda") == "Sección Segunda"
 
 

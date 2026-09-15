@@ -1,20 +1,3 @@
-"""Cruza los documentos indexados en un File Search Store contra el corpus local.
-
-La llave de union del citation locator es el nombre del archivo: la API sube con
-`display_name=filename` y Gemini devuelve ese mismo valor en `retrieved_context.title`.
-Si los markdown del corpus fueron renombrados respecto a lo indexado, nada casa y el
-locator cae siempre al fallback por regex.
-
-Este script responde tres preguntas antes de copiar nada:
-  - que documentos hay realmente en el store
-  - cuales de esos resuelven contra el corpus local
-  - que entradas de manifest harian falta para los que no
-
-    python -m app.corpus_diff --list-stores
-    python -m app.corpus_diff --store "fileSearchStores/familylaw-k3uggnk7czvu"
-    python -m app.corpus_diff --store "..." --write-manifest
-"""
-
 import argparse
 import difflib
 import json
@@ -23,7 +6,6 @@ import sys
 from app import corpus
 from app.config import settings
 
-# Umbral alto: una sugerencia equivocada en el manifest es peor que ninguna.
 SUGGESTION_CUTOFF = 0.72
 
 
@@ -60,11 +42,6 @@ def _load_store_registry() -> dict:
 
 
 def store_documents(client, store: str) -> dict[str, int]:
-    """display_name -> size_bytes del markdown que se subio.
-
-    El tamano confirma que el archivo local es la misma revision indexada, no solo que
-    el nombre coincide.
-    """
     documents = {}
     for document in client.file_search_stores.documents.list(parent=store):
         display = getattr(document, "display_name", "") or ""
@@ -74,7 +51,6 @@ def store_documents(client, store: str) -> dict[str, int]:
 
 
 def compare_size(path, expected: int) -> tuple[str, str]:
-    """Devuelve (estado, detalle). Distingue contenido distinto de un simple CRLF."""
     try:
         raw = path.read_bytes()
     except OSError as exc:
@@ -83,7 +59,6 @@ def compare_size(path, expected: int) -> tuple[str, str]:
     if len(raw) == expected:
         return "ok", ""
 
-    # Un checkout en Windows pudo convertir los saltos de linea sin tocar el texto.
     if len(raw.replace(b"\r\n", b"\n")) == expected:
         return "crlf", f"{len(raw)} en disco vs {expected} indexados (solo saltos de linea)"
 
@@ -188,8 +163,6 @@ def main(argv: list[str] | None = None) -> int:
 
     suggestions: dict[str, str] = {}
     if unmatched:
-        # Comparar sobre el stem sin hash: los hashes se parecen entre si y generan
-        # sugerencias espurias.
         keys = {
             corpus.normalize_key(corpus.strip_document_id_hash(name.rsplit(".", 1)[0])): name
             for name in corpus_names

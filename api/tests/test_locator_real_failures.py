@@ -1,16 +1,6 @@
-"""Los mecanismos de las citas mal ubicadas de ablacion-v1, uno por test.
-
-En esa corrida el 17.1% de las citas ubicables no apuntaba al articulo correcto. Ninguna
-cita estaba inventada: el pasaje era real y el articulo estaba mal. Replicando cada cita
-con el chunk real que devolvio File Search (recuperado de las ejecuciones de n8n) las
-causas fueron siempre alguna de estas.
-"""
-
 from app import locator as L
 from app.config import settings
 
-# El chunk de File Search trae el marcado del markdown; el excerpt del agente, no. Buscar el
-# excerpt literal fallaba, el respaldo por prefijo casaba corrido y cruzaba de articulo.
 CODIGO = """**TITULO I**
 
 **Alimentos**
@@ -45,7 +35,6 @@ def test_plain_excerpt_is_located_against_a_chunk_with_markup():
 
 
 def test_excerpt_ending_at_the_article_boundary_does_not_take_the_next_article():
-    """alim-002, vf-005, tut-001: el pasaje terminaba justo donde empieza "**Articulo N+1"."""
     excerpt = (
         "El mayor de dieciocho años sólo tiene derecho a alimentos cuando no se encuentre en "
         "aptitud de atender a su subsistencia por causas de incapacidad física o mental."
@@ -68,8 +57,6 @@ def test_sumilla_above_the_article_belongs_to_it():
     assert found.label == "Art. 472"
 
 
-# El texto original de un articulo y su version modificada son casi identicos. div-003 salio
-# "Art. 350" para el Art. 348 por un desfase acumulado del respaldo por prefijo.
 MODIFICADO = """**Artículo 348.-  El divorcio disuelve el vínculo del matrimonio.**
 
 **_Artículo 349.- Puede demandarse el divorcio por las causales señaladas en el artículo 333, incisos 1 al 10.(*)_**
@@ -93,8 +80,6 @@ def test_short_heading_excerpt_in_a_chunk_with_a_duplicated_article():
 
 
 def test_passage_repeated_in_two_articles_cannot_be_attributed_by_the_evaluator_to_the_wrong_one():
-    """La frase "cuyo texto es el siguiente" aparece mil veces: el recalculo no puede usar la
-    primera aparicion y declarar mal ubicada una cita correcta."""
     index = L.build_index(MODIFICADO)
     readings = L.passage_readings(
         index, "Puede demandarse el divorcio por las causales señaladas en el artículo 333"
@@ -104,7 +89,6 @@ def test_passage_repeated_in_two_articles_cannot_be_attributed_by_the_evaluator_
 
 
 def test_numbers_are_never_matched_approximately():
-    """Concordancias del Codigo Procesal Civil: la misma frase con otro numero de casacion."""
     doc = (
         "**Artículo 58.- Texto del artículo cincuenta y ocho sobre la representación procesal.**\n\n"
         "CONCORDANCIAS AL ARTÍCULO 58 DEL CÓDIGO PROCESAL CIVIL SENTENCIA EN CASACIÓN DE LA "
@@ -141,8 +125,6 @@ def test_excerpt_with_an_ellipsis_is_located_by_both_ends():
     assert found.label == "Art. 472"
 
 
-# ten-005: la nota de modificacion debajo del capitulo se tomaba por su nombre, y el mismo
-# CAPITULO II quedaba con dos breadcrumbs: la cita de los Arts. 84 y 85 salia sin ubicacion.
 NINOS = """## CAPÍTULO II TENENCIA DEL NIÑO Y DEL ADOLESCENTE
 
 ## Artículo 84º
@@ -179,7 +161,6 @@ def test_modification_note_is_not_taken_as_the_chapter_name():
 
 
 def test_wrapped_prose_line_is_not_a_structural_heading():
-    """suc-001: "disposición que lo instituye." cerraba el articulo a media frase."""
     doc = (
         "**Artículo 816.- Son herederos del primer orden los hijos, salvo lo previsto en la\n"
         "disposición que lo instituye.**\n\n"
@@ -193,7 +174,6 @@ def test_wrapped_prose_line_is_not_a_structural_heading():
 
 
 def test_titulo_in_the_sense_of_a_deed_is_not_a_structural_heading():
-    """Libro de Registros Publicos: "Titulo" es el documento que se inscribe."""
     doc = (
         "**Artículo 2011.- Los registradores califican la legalidad de los documentos.**\n\n"
         "**Titulo que da mérito a la inscripción**\n\n"

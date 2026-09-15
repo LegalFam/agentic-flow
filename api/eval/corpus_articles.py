@@ -1,19 +1,3 @@
-"""Registro de que articulos existen realmente en el corpus, y detector de los que se citan.
-
-Dos usos, y el mismo registro sirve a los dos:
-
-1. Verificar el ground truth. Un dataset cuyos `expected_articles` no existen en el corpus
-   mide el error del dataset, no el del sistema. `--verify-dataset` sale distinto de cero
-   si alguno no existe.
-2. Medir alucinacion normativa. Una respuesta que dice "articulo 1481 del Codigo Civil"
-   se puede contrastar contra el articulado real: si el numero no existe, esta inventado.
-   Es la metrica que separa el brazo con recuperacion del que responde de memoria.
-
-    python -m eval.corpus_articles                       # resumen del registro
-    python -m eval.corpus_articles --list codigo_civil   # articulos de una norma
-    python -m eval.corpus_articles --verify-dataset eval/dataset/family_law_v1.jsonl
-"""
-
 import argparse
 import json
 import re
@@ -28,8 +12,6 @@ from eval.norms import NORMS, Norm, normalize_article
 
 
 def deaccent(text: str) -> str:
-    """Para comparar contra los alias: el corpus perdio acentos al convertir el PDF y el
-    modelo los escribe o no segun el dia."""
     decomposed = unicodedata.normalize("NFD", text.lower())
     return "".join(char for char in decomposed if unicodedata.category(char) != "Mn")
 
@@ -39,7 +21,6 @@ class NormIndex:
     norm: Norm
     path: Path
     index: locator.DocumentIndex
-    # articulo normalizado -> (offset de inicio, offset de fin) en coordenadas base
     articles: dict[str, tuple[int, int]]
 
     def has(self, article: str) -> bool:
@@ -53,12 +34,6 @@ class NormIndex:
 
 
 def _article_spans(index: locator.DocumentIndex) -> dict[str, tuple[int, int]]:
-    """Cada articulo va desde su encabezado hasta el siguiente encabezado, del nivel que sea.
-
-    Se corta en cualquier encabezado estructural y no solo en el siguiente articulo: el
-    texto que sigue a un "TITULO III" ya no pertenece al ultimo articulo del titulo
-    anterior, y darselo ensancharia el tramo hasta el absurdo.
-    """
     boundaries = sorted(
         heading.offset
         for heading in index.headings
@@ -70,8 +45,6 @@ def _article_spans(index: locator.DocumentIndex) -> dict[str, tuple[int, int]]:
             continue
         key = normalize_article(heading.label)
         if key in spans:
-            # Un articulo repetido (el indice del codigo al inicio del documento, o un
-            # encabezado duplicado por el OCR): manda la primera aparicion.
             continue
         end = next((offset for offset in boundaries if offset > heading.offset), len(index.base))
         spans[key] = (heading.offset, end)
@@ -80,7 +53,6 @@ def _article_spans(index: locator.DocumentIndex) -> dict[str, tuple[int, int]]:
 
 @lru_cache(maxsize=1)
 def build_registry() -> dict[str, NormIndex]:
-    """Norma -> su articulado. Solo las normas que la tabla `NORMS` sabe nombrar."""
     files = corpus.iter_corpus_files()
     registry: dict[str, NormIndex] = {}
 
@@ -88,8 +60,6 @@ def build_registry() -> dict[str, NormIndex]:
         matches = [path for path in files if norm.stem_contains in path.stem.lower()]
         if not matches:
             continue
-        # Si hay mas de uno (una version vieja que no se borro), gana el mas grande: el
-        # truncado por un fallo de conversion nunca es el bueno.
         path = max(matches, key=lambda candidate: candidate.stat().st_size)
         index = corpus.load_index(path)
         if index is None:
@@ -101,8 +71,6 @@ def build_registry() -> dict[str, NormIndex]:
     return registry
 
 
-# "articulo 481", "art. 4-A", "arts. 481, 482 y 483". El grupo de numeros se captura
-# entero para poder desplegar las enumeraciones despues.
 _MENTION_RE = re.compile(
     r"\bart(?:iculos?|s?\.|\b)\s*"
     r"((?:\d+(?:\s?[-–]\s?[a-z])?[°º]?)"
@@ -111,8 +79,6 @@ _MENTION_RE = re.compile(
 )
 _NUMBER_RE = re.compile(r"\d+(?:\s?[-–]\s?[a-z])?[°º]?", re.IGNORECASE)
 
-# Cuanto texto se mira despues de la mencion para encontrar la norma ("... del Codigo
-# Civil"), y cuanto hacia atras si ahi no aparece.
 _LOOKAHEAD = 90
 _LOOKBEHIND = 320
 
@@ -123,33 +89,14 @@ class Mention:
     norm_key: str | None
     raw: str
     position: int
-    # `explicit`: la norma va pegada a la cita ("art. 481 del Codigo Civil").
-    # `inferred` : se arrastro de la frase anterior ("Segun el Codigo Civil, el art. 481").
-    # `none`     : el texto nunca dijo de que norma habla.
     attribution: str = "none"
 
 
-# Lo unico que puede separar una norma de la cita que la sigue para contar como pegada:
-# "Codigo Civil (Articulo 423)", "Codigo Civil, art. 481". Un punto no vale: detras de un
-# punto empieza otra frase y la norma puede ser de la cita anterior.
 _ADJACENT_BEFORE_GAP_RE = re.compile(r"[\s(\[,:;]*")
-# Una norma que sigue a la cita y va enganchada con "del"/"de la" es suya sin discusion
-# ("art. 5 del Codigo Procesal Civil"), aunque haya otra norma justo antes.
 _ATTACHED_AFTER_GAP_RE = re.compile(r"[\s)\],]*(?:del|de la|de los|de)\s+(?:(?:el|la|los)\s+)?")
 
 
 def _find_alias(window: str, direction: str) -> tuple[int, str, int] | None:
-    """(distancia a la cita, clave de norma, offset del hueco) del alias mas cercano.
-
-    Gana el mas cercano y no el ultimo del tramo. Con "el ultimo" una cita se llevaba la
-    norma de la frase siguiente: en "art. 92 del Codigo de los Ninos y Adolescentes. El
-    art. 9999 del Codigo Civil" la ventana de la primera cita alcanzaba a "Codigo Civil"
-    y le atribuia el 92 al codigo equivocado, que es exactamente el error que este modulo
-    tiene que detectar y no cometer.
-
-    El offset marca donde empieza el texto entre la cita y el alias dentro de `window`:
-    hacia adelante el hueco es `window[:position]`; hacia atras, `window[offset:]`.
-    """
     best: tuple[int, str, int] | None = None
     for norm in NORMS:
         for alias in norm.aliases:
@@ -167,17 +114,6 @@ def _find_alias(window: str, direction: str) -> tuple[int, str, int] | None:
 
 
 def detect_mentions(text: str) -> list[Mention]:
-    """Articulos citados en el texto de una respuesta, con la norma a la que se atribuyen.
-
-    La norma se busca primero hacia adelante ("articulo 481 del Codigo Civil") y, si no
-    aparece, hacia atras, que es como queda en una enumeracion ("Segun el Codigo Civil,
-    los articulos 481 y 482..."). Las dos ventanas se cortan en la cita vecina: el texto
-    que ya pertenece a otra cita no puede prestarle su norma a esta.
-
-    Sin norma, la mencion queda con `norm_key=None`; con norma arrastrada de atras, queda
-    marcada como `inferred`. Las tres clases se cuentan por separado porque solo la
-    explicita permite afirmar sin discusion que un articulo esta inventado.
-    """
     folded = deaccent(text)
     matches = list(_MENTION_RE.finditer(folded))
     mentions: list[Mention] = []
@@ -191,8 +127,6 @@ def detect_mentions(text: str) -> list[Mention]:
         after = _find_alias(after_window, "after") if after_window else None
         before = _find_alias(before_window, "before") if before_window else None
 
-        # "Codigo Civil (Articulo 423) y el Codigo de los Ninos...": la norma pegada por
-        # delante es la de la cita; la de adelante ya es de la siguiente, pasado el ") y".
         before_adjacent = before is not None and _ADJACENT_BEFORE_GAP_RE.fullmatch(
             before_window[before[2] :]
         )
@@ -224,13 +158,6 @@ def detect_mentions(text: str) -> list[Mention]:
 
 
 def norm_of_document(file_name: str, file_url: str = "") -> str | None:
-    """A que norma corresponde el documento que la cita dice haber usado.
-
-    Hace falta porque una cita trae el nombre del documento, no la clave de la norma, y
-    sin esa traduccion no se puede comparar "Art. 481" de una cita contra el ground truth.
-    Se prueba por alias (como lo escribe el metadato del corpus) y por el nombre de
-    fichero, que es lo unico estable cuando el titulo viene con los acentos rotos.
-    """
     haystack = deaccent(f"{file_name} {file_url}")
     for norm in NORMS:
         if norm.stem_contains.replace("-", " ") in haystack.replace("-", " "):
@@ -240,20 +167,10 @@ def norm_of_document(file_name: str, file_url: str = "") -> str | None:
     return None
 
 
-# "CASACION N° 3496 - 2016", "1189-2018", "000588-2016", "CASACION N° 588 2016".
-# El año se acota a 19xx/20xx porque el separador tambien puede ser un espacio: con
-# `\d{4}` a secas, un "articulo 472 2016" cualquiera habria pasado por expediente.
 _CASE_RE = re.compile(r"\b(\d{1,6})\s*(?:[-–]\s*|\s+)((?:19|20)\d{2})\b")
 
 
 def case_numbers(text: str) -> set[str]:
-    """Expedientes citados en un texto, normalizados a `numero-año` sin ceros a la izquierda.
-
-    El corpus guarda la jurisprudencia por numero de expediente ("3023-2017-<hash>.md",
-    "resolucion-001532-2013-patty-<hash>.md") mientras que la cita la nombra por su
-    caratula ("CASACION 3023-2017 LIMA TENENCIA Y CUSTODIA"). El numero es lo unico que
-    aparece igual en los dos sitios.
-    """
     found = set()
     for number, year in _CASE_RE.findall(text or ""):
         found.add(f"{number.lstrip('0') or '0'}-{year}")
@@ -262,7 +179,6 @@ def case_numbers(text: str) -> set[str]:
 
 @lru_cache(maxsize=1)
 def _case_index() -> dict[str, Path]:
-    """Expediente -> fichero del corpus. Solo para la jurisprudencia."""
     index: dict[str, Path] = {}
     for path in corpus.iter_corpus_files():
         for case in case_numbers(path.stem):
@@ -271,20 +187,12 @@ def _case_index() -> dict[str, Path]:
 
 
 def find_corpus_path(file_name: str, file_url: str = "") -> Path | None:
-    """El fichero del corpus que respalda una cita, sea norma o jurisprudencia.
-
-    Sin esto, toda cita a una casacion quedaba sin documento y por tanto sin verificar:
-    eran 29 de 157 citas marcadas como no verificables por una carencia del evaluador, no
-    por un fallo del sistema evaluado.
-    """
     norm_key = norm_of_document(file_name, file_url)
     if norm_key:
         entry = build_registry().get(norm_key)
         if entry is not None:
             return entry.path
 
-    # En el orden en que aparecen en la cita: recorrer el set de `case_numbers` dejaba la
-    # eleccion entre dos expedientes al orden de hash, distinto en cada proceso.
     index = _case_index()
     for number, year in _CASE_RE.findall(f"{file_name} {file_url}"):
         case = f"{number.lstrip('0') or '0'}-{year}"
@@ -294,20 +202,12 @@ def find_corpus_path(file_name: str, file_url: str = "") -> Path | None:
 
 
 def articles_in_locator(label: str) -> list[str]:
-    """`"Arts. 562 y 563"` -> `["562", "563"]`. Un locator combinado cubre varios."""
     if not label:
         return []
     return [normalize_article(number) for number in _NUMBER_RE.findall(label)]
 
 
 def classify_mention(mention: Mention, registry: dict[str, NormIndex]) -> str:
-    """`exists` | `hallucinated` | `unattributed` | `unknown_norm`.
-
-    `unattributed` no es un acierto ni un fallo: el texto cito un articulo sin decir de
-    que norma, y sin norma no hay nada contra que verificarlo. Se reporta aparte porque
-    su tasa es en si misma un sintoma: una respuesta que nunca nombra la norma no es
-    verificable por el usuario.
-    """
     if mention.norm_key is None:
         return "unattributed"
     entry = registry.get(mention.norm_key)

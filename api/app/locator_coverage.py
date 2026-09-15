@@ -1,13 +1,3 @@
-"""Mide que porcentaje del corpus resuelve a una ubicacion concreta.
-
-Trocea cada markdown en fragmentos del tamano aproximado que devuelve File Search, los
-pasa por el resolver y reporta el desglose por estrategia. Es el insumo para decidir si
-conviene propagar el locator hasta el usuario o si primero hay que ajustar el corpus.
-
-    python -m app.locator_coverage
-    python -m app.locator_coverage --chunk-size 1200 --worst 15
-"""
-
 import argparse
 import re
 import sys
@@ -21,7 +11,6 @@ STRATEGIES = ("exact", "prefix", "fuzzy", "markdown_heading", "snippet_regex", "
 
 
 def chunk_text(collapsed: str, size: int, stride: int) -> list[str]:
-    """Fragmentos sobre el texto ya colapsado, cortando en limites de palabra."""
     if not collapsed:
         return []
 
@@ -67,14 +56,6 @@ def format_row(name: str, counts: Counter, headings: int | None = None) -> str:
     return " ".join(parts)
 
 
-# Una linea que "parece" encabezado de articulo, sin importar la decoracion que traiga.
-# La cobertura por si sola no detecta un encabezado perdido: el fragmento igual resuelve,
-# solo que al articulo anterior. Este chequeo es el que ve ese error.
-#
-# El juego de caracteres tiene que ser mas ancho que el de `locator._ARTICULO_RE`, o el
-# chequeo se vuelve ciego justo a los encabezados que el resolver todavia no toma: las
-# comillas y la vineta de lista quedaban fuera de ambos y por eso 631 encabezados reales
-# nunca aparecieron en esta lista.
 ARTICLE_LIKE = re.compile(r"^[\s*_#>\-–—•\"'“”‘’]{0,12}art[ií]culo\s+\d", re.IGNORECASE)
 
 
@@ -130,8 +111,6 @@ def main(argv: list[str] | None = None) -> int:
 
     strong = totals.get("exact", 0) + totals.get("prefix", 0)
     print(f"\n  exact+prefix   {strong:>7}  {strong * 100 / grand_total:5.1f}%   (meta: >80%)")
-    # markdown_heading no es una ubicacion juridica: en resoluciones sin articulado
-    # devuelve el asunto del caso o ruido del OCR, que la cita ya muestra por titulo.
     weak = totals.get("markdown_heading", 0)
     if weak:
         print(f"  markdown_heading {weak:>7}  {weak * 100 / grand_total:5.1f}%   no es ubicacion juridica:")

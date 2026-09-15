@@ -1,17 +1,3 @@
-"""Que normas del corpus se pueden citar, y como se las nombra en una respuesta.
-
-Es la tabla que une tres vocabularios que no coinciden entre si:
-
-- el nombre del fichero en `work/corpus/` ("codigo-de-los-ni-os-y-adolescentes-<hash>.md",
-  con los acentos ya perdidos al convertir el PDF),
-- la clave corta y estable que usa el dataset ("codigo_ninos_adolescentes"),
-- y como el modelo escribe la norma en la respuesta ("Codigo de los Ninos y Adolescentes",
-  "CNA", "Ley 30364", ...).
-
-Sin este tercer vocabulario no se puede decidir si un "articulo 481" que aparece en el
-texto es del Codigo Civil o de otra norma, y sin eso no se puede medir alucinacion.
-"""
-
 import re
 from dataclasses import dataclass, field
 
@@ -20,13 +6,8 @@ from dataclasses import dataclass, field
 class Norm:
     key: str
     display: str
-    # Fragmento del nombre de fichero en el corpus, ya sin acentos y en minusculas.
     stem_contains: str
-    # Como puede aparecer escrita en una respuesta. Se comparan sobre texto plegado
-    # (sin acentos, en minusculas), asi que aca van sin acentos.
     aliases: tuple[str, ...] = field(default_factory=tuple)
-    # Normas sin articulado propio citable (jurisprudencia, protocolos): existen en el
-    # corpus y pueden respaldar una cita, pero no se les exige registro de articulos.
     articulated: bool = True
 
 
@@ -105,12 +86,10 @@ NORMS: tuple[Norm, ...] = (
 
 BY_KEY = {norm.key: norm for norm in NORMS}
 
-# Las normas cuyo articulado se puede verificar numero por numero contra el corpus.
 ARTICULATED_KEYS = tuple(norm.key for norm in NORMS if norm.articulated)
 
 
 def normalize_article(raw: str) -> str:
-    """"Art. 4-A", "articulo 4 a", "4°" -> "4A". Un numero de articulo, una forma."""
     cleaned = raw.strip().strip("*_# ").upper()
     cleaned = cleaned.replace("ART.", "").replace("ARTICULO", "").replace("ARTÍCULO", "")
     cleaned = re.sub(r"[°º]", "", cleaned)

@@ -1,22 +1,7 @@
-"""Los cuatro brazos del experimento, como parches sobre el workflow de produccion.
-
-Se parchea y no se copia a mano porque el workflow de produccion se sigue editando: una
-copia editada a mano deja de ser comparable en cuanto alguien toca un prompt, y el
-experimento pasaria a medir la diferencia entre dos versiones del sistema en vez del
-efecto del componente ablacionado.
-
-Cada parche esta anclado a texto literal del workflow y **falla ruidosamente** si el ancla
-ya no aparece. Es deliberado: un parche que no encuentra su ancla y sigue adelante produce
-un brazo que dice estar ablacionado y no lo esta, y eso no se nota en los resultados, solo
-los invalida.
-"""
-
 import uuid
 
 NAMESPACE = uuid.UUID("6f0a2d4e-6d2b-5c1a-9f3e-8a1b2c3d4e5f")
 
-# Terminos que no pueden sobrevivir a la ablacion de cada eje. Se comprueban al final:
-# es la red que atrapa un parche que aplico a medias.
 RAG_FORBIDDEN = ("SearchStore",)
 XAI_FORBIDDEN = (
     "citations",
@@ -33,12 +18,10 @@ XAI_FORBIDDEN = (
 
 
 class PatchError(RuntimeError):
-    """El workflow de produccion cambio y el parche ya no encaja. Hay que revisarlo."""
+    pass
 
 
 def stable_id(arm: str, seed: str) -> str:
-    """Id derivado, no aleatorio: reimportar el mismo brazo actualiza su workflow en vez
-    de crear uno nuevo cada vez."""
     return str(uuid.uuid5(NAMESPACE, f"legalfam-eval:{arm}:{seed}"))
 
 
@@ -50,7 +33,7 @@ def node(workflow: dict, name: str) -> dict:
 
 
 def drop_node(workflow: dict, name: str) -> None:
-    node(workflow, name)  # falla si no existe
+    node(workflow, name)
     workflow["nodes"] = [item for item in workflow["nodes"] if item["name"] != name]
     workflow["connections"].pop(name, None)
     for outputs in workflow["connections"].values():
@@ -73,7 +56,6 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 
 def cut_between(text: str, start: str, end: str, new: str, label: str) -> str:
-    """Sustituye el tramo `[start, end)`, conservando `end`."""
     begin = text.find(start)
     finish = text.find(end, begin + 1) if begin >= 0 else -1
     if begin < 0 or finish < 0:
@@ -81,17 +63,9 @@ def cut_between(text: str, start: str, end: str, new: str, label: str) -> str:
     return text[:begin] + new + text[finish:]
 
 
-# --------------------------------------------------------------------------------------
-# Parche comun
 
 
 def apply_common(workflow: dict, arm: str) -> None:
-    """Identidad propia, webhook propio y temperatura fija.
-
-    La temperatura se fija en los cuatro brazos por igual. No hace la corrida
-    determinista, pero sin ella la diferencia entre brazos incluye el ruido de muestreo
-    de cinco nodos distintos, y ese ruido no es el efecto que se quiere medir.
-    """
     workflow["name"] = f"LegalFam Eval - {arm}"
     workflow["id"] = stable_id(arm, "workflow")
     workflow["versionId"] = stable_id(arm, "version")
@@ -101,9 +75,6 @@ def apply_common(workflow: dict, arm: str) -> None:
     webhook = node(workflow, "Webhook")
     webhook["parameters"]["path"] = f"chat-process-eval-{arm}"
     webhook["webhookId"] = stable_id(arm, "webhook")
-    # Los brazos corren en una instancia local que no esta expuesta, y la cabecera de
-    # autenticacion se comprueba antes de que el flujo arranque: quitarla no toca nada de
-    # lo que se mide, y evita que el runner tenga que manejar el secreto de produccion.
     webhook["parameters"].pop("authentication", None)
     webhook.pop("credentials", None)
 
@@ -113,8 +84,6 @@ def apply_common(workflow: dict, arm: str) -> None:
             item["parameters"].setdefault("options", {})["temperature"] = 0
 
 
-# --------------------------------------------------------------------------------------
-# Eje RAG
 
 
 _NO_RAG_TOOL_LINE = (
@@ -129,12 +98,6 @@ _NO_RAG_PROCESS = """Proceso obligatorio:
 
 
 def apply_no_rag(workflow: dict) -> None:
-    """Quita la recuperacion: el agente responde de memoria.
-
-    Se elimina la herramienta y se reescribe solo la parte del prompt que la nombra. El
-    resto del system message queda literalmente igual, para que la diferencia entre este
-    brazo y el completo sea la recuperacion y no una redaccion distinta del encargo.
-    """
     drop_node(workflow, "SearchStore")
 
     agent = node(workflow, "RAG Agent")
@@ -179,20 +142,14 @@ def apply_no_rag(workflow: dict) -> None:
     agent["parameters"]["options"]["systemMessage"] = message
 
 
-# --------------------------------------------------------------------------------------
-# Eje XAI
 
 
-# Secciones del system message del XAI Agent que definen la capa de explicabilidad.
 _XAI_SECTIONS_TO_DROP = (
     "Contrato de salida obligatorio para el parser:",
     "Campos estructurados obligatorios:",
     "Preguntas para afinar la orientacion:",
 )
 
-# Vinetas sueltas que sobreviven al corte por secciones pero solo tienen sentido con la
-# capa de explicabilidad puesta. Se listan literalmente para que el parche falle si el
-# prompt de produccion las reescribe.
 _XAI_BULLETS_TO_DROP = (
     "- Si no puedes copiar un pasaje literal de la cita, no la incluyas.",
 )
@@ -221,9 +178,6 @@ _XAI_REDUCED_SCHEMA = """{
   "additionalProperties": false
 }"""
 
-# El nodo que arma la respuesta cuando no hay capa de explicabilidad. Los campos XAI
-# salen vacios y no ausentes: el backend y el frontend esperan las claves, y un brazo que
-# rompiera el contrato de transporte estaria midiendo un error de integracion.
 _XAI_REDUCED_BUILDER = """const output = $json.output || {};
 // Brazo de ablacion sin capa de explicabilidad: la respuesta viaja sin citas, sin
 // localizador, sin confianza y sin pasos. Los campos se envian vacios y no ausentes para
@@ -252,13 +206,6 @@ return [{
 
 
 def _strip_xai_sections(message: str) -> str:
-    """Deja el encargo de redaccion y borra el contrato de explicabilidad.
-
-    Se corta por secciones y no por el nodo entero a proposito. Si se borrara el XAI
-    Agent completo, este brazo perderia tambien al redactor —la respuesta cruda del RAG
-    Agent es visiblemente peor prosa— y el efecto medido mezclaria explicabilidad con
-    calidad de redaccion. Lo que se ablaciona aca es exactamente la verificabilidad.
-    """
     lines = message.split("\n")
     kept: list[str] = []
     dropped_bullets: set[str] = set()
@@ -276,10 +223,6 @@ def _strip_xai_sections(message: str) -> str:
         if dropping:
             continue
 
-        # Dentro de las secciones que si se conservan quedan vinetas sueltas sobre citas
-        # ("No incluyas una seccion de fuentes...", que ahi es una regla de redaccion y
-        # se queda: quitarla cambiaria el formato de la respuesta y no su explicabilidad).
-        # Se van solo las que nombran un campo del contrato XAI.
         if stripped.startswith("-") and any(token in line for token in XAI_FORBIDDEN):
             continue
 
@@ -303,12 +246,6 @@ def _strip_xai_sections(message: str) -> str:
 
 
 def _drop_orphan_headers(lines: list[str]) -> list[str]:
-    """Quita las vinetas que solo encabezaban sub-vinetas ya eliminadas.
-
-    "- Cada cita lleva dos textos distintos y ninguno reemplaza al otro:" se queda sin
-    sus dos sub-vinetas al ablacionar, y una instruccion que termina en dos puntos y no
-    introduce nada es ruido que el modelo intenta cumplir igual.
-    """
     result: list[str] = []
     for position, line in enumerate(lines):
         stripped = line.strip()
@@ -325,14 +262,12 @@ def _drop_orphan_headers(lines: list[str]) -> list[str]:
 
 
 def apply_no_xai(workflow: dict) -> None:
-    """Quita la capa de explicabilidad, conservando la generacion de la respuesta."""
     agent = node(workflow, "XAI Agent")
     reduced = _strip_xai_sections(agent["parameters"]["options"]["systemMessage"])
     agent["parameters"]["options"]["systemMessage"] = f"{reduced}\n\n{_XAI_REDUCED_CONTRACT}"
 
     node(workflow, "XAI Output Parser")["parameters"]["inputSchema"] = _XAI_REDUCED_SCHEMA
 
-    # Sin citas no hay nada que reanclar contra el corpus.
     drop_node(workflow, "Resolve Locators")
     drop_node(workflow, "Attach Locators")
     connect(workflow, "XAI Agent", "Build Response XAI")
@@ -340,8 +275,6 @@ def apply_no_xai(workflow: dict) -> None:
     node(workflow, "Build Response XAI")["parameters"]["jsCode"] = _XAI_REDUCED_BUILDER
 
 
-# --------------------------------------------------------------------------------------
-# Registro de brazos
 
 
 _SOURCES_BULLET = (
@@ -356,15 +289,6 @@ _INLINE_SOURCES_BULLET = (
 
 
 def apply_no_xai_inline(workflow: dict) -> None:
-    """Como `no_xai`, pero dejando que la respuesta nombre sus fuentes en el texto.
-
-    Existe para responder a la objecion evidente contra `no_xai`: ese brazo conserva la
-    instruccion de no citar dentro de `answer` —correcta en produccion, donde la interfaz
-    muestra las fuentes al lado— pero se queda sin la interfaz que la justifica, asi que
-    parte de su caida en trazabilidad podria venir de la instruccion y no de la ablacion.
-    Este brazo separa las dos cosas: si aqui la trazabilidad sigue baja, la perdida es de
-    la capa de explicabilidad y no del formato que se le pidio a la respuesta.
-    """
     apply_no_xai(workflow)
     agent = node(workflow, "XAI Agent")
     agent["parameters"]["options"]["systemMessage"] = replace_once(
@@ -380,16 +304,13 @@ ARMS: dict[str, dict] = {
     "no_rag": {"rag": False, "xai": True, "patches": (apply_no_rag,)},
     "no_xai": {"rag": True, "xai": False, "patches": (apply_no_xai,)},
     "base": {"rag": False, "xai": False, "patches": (apply_no_rag, apply_no_xai)},
-    # Control opcional, fuera del 2x2: no se corre por defecto.
     "no_xai_inline": {"rag": True, "xai": False, "patches": (apply_no_xai_inline,)},
 }
 
-# Los cuatro brazos del diseno factorial. `no_xai_inline` se pide explicitamente.
 FACTORIAL = ("full", "no_rag", "no_xai", "base")
 
 
 def build(workflow: dict, arm: str) -> dict:
-    """Aplica el brazo sobre una copia ya deserializada del workflow de produccion."""
     spec = ARMS[arm]
     apply_common(workflow, arm)
     for patch in spec["patches"]:
@@ -399,11 +320,6 @@ def build(workflow: dict, arm: str) -> dict:
 
 
 def verify(workflow: dict, arm: str) -> None:
-    """Comprueba que la ablacion se aplico de verdad.
-
-    Un brazo mal parcheado no falla al ejecutarse: responde normal y contamina los
-    resultados sin dejar rastro. Por eso la comprobacion es una asercion y no un aviso.
-    """
     spec = ARMS[arm]
 
     if not spec["rag"]:
@@ -426,12 +342,6 @@ def verify(workflow: dict, arm: str) -> None:
 
 
 def _tools_of(workflow: dict, agent: str) -> list[str]:
-    """Nodos enchufados como herramienta a un agente.
-
-    La comprobacion es sobre las conexiones y no sobre el texto del JSON: el nombre del
-    recurso de Gemini ("fileSearchStores/...") contiene la palabra que se busca, y un
-    chequeo textual daba por fallado un brazo correctamente ablacionado.
-    """
     return [
         source
         for source, outputs in workflow["connections"].items()
@@ -445,14 +355,6 @@ XAI_NODES = ("XAI Agent", "XAI Output Parser")
 
 
 def _prompt_text(workflow: dict) -> str:
-    """Lo que la capa XAI le pide al modelo: su system message y su esquema de salida.
-
-    Se mira solo esos dos nodos, y no todo el workflow, porque el resto sigue hablando de
-    citas con razon. El RAG Agent las recupera igual en este brazo —ablacionar tambien la
-    recuperacion seria el brazo `base`, no este— y los nodos `Build Response *` nombran
-    los campos XAI justamente para enviarlos vacios. Lo que no puede quedar es una
-    instruccion que le pida al modelo producir explicabilidad.
-    """
     chunks: list[str] = []
     for name in XAI_NODES:
         parameters = node(workflow, name).get("parameters", {})

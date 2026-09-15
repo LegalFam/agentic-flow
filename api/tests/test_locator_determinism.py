@@ -1,10 +1,3 @@
-"""El reanclaje difuso y la auditoria de citas no pueden depender de PYTHONHASHSEED.
-
-En ablacion-v1 la misma cita salia `correct` o `partial` segun el proceso: el fuzzy elegia
-anclas por orden de iteracion de un set, un ancla frecuente llenaba el tope de candidatos
-y la ventana buena no se llegaba a evaluar.
-"""
-
 import json
 import os
 import subprocess
@@ -21,8 +14,6 @@ from eval import corpus_articles
 
 API_DIR = Path(__file__).resolve().parents[1]
 
-# Un token largo y muy frecuente en el snippet: con anclas ordenadas solo por largo era el
-# primero en entrar y agotaba los 200 candidatos antes de llegar al articulo real.
 FLOODED = (
     "Disposiciones generales del procedimientos.\n" * 250
     + "\nArticulo 10.- La solicitud se tramita conforme a los procedimientos sumarisimos "
@@ -35,7 +26,6 @@ FLOODED_QUERY = (
     "alimentos. Articulo 11.- El juez resuelve atendiendo las necesidades del beneficiario."
 )
 
-# Anclas del mismo largo, una de ellas frecuente: el desempate lo decidia el hash.
 TIED = (
     "Es procedente.\n" * 250
     + "\nArticulo 10.- La procedente cosa solicitada debe tramitarse por via sumarisimo sin mas.\n\n"
@@ -65,8 +55,6 @@ def test_frequent_anchor_does_not_starve_the_real_window():
 
 
 def test_fuzzy_window_is_aligned_with_the_snippet_start():
-    # Con un margen fijo de 40 caracteres la ventana arrancaba antes del pasaje y podia
-    # arrastrar un articulo que la cita no toca.
     index = L.build_index(FLOODED)
     position, _ = L.find_in_folded(index.folded, clean_user_text(FLOODED_QUERY))
     assert position == index.folded.find("la solicitud se tramita")
@@ -102,7 +90,6 @@ def test_fuzzy_match_is_the_same_under_every_hash_seed(doc, query):
     assert len(results) == 1, results
     position, strategy = json.loads(results.pop())
     assert strategy == "fuzzy"
-    # Una letra perdida en el snippet corre un caracter las anclas que vienen detras.
     expected = L.build_index(doc).folded.find(clean_user_text(query)[:12].lower())
     assert abs(position - expected) <= 1
 

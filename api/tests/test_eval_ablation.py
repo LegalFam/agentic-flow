@@ -1,5 +1,3 @@
-"""Que los parches de la ablacion realmente ablacionan, y fallan si dejan de encajar."""
-
 import copy
 import json
 
@@ -78,8 +76,6 @@ def test_no_xai_reduces_the_contract_to_the_answer(workflow):
 
 
 def test_no_xai_keeps_the_writer(workflow):
-    """La ablacion es de la explicabilidad, no del redactor: si se llevara por delante el
-    encargo de redaccion, el brazo mediria prosa y no verificabilidad."""
     built = arms.build(workflow, "no_xai")
     message = arms.node(built, "XAI Agent")["parameters"]["options"]["systemMessage"]
     assert "Formato de answer:" in message
@@ -115,8 +111,6 @@ def test_inline_control_lets_the_answer_name_its_sources(workflow):
 
 
 def test_patch_fails_loudly_when_the_anchor_moved(workflow):
-    """Un parche que no encuentra su ancla no puede seguir: produciria un brazo que dice
-    estar ablacionado y no lo esta, y eso no se nota en los resultados."""
     agent = arms.node(workflow, "RAG Agent")
     agent["parameters"]["options"]["systemMessage"] = "prompt reescrito sin las anclas"
 
@@ -133,14 +127,6 @@ def test_verify_rejects_an_arm_that_kept_its_tool(workflow):
 def test_dropping_a_missing_node_is_an_error(workflow):
     with pytest.raises(arms.PatchError):
         arms.drop_node(workflow, "Nodo Que No Existe")
-
-
-# --------------------------------------------------------------------------------------
-# Deteccion de brazos desincronizados
-#
-# Los brazos generados se versionan, y el riesgo de eso no es que ocupen sitio: es que se
-# queden viejos en silencio cuando alguien toca un prompt de produccion, y que la corrida
-# siguiente compare contra una version del sistema que ya no existe.
 
 
 def _write_arms(production: dict, out) -> list[tuple[str, dict]]:

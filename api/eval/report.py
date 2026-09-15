@@ -1,17 +1,3 @@
-"""Tablas 2x2, efectos principales y contrastes pareados sobre una corrida puntuada.
-
-    python -m eval.report --run eval/runs/<timestamp>
-
-Los cuatro brazos ven exactamente las mismas preguntas, asi que los contrastes son
-pareados: cada pregunta es su propio control y la variabilidad entre preguntas —que en un
-dataset de derecho de familia es enorme, una consulta sobre alimentos no se parece en nada
-a una sobre violencia— deja de ser ruido. Por eso McNemar y Wilcoxon, y no un t de dos
-muestras.
-
-Sin dependencias externas: los tres estadisticos estan implementados aca abajo para que
-esto corra en el mismo contenedor que el resto, sin instalar scipy.
-"""
-
 import argparse
 import json
 import math
@@ -27,11 +13,8 @@ ARM_GRID = {
     "base": (False, False),
 }
 
-# Control fuera del 2x2: `no_xai` con permiso para citar dentro de la respuesta. Separa
-# la ablacion de la capa XAI del sesgo de la instruccion de no nombrar fuentes.
 CONTROL_ARM = "no_xai_inline"
 
-# Metricas que se leen como tasa por respuesta.
 RATE_METRICS = (
     ("traceable", "Respuestas trazables"),
     ("correct", "Respuestas correctas"),
@@ -49,18 +32,9 @@ COUNT_METRICS = (
 BINARY_METRICS = ("traceable", "correct")
 
 
-# --------------------------------------------------------------------------------------
-# Estadistica
 
 
 def mcnemar(pairs: list[tuple[bool, bool]]) -> tuple[int, int, float]:
-    """Contraste pareado para una metrica binaria.
-
-    Solo cuentan las preguntas donde los dos brazos difieren: las que ambos aciertan o
-    ambos fallan no dicen nada sobre cual es mejor. Se usa la version exacta (binomial)
-    porque con 60 preguntas los discordantes suelen ser pocos y la aproximacion normal
-    ahi no vale.
-    """
     only_left = sum(1 for left, right in pairs if left and not right)
     only_right = sum(1 for left, right in pairs if right and not left)
     discordant = only_left + only_right
@@ -73,7 +47,6 @@ def mcnemar(pairs: list[tuple[bool, bool]]) -> tuple[int, int, float]:
 
 
 def wilcoxon(pairs: list[tuple[float, float]]) -> float:
-    """Wilcoxon de rangos con signo, aproximacion normal con correccion de empates."""
     diffs = [left - right for left, right in pairs if left is not None and right is not None]
     diffs = [value for value in diffs if value != 0]
     if len(diffs) < 6:
@@ -102,7 +75,6 @@ def wilcoxon(pairs: list[tuple[float, float]]) -> float:
 
 
 def bootstrap_ci(values: list[float], rounds: int = 4000, seed: int = 20260908) -> tuple[float, float]:
-    """IC 95% de la media, remuestreando preguntas."""
     clean = [value for value in values if value is not None]
     if len(clean) < 3:
         return (float("nan"), float("nan"))
@@ -113,8 +85,6 @@ def bootstrap_ci(values: list[float], rounds: int = 4000, seed: int = 20260908) 
     return means[int(0.025 * rounds)], means[int(0.975 * rounds)]
 
 
-# --------------------------------------------------------------------------------------
-# Carga y pivote
 
 
 def load_rows(run: Path) -> list[dict]:
@@ -125,7 +95,6 @@ def load_rows(run: Path) -> list[dict]:
 
 
 def pivot(rows: list[dict], metric: str) -> dict[str, dict[str, float]]:
-    """`{pregunta: {brazo: valor}}`, promediando las repeticiones de una misma pregunta."""
     buckets: dict[str, dict[str, list[float]]] = {}
     for row in rows:
         if not row.get("ok"):
@@ -141,7 +110,6 @@ def pivot(rows: list[dict], metric: str) -> dict[str, dict[str, float]]:
 
 
 def paired(table: dict[str, dict[str, float]], left: str, right: str) -> list[tuple[float, float]]:
-    """Solo las preguntas contestadas por los dos brazos: si falto una, el par no existe."""
     return [
         (values[left], values[right])
         for values in table.values()
@@ -149,17 +117,9 @@ def paired(table: dict[str, dict[str, float]], left: str, right: str) -> list[tu
     ]
 
 
-# --------------------------------------------------------------------------------------
-# Tablas
 
 
 def factorial_table(table: dict[str, dict[str, float]]) -> dict:
-    """Media por brazo, efectos principales e interaccion.
-
-    El efecto de un componente se estima con los dos contrastes disponibles y se promedia:
-    quitar el RAG con el XAI puesto (full - no_xai... ) no tiene por que dar lo mismo que
-    quitarlo sin el, y la diferencia entre ambos es justamente la interaccion.
-    """
     means = {}
     for arm in ARM_GRID:
         values = [row[arm] for row in table.values() if arm in row]
@@ -200,7 +160,6 @@ def arm_mean(table: dict[str, dict[str, float]], arm: str) -> float | None:
 
 
 def contrast(table: dict[str, dict[str, float]], metric: str, left: str, right: str) -> dict | None:
-    """Contraste pareado `left - right`: McNemar si la metrica es binaria, Wilcoxon si no."""
     pairs = paired(table, left, right)
     if not pairs:
         return None

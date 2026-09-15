@@ -24,8 +24,6 @@ def plan(filename: str, display_names: list[str]) -> dict:
 
 
 def test_replacement_key_ignores_the_document_id_hash():
-    # El hash sale del sha256 del PDF, asi que la revision nueva trae otro y por igualdad
-    # de nombre no encontraria a la vieja.
     assert store_documents.replacement_key("codigo-civil-97fe57ba02fb.md") == store_documents.replacement_key(
         "codigo-civil-000000000000.md"
     )
@@ -38,13 +36,6 @@ def test_replacement_key_ignores_separators_and_case():
 
 
 def test_a_renamed_pdf_does_not_match_and_falls_to_supersedes():
-    """`build_document_id` pierde el acento en vez de normalizarlo.
-
-    `Codigo Procesal Civil.pdf` se indexo como `c-digo-...`: la vocal no esta, y de
-    `c_digo` no se puede recuperar `codigo` sin adivinar. Mientras el PDF conserve su
-    nombre las dos revisiones se manglean igual y casan; si alguien lo renombra entre
-    revisiones, el plan sale "new" y hay que pasar `supersedes` a mano.
-    """
     assert store_documents.replacement_key("c-digo-procesal-civil-1a7a94997c08.md") != (
         store_documents.replacement_key("codigo-procesal-civil-ffffffffffff.md")
     )
@@ -81,7 +72,6 @@ def test_plan_reports_ambiguity_instead_of_picking():
 
 
 def test_plan_detects_the_same_pdf_reuploaded():
-    # Mismo display_name = mismo hash = mismo PDF: no hay texto nuevo que indexar.
     result = plan("codigo-civil-97fe57ba02fb.md", ["codigo-civil-97fe57ba02fb.md"])
     assert result["verdict"] == "identical"
 
@@ -142,12 +132,6 @@ def test_sync_writes_the_new_revision_and_drops_the_old_file(corpus_dir):
 
 
 def test_sync_does_not_delete_the_file_it_just_wrote(corpus_dir):
-    """El nombre viejo y el nuevo normalizan a la misma llave: es lo que los emparejo.
-
-    Si los viejos se resolvieran despues de escribir el nuevo, `resolve_document_path`
-    del nombre viejo devolveria el archivo nuevo por el fallback de stem sin hash, y el
-    borrado se llevaria la revision recien subida dejando el corpus vacio.
-    """
     result = corpus.sync_replacement(
         "codigo-civil-ffffffffffff.md", "nuevo", ["codigo-civil-97fe57ba02fb.md"]
     )
@@ -174,8 +158,6 @@ def test_sync_prunes_the_manifest_entry_of_the_removed_file(corpus_dir):
 
 
 def test_sync_reports_a_missing_corpus_directory_instead_of_raising(monkeypatch):
-    # En Cloud Run el corpus es un volumen de solo lectura: no poder escribir es un
-    # resultado esperado, y el reemplazo en el store ya paso.
     monkeypatch.setattr(settings, "corpus_dir", "/no/existe/aqui")
     result = corpus.sync_replacement("nuevo.md", "texto", [])
     assert result["synced"] is False
@@ -188,12 +170,6 @@ def test_sync_gives_the_new_file_the_md_extension(corpus_dir):
 
 
 def test_sync_reports_a_read_only_corpus_instead_of_raising(corpus_dir, monkeypatch):
-    """Es el caso de Cloud Run: /corpus se monta con readonly=true.
-
-    El reemplazo en el store ya ocurrio cuando se llega aca, asi que una excepcion no
-    ayudaria a nadie: lo que hace falta es que la respuesta diga que el corpus quedo
-    atrasado para que el log del workflow lo registre.
-    """
     (corpus_dir / "codigo-civil-97fe57ba02fb.md").write_text("viejo", encoding="utf-8")
 
     def read_only(self, *args, **kwargs):
@@ -206,8 +182,6 @@ def test_sync_reports_a_read_only_corpus_instead_of_raising(corpus_dir, monkeypa
 
     assert result["synced"] is False
     assert "Read-only file system" in result["reason"]
-    # Y sobre todo: no se borro la revision vieja. Si se hubiera borrado sin poder
-    # escribir la nueva, el corpus se quedaria sin ninguna de las dos.
     assert (corpus_dir / "codigo-civil-97fe57ba02fb.md").exists()
 
 
@@ -236,11 +210,6 @@ class _FakeTypes:
 
 
 def test_delete_forces_removal_of_the_chunks():
-    """Sin force, la API responde 400 'Cannot delete non-empty Document'.
-
-    Todo documento ya indexado tiene chunks, asi que un borrado sin force falla siempre
-    justo en el caso normal: el reemplazo sube la version nueva y deja la vieja.
-    """
     client = _FakeClient()
     store_documents._delete_document(client, _FakeTypes, "fileSearchStores/s/documents/d")
     (name, config), = client.file_search_stores.documents.calls

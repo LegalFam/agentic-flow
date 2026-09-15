@@ -248,7 +248,6 @@ class FileSearchDocumentListResponse(BaseModel):
 
 
 class FileSearchDocumentDeleteRequest(BaseModel):
-    # name completo (fileSearchStores/.../documents/...) o display_name.
     document: str
     file_search_store_name: str | None = None
 
@@ -271,8 +270,6 @@ class FileSearchReplacePlanResponse(BaseModel):
     documents: int
     superseded: list[FileSearchDocument] = Field(default_factory=list)
     already_indexed: list[FileSearchDocument] = Field(default_factory=list)
-    # "replace" (uno solo, caso normal), "new" (nada que reemplazar), "ambiguous" (varios
-    # candidatos) o "identical" (mismo display_name, o sea el mismo PDF).
     verdict: str
     message: str
 
@@ -282,8 +279,6 @@ class FileSearchReplaceRequest(BaseModel):
     markdown: str
     metadata: LegalMetadata
     file_search_store_name: str | None = None
-    # Nombres completos o display_name de los documentos a borrar. Manda sobre lo que
-    # deduzca el plan: es la unica forma de resolver un caso ambiguo.
     supersedes: list[str] = Field(default_factory=list)
     allow_new: bool = False
     allow_multiple: bool = False
@@ -337,8 +332,6 @@ class RagSearchResponse(BaseModel):
 
 class LocatorResolveRequestCitation(BaseModel):
     citation_id: str = ""
-    # Copia textual del fragmento del chunk que el agente XAI dice haber usado. Cuando se
-    # verifica contra el chunk recuperado, la ubicacion sale de aca y no del chunk entero.
     original_snippet: str = ""
 
 
@@ -353,16 +346,9 @@ class LocatorResolveResponseCitation(BaseModel):
     page: int | None = None
     locator_source: str = ""
     resolved: bool = False
-    # De donde salio la ubicacion: "excerpt" (el fragmento citado, un solo articulo),
-    # "excerpt_multi" (el fragmento cruza articulos y se citan todos), "chunk" (el chunk
-    # completo), "ambiguous" (abarca varios articulos que no se pudieron combinar y no
-    # hubo excerpt verificable: se devuelve vacio) o "unknown" (citation_id que no esta
-    # en el registro).
     locator_scope: str = ""
     chunk_articles: list[str] = Field(default_factory=list)
     excerpt_articles: list[str] = Field(default_factory=list)
-    # Documento de la cita. Viaja por el registro y no por el prompt, igual que el
-    # locator: asi la cita llega completa aunque el agente no copie estos campos.
     file_name: str = ""
     file_url: str = ""
 

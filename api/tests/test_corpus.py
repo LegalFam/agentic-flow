@@ -44,7 +44,6 @@ def test_resolves_when_title_has_no_extension(corpus_dir):
 
 def test_resolves_by_normalized_stem(corpus_dir):
     (corpus_dir / "codigo-civil-peru.md").write_text(DOC, encoding="utf-8")
-    # Acentos, mayusculas y separadores distintos deben seguir casando.
     assert corpus.resolve_document_path("Código Civil Perú.md", None).name == "codigo-civil-peru.md"
 
 
@@ -79,7 +78,7 @@ def test_index_is_cached_and_invalidated_on_change(corpus_dir):
     path.write_text(DOC, encoding="utf-8")
 
     first = corpus.load_index(path)
-    assert corpus.load_index(path) is first  # mismo objeto: viene del cache
+    assert corpus.load_index(path) is first
 
     path.write_text(DOC.replace("333", "334"), encoding="utf-8")
     updated = corpus.load_index(path)
@@ -104,20 +103,17 @@ def test_status_reports_documents(corpus_dir):
 
 
 def test_ignores_document_id_hash_suffix(corpus_dir):
-    # El store indexa "<stem>-<sha256(pdf)[:12]>.md"; el corpus tiene el nombre limpio.
     (corpus_dir / "codigo-civil.md").write_text(DOC, encoding="utf-8")
     resolved = corpus.resolve_document_path("codigo-civil-97fe57ba02fb.md", None)
     assert resolved is not None and resolved.name == "codigo-civil.md"
 
 
 def test_ignores_hash_suffix_in_the_other_direction(corpus_dir):
-    # Y al reves, por si el corpus se descargo con los nombres ya hasheados.
     (corpus_dir / "codigo-civil-97fe57ba02fb.md").write_text(DOC, encoding="utf-8")
     resolved = corpus.resolve_document_path("Codigo Civil.md", None)
     assert resolved is not None and resolved.name == "codigo-civil-97fe57ba02fb.md"
 
 
 def test_does_not_strip_a_non_hash_suffix(corpus_dir):
-    # "-2016" no es un hash de 12 hex: no debe recortarse.
     (corpus_dir / "resolucion-224.md").write_text(DOC, encoding="utf-8")
     assert corpus.resolve_document_path("resolucion-224-2016.md", None) is None

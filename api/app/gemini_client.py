@@ -205,12 +205,6 @@ def upload_document(
     wait_until_done: bool,
     max_wait_seconds: int,
 ):
-    """Indexa un markdown en el store y devuelve la operacion terminada.
-
-    Compartido por la subida normal y por el reemplazo (`store_documents`): la metadata
-    se fija al indexar y no se puede editar despues, asi que las dos rutas tienen que
-    construirla igual o un documento reemplazado perderia filtros que el original tenia.
-    """
     import tempfile
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -414,8 +408,6 @@ def _extract_response_text(response: Any) -> str:
 
 
 def resolve_citation_locator(context_title: str, file_id: str, snippet: str) -> dict[str, Any]:
-    """Ubica el snippet dentro del documento. Nunca lanza: una cita sin locator es
-    aceptable, una busqueda legal caida no lo es."""
     return resolve_citation_entry(context_title, file_id, snippet)[0]
 
 
@@ -426,12 +418,6 @@ def resolve_citation_entry(
     file_name: str = "",
     file_url: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """`(campos del locator, contexto de resolucion)`.
-
-    El contexto viaja al registro para que `/resolve-locators` pueda reanclar despues el
-    fragmento que el agente XAI diga haber usado, y para saber si el chunk abarca varios
-    articulos, caso en el que quedarse con el primero seria adivinar.
-    """
     empty = {"locator": "", "breadcrumb": "", "page": None, "locator_source": ""}
     context = {
         "title": context_title,
@@ -464,23 +450,12 @@ def resolve_citation_entry(
 
 
 def citation_identity(file_url: str, locator_label: str, snippet: str) -> str:
-    """Que hace unica a una cita.
-
-    Con ubicacion, la unidad es el articulo: dos fragmentos del mismo Art. 333 son una
-    sola cita, y su identidad no depende de cual de los dos se recupero primero. Sin
-    ubicacion —las resoluciones, que no tienen articulado— se vuelve al fragmento.
-    """
     if locator_label:
         return f"{file_url}|{locator_label}"
     return f"{file_url}|{snippet[:200]}"
 
 
 def citation_id(identity: str) -> str:
-    """Id opaco y corto que los agentes copian sin interpretarlo.
-
-    Derivado y no aleatorio para que el mismo articulo recuperado en dos busquedas
-    distintas —el RAG Agent reintenta con sinonimos mas amplios— produzca el mismo id.
-    """
     return hashlib.blake2s(identity.encode("utf-8"), digest_size=5).hexdigest()
 
 
@@ -517,7 +492,6 @@ def _extract_grounding_citations(response: Any) -> list[dict[str, Any]]:
             seen.add(identity)
 
             cid = citation_id(identity)
-            # El locator autoritativo se guarda aca, no viaja por el prompt.
             locator_registry.register(cid, locator_fields, locator_context)
 
             citations.append(

@@ -1,14 +1,3 @@
-"""Carga los markdown originales de los documentos indexados en Gemini File Search.
-
-La llave de union es el nombre del archivo: al subir se usa `display_name=filename`
-(`upload_to_file_search_store`), y eso es lo que Gemini devuelve luego en
-`retrieved_context.title`. Cuando los nombres del corpus no coinciden con los del store,
-`corpus_manifest.json` resuelve el mapeo sin renombrar nada.
-
-El corpus se monta como carpeta: bind mount `./work:/work` en local, Cloud Storage volume
-en Cloud Run. Por eso aca solo hay lectura de filesystem, sin SDK de GCS.
-"""
-
 import json
 import re
 import threading
@@ -38,11 +27,6 @@ def iter_corpus_files() -> list[Path]:
 
 
 def load_manifest() -> dict[str, str]:
-    """Mapea `display_name` del store -> archivo del corpus.
-
-    Tolerante igual que `_load_store_registry` en `gemini_client`: si no existe o esta
-    corrupto devuelve {} en vez de romper la busqueda.
-    """
     path = manifest_path()
     if not path.exists():
         return {}
@@ -55,10 +39,6 @@ def load_manifest() -> dict[str, str]:
     return {str(key): str(value) for key, value in data.items()}
 
 
-# `build_document_id` en converter.py sube los documentos como
-# "<stem-normalizado>-<sha256(pdf)[:12]>.md", asi que el display_name del store no es el
-# nombre original del archivo. El hash se calcula sobre el PDF y no se puede recomputar
-# desde el markdown, asi que al comparar se ignora.
 _DOCUMENT_ID_HASH_RE = re.compile(r"-[0-9a-f]{12}$")
 
 
@@ -67,7 +47,6 @@ def strip_document_id_hash(stem: str) -> str:
 
 
 def normalize_key(value: str) -> str:
-    """Misma normalizacion que `_metadata_code` en `gemini_client`."""
     normalized = unicodedata.normalize("NFKD", value or "")
     without_accents = "".join(char for char in normalized if not unicodedata.combining(char))
     return re.sub(r"[^a-z0-9]+", "_", without_accents.casefold()).strip("_")
@@ -80,7 +59,6 @@ def resolve_document_path(title: str | None, file_id: str | None) -> Path | None
 
     by_name = {path.name: path for path in files}
     by_key = {normalize_key(path.stem): path for path in files}
-    # Por si el corpus si trae los nombres con hash y el store no.
     for path in files:
         by_key.setdefault(normalize_key(strip_document_id_hash(path.stem)), path)
 
@@ -107,7 +85,6 @@ def resolve_document_path(title: str | None, file_id: str | None) -> Path | None
         if key and key in by_key:
             return by_key[key]
 
-    # Ultimo intento: el mismo stem sin el hash de document_id.
     for candidate in (title, file_id):
         if not candidate:
             continue
@@ -119,7 +96,6 @@ def resolve_document_path(title: str | None, file_id: str | None) -> Path | None
 
 
 def load_index(path: Path) -> DocumentIndex | None:
-    """Indice cacheado por (mtime, size): reemplazar un .md invalida solo ese documento."""
     try:
         stat = path.stat()
     except OSError:
@@ -159,16 +135,6 @@ def clear_cache() -> int:
 
 
 def sync_replacement(filename: str, markdown: str, removed_display_names: list[str]) -> dict:
-    """Deja el corpus local en el mismo estado que el store tras un reemplazo.
-
-    Sin esto queda el peor caso silencioso que describe el README: el nombre viejo sigue
-    casando, el locator indexa un texto que ya no es el indexado, y las citas de ese
-    documento pierden ubicacion sin ningun error visible.
-
-    En Cloud Run el corpus es un volumen de Cloud Storage de solo lectura, asi que no
-    poder escribir es un resultado esperado y no una excepcion: se reporta `synced: False`
-    con el motivo y el operador sincroniza el bucket.
-    """
     root = corpus_path()
     if not root.is_dir():
         return {"synced": False, "reason": f"{root} no existe"}
@@ -177,9 +143,6 @@ def sync_replacement(filename: str, markdown: str, removed_display_names: list[s
     if target.suffix != ".md":
         target = target.with_suffix(".md")
 
-    # Los viejos se resuelven ANTES de escribir el nuevo: los dos normalizan a la misma
-    # llave (es lo que los emparejo), asi que despues de escribirlo `resolve_document_path`
-    # del nombre viejo devolveria el archivo nuevo y lo borrariamos recien escrito.
     stale = []
     for display_name in removed_display_names:
         path = resolve_document_path(display_name, None)
@@ -213,11 +176,6 @@ def sync_replacement(filename: str, markdown: str, removed_display_names: list[s
 
 
 def _prune_manifest(removed_display_names: list[str], removed_files: list[str]) -> list[str]:
-    """Saca del manifest las entradas que apuntan a lo que ya no existe.
-
-    Una entrada huerfana no rompe la resolucion, pero sobrevive a varias revisiones y
-    termina mapeando un nombre viejo a un archivo que alguien recreo con otro contenido.
-    """
     manifest = load_manifest()
     if not manifest:
         return []

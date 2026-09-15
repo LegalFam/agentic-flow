@@ -1,5 +1,3 @@
-"""Deteccion de articulos citados, auditoria de citas contra el corpus y estadistica."""
-
 import pytest
 
 from app import corpus
@@ -34,10 +32,6 @@ def corpus_dir(tmp_path, monkeypatch):
 @pytest.fixture
 def registry(corpus_dir):
     return corpus_articles.build_registry()
-
-
-# --------------------------------------------------------------------------------------
-# Deteccion de menciones
 
 
 def test_article_is_attributed_to_the_nearest_norm():
@@ -114,10 +108,6 @@ def test_document_name_maps_to_its_norm():
     assert corpus_articles.norm_of_document("Un documento cualquiera") is None
 
 
-# --------------------------------------------------------------------------------------
-# Auditoria de citas
-
-
 def _citation(snippet: str, locator: str) -> dict:
     return {
         "original_snippet": snippet,
@@ -138,7 +128,6 @@ def test_verbatim_snippet_with_the_right_article_is_correct(registry):
 
 
 def test_verbatim_snippet_with_the_wrong_article_is_caught(registry):
-    """El fallo que la metrica existe para encontrar: cita bien redactada, mal ubicada."""
     audit = score.audit_citation(
         _citation("Los alimentos se regulan por el juez en proporcion", "Art. 472"), registry
     )
@@ -163,11 +152,6 @@ def test_citation_without_locator_is_reported_as_missing(registry):
 
 
 def test_citation_from_an_unknown_document_is_set_apart(registry):
-    """No supe que documento es: es carencia del evaluador, no sospecha sobre el sistema.
-
-    Se separa de `unverifiable` —el pasaje no aparece en un documento que si resolvi—
-    porque solo el segundo dice algo sobre la calidad de la cita.
-    """
     citation = _citation("cualquier texto", "Art. 481")
     citation["file_name"] = "Documento desconocido"
     citation["file_url"] = ""
@@ -177,17 +161,12 @@ def test_citation_from_an_unknown_document_is_set_apart(registry):
 
 
 def test_passage_missing_from_a_resolved_document_is_unverifiable(registry):
-    """Esta si es la senal real: el documento existe y el pasaje declarado no esta en el."""
     audit = score.audit_citation(
         _citation("Este pasaje no aparece en ningun documento del corpus", "Art. 481"), registry
     )
     assert audit["document_resolved"] is True
     assert audit["verbatim"] is False
     assert audit["locator_verdict"] == "unverifiable"
-
-
-# --------------------------------------------------------------------------------------
-# Puntuacion de una respuesta
 
 
 def _record(message: str, citations: list[dict], arm: str = "full") -> dict:
@@ -271,10 +250,6 @@ def test_must_mention_coverage_ignores_accents_and_case(registry):
     assert row["must_mention_coverage"] == 1.0
 
 
-# --------------------------------------------------------------------------------------
-# Estadistica del reporte
-
-
 def test_mcnemar_only_counts_discordant_pairs():
     wins, losses, p_value = report.mcnemar([(True, False)] * 10 + [(True, True)] * 40)
     assert (wins, losses) == (10, 0)
@@ -303,7 +278,6 @@ def test_bootstrap_interval_brackets_the_mean():
 
 
 def test_factorial_table_separates_both_effects():
-    """Un componente que aporta 1.0 y otro que no aporta nada tienen que salir separados."""
     table = {
         "q1": {"full": 1.0, "no_rag": 0.0, "no_xai": 1.0, "base": 0.0},
         "q2": {"full": 1.0, "no_rag": 0.0, "no_xai": 1.0, "base": 0.0},
@@ -328,10 +302,6 @@ def test_pivot_drops_failed_calls():
         {"id": "q1", "arm": "full", "ok": True, "traceable": True},
     ]
     assert report.pivot(rows, "traceable")["q1"]["full"] == 1.0
-
-
-# --------------------------------------------------------------------------------------
-# Reanudacion: un corte de infraestructura no es una tasa de fallo del sistema
 
 
 def _write_run(tmp_path, records):
@@ -389,11 +359,6 @@ def test_questions_outside_the_dataset_are_skipped(tmp_path, capsys):
 
 
 def test_snippet_spanning_two_articles_accepts_the_combined_locator(registry):
-    """Un pasaje que cruza dos articulos se cita con los dos, y eso es correcto.
-
-    Comparar el locator combinado contra el articulo del primer caracter marcaba como
-    fallo citas que estaban bien, y hundia artificialmente la tasa de acierto.
-    """
     spanning = (
         "disminucion que experimenten las necesidades del alimentista"
     )
@@ -402,16 +367,11 @@ def test_snippet_spanning_two_articles_accepts_the_combined_locator(registry):
 
 
 def test_combined_locator_that_overreaches_is_partial(registry):
-    """Declarar dos articulos cuando el pasaje solo cubre uno no es correcto del todo."""
     audit = score.audit_citation(
         _citation("Los alimentos se regulan por el juez en proporcion", "Arts. 481 y 482"),
         registry,
     )
     assert audit["locator_verdict"] == "partial"
-
-
-# --------------------------------------------------------------------------------------
-# Via de aclaracion: no responder no es responder mal
 
 
 def _clarification(message: str) -> dict:
@@ -421,7 +381,6 @@ def _clarification(message: str) -> dict:
 
 
 def test_clarification_answer_is_not_judged_as_incorrect(registry):
-    """El flujo pidio datos en vez de responder: no hay respuesta que juzgar."""
     row = score.score_record(
         _clarification("Para orientarte mejor, ¿existe una sentencia previa?"), ITEM, registry
     )
@@ -439,7 +398,6 @@ def test_substantive_answer_is_still_judged(registry):
 
 
 def test_rates_exclude_unjudgeable_answers_from_the_denominator(registry):
-    """Contarlas como fallo hundiria la metrica por un motivo que no es calidad."""
     rows = [
         score.score_record(_record("proporcion y necesidades", []), ITEM, registry),
         score.score_record(_clarification("¿que edad tiene?"), ITEM, registry),

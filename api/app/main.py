@@ -168,11 +168,6 @@ async def list_store_documents(payload: FileSearchDocumentListRequest) -> FileSe
 
 @app.post("/file-search-stores/documents/delete", response_model=FileSearchDocumentDeleteResponse)
 async def delete_store_document(payload: FileSearchDocumentDeleteRequest) -> FileSearchDocumentDeleteResponse:
-    """Borra un documento del store sin subir nada.
-
-    Es la salida para el reemplazo que quedo a medias: subio la version nueva pero no
-    pudo borrar la vieja, y el store devuelve las dos al RAG hasta que alguien saque una.
-    """
     try:
         return FileSearchDocumentDeleteResponse.model_validate(
             store_documents.delete_store_document(
@@ -191,11 +186,6 @@ async def delete_store_document(payload: FileSearchDocumentDeleteRequest) -> Fil
 
 @app.post("/file-search-stores/documents/plan-replace", response_model=FileSearchReplacePlanResponse)
 async def plan_replace_document(payload: FileSearchReplacePlanRequest) -> FileSearchReplacePlanResponse:
-    """Que version quedaria reemplazada, sin tocar el store.
-
-    Es el paso que alimenta la revision manual: el borrado en File Search no se deshace,
-    asi que quien aprueba tiene que ver antes el nombre exacto de lo que se va a borrar.
-    """
     try:
         return FileSearchReplacePlanResponse.model_validate(
             store_documents.plan_replacement(
@@ -210,7 +200,6 @@ async def plan_replace_document(payload: FileSearchReplacePlanRequest) -> FileSe
 
 @app.post("/file-search-stores/documents/replace", response_model=FileSearchReplaceResponse)
 async def replace_store_document(payload: FileSearchReplaceRequest) -> FileSearchReplaceResponse:
-    """Sube la version nueva, borra la vieja y sincroniza el corpus local."""
     try:
         return FileSearchReplaceResponse.model_validate(
             store_documents.replace_document(
@@ -227,7 +216,6 @@ async def replace_store_document(payload: FileSearchReplaceRequest) -> FileSearc
             )
         )
     except store_documents.ReplaceRefused as exc:
-        # 409 y no 503: reintentar da el mismo resultado, hace falta que alguien decida.
         raise HTTPException(
             status_code=409, detail=error_detail("REPLACE_NEEDS_DECISION", str(exc))
         ) from exc
@@ -269,16 +257,6 @@ def corpus_reload() -> CorpusReloadResponse:
 
 @app.post("/resolve-locators", response_model=LocatorResolveResponse)
 def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
-    """Cambia los `citation_id` que trajeron los agentes por el locator autoritativo.
-
-    Un id desconocido devuelve campos vacios, nunca un error: si el modelo altero el id o
-    la entrada vencio, la cita debe salir sin ubicacion en vez de tumbar la respuesta del
-    chat. Y nunca con la ubicacion que el modelo haya podido inventar.
-
-    El texto que si se acepta del modelo es `original_snippet`, y solo como puntero: se
-    verifica contra el chunk que se guardo al recuperarlo, y la ubicacion se recalcula
-    sobre el documento. Si no se verifica, se descarta sin mas.
-    """
     citations = []
     resolved = 0
     from_excerpt = 0
@@ -310,9 +288,6 @@ def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
         elif len(excerpt_articles) > 1 or (
             len(articles) > 1 and settings.locator_require_excerpt_when_ambiguous
         ):
-            # El fragmento cruza varios articulos y no se pudieron combinar, o el agente
-            # no dejo verificable cual uso: el primero es una moneda al aire y una
-            # atribucion falsa es peor que ninguna.
             fields = locator_registry.EMPTY
             scope = "ambiguous"
             ambiguous += 1
@@ -326,8 +301,6 @@ def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
                 locator_scope=scope,
                 chunk_articles=articles,
                 excerpt_articles=excerpt_articles,
-                # El documento tampoco se acepta del modelo: viaja con el id opaco igual
-                # que el locator, para que el backend no dependa de que el agente lo copie.
                 file_name=context.get("file_name") or "",
                 file_url=context.get("file_url") or "",
                 **fields,
@@ -344,13 +317,6 @@ def resolve_locators(payload: LocatorResolveRequest) -> LocatorResolveResponse:
 
 
 def _locator_from_excerpt(context: dict, excerpt: str) -> tuple[dict | None, list[str]]:
-    """Reancla la cita sobre el fragmento citado.
-
-    Devuelve `(campos, articulos que cubre el fragmento)`. Los campos son `None` cuando no
-    se pudo verificar el fragmento, y tambien cuando cubre varios articulos que no se
-    pudieron combinar: ahi la lista de articulos es lo que le dice al caller que la cita
-    es ambigua y no que simplemente no hubo excerpt.
-    """
     if not settings.enable_citation_locator or not excerpt or not context.get("snippet"):
         return None, []
 
@@ -373,7 +339,6 @@ def _locator_from_excerpt(context: dict, excerpt: str) -> tuple[dict | None, lis
 
 @app.post("/locator/probe", response_model=LocatorProbeResponse)
 def locator_probe(payload: LocatorProbeRequest) -> LocatorProbeResponse:
-    """Diagnostico: muestra que documento caso y con que estrategia se resolvio."""
     path = corpus.resolve_document_path(payload.title, payload.file_id)
     index = corpus.load_index(path) if path is not None else None
     found = locator.resolve(index, payload.snippet)

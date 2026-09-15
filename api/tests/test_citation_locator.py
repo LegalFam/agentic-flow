@@ -57,7 +57,6 @@ def test_empty_snippet_short_circuits(corpus_dir):
 
 
 def test_never_raises_when_the_corpus_layer_fails(monkeypatch):
-    """Una cita sin locator es aceptable; una busqueda legal caida no lo es."""
     def explode(*args, **kwargs):
         raise RuntimeError("disco caido")
 

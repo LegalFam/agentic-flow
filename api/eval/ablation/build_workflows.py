@@ -1,12 +1,3 @@
-"""Genera los cuatro workflows de la ablacion desde el de produccion.
-
-    python -m eval.ablation.build_workflows --dry-run    # solo el diff, no escribe nada
-    python -m eval.ablation.build_workflows
-
-Los ficheros salen en `n8n/workflows/eval/`, que NO entra en el deploy: el import del
-pipeline de Cloud Run apunta a `n8n/workflows/` y pisaria produccion con estos brazos.
-"""
-
 import argparse
 import copy
 import json
@@ -15,7 +6,6 @@ from pathlib import Path
 
 from eval.ablation import arms
 
-# api/eval/ablation/build_workflows.py -> agentic-flow/
 REPO = Path(__file__).resolve().parents[3]
 SOURCE = REPO / "n8n" / "workflows" / "LegalFam Message Flow.json"
 TARGET = REPO / "n8n" / "workflows" / "eval"
@@ -50,7 +40,6 @@ def summarize(original: dict, variant: dict, arm: str) -> str:
 
 
 def _changed_fields(before: dict, after: dict) -> list[str]:
-    """Que se toco de un nodo, en terminos legibles y no como un diff de JSON."""
     changes: list[str] = []
     old = before.get("parameters", {})
     new = after.get("parameters", {})
@@ -150,17 +139,6 @@ def parse_bindings(raw: list[str]) -> dict[str, str]:
 
 
 def bind_credentials(workflow: dict, bindings: dict[str, str]) -> int:
-    """Reapunta las credenciales al id que tengan en la instancia destino.
-
-    El id de una credencial de n8n es local a la instancia que la creo: el mismo
-    "Google Gemini(PaLM) Api account" tiene un id distinto en produccion y en la maquina
-    de quien corre el experimento, y un workflow importado con el id ajeno arranca sin
-    credencial y falla en cada nodo de modelo.
-
-    Se empareja por nombre, que si es estable. Los ficheros versionados conservan los ids
-    de produccion —son la evidencia de que el brazo sale del workflow real— y esta
-    reasignacion se aplica solo sobre la copia que se importa.
-    """
     changed = 0
     for node_item in workflow["nodes"]:
         for credential in (node_item.get("credentials") or {}).values():
@@ -178,13 +156,6 @@ def serialize(path: Path, variant: dict) -> str:
 
 
 def check(variants: list[tuple[str, dict]], out: Path) -> int:
-    """Compara los brazos en disco contra los que saldrian del workflow de produccion ahora.
-
-    Es lo que hace seguro versionarlos. El riesgo de un artefacto generado no es que se
-    vea en el arbol, es que se quede viejo sin que nadie lo note: alguien toca un prompt
-    de produccion, nadie regenera, y la corrida siguiente compara contra una version del
-    sistema que ya no existe. Esto convierte ese silencio en un fallo.
-    """
     stale: list[str] = []
     for arm, variant in variants:
         path = out / f"legalfam-eval-{arm}.json"

@@ -1,10 +1,3 @@
-"""`/resolve-locators` es la ultima frontera antes de que la cita llegue al usuario.
-
-Lo que entra por aca lo escribio un LLM. El `citation_id` es opaco y solo sirve de llave;
-el `original_snippet` es texto libre y por lo tanto se trata como sospechoso: se acepta
-como puntero al chunk guardado, nunca como ubicacion.
-"""
-
 import pytest
 
 from app import corpus, locator_registry
@@ -30,7 +23,6 @@ CHUNK = (
 
 EXCERPT_562 = "El demandante goza de Auxilio Judicial sin trámite ni prestar caución juratoria."
 
-# Un excerpt que cruza el corte entre articulos: se cita con los dos o con ninguno.
 EXCERPT_561_562 = (
     "los directores de los establecimientos de menores. Articulo 562.- El demandante goza "
     "de Auxilio Judicial"
@@ -90,7 +82,6 @@ def test_excerpt_wins_over_the_chunk_locator(corpus_dir):
 
 
 def test_excerpt_that_crosses_articles_cites_all_of_them(corpus_dir):
-    """El caso que reaparecio: el fragmento parte del 561 y sigue dentro del 562."""
     register()
     response, citation = ask(excerpt=EXCERPT_561_562)
     assert citation.locator == "Arts. 561 y 562"
@@ -109,7 +100,6 @@ def test_uncombinable_multi_article_excerpt_returns_no_location(corpus_dir, monk
 
 
 def test_the_document_comes_from_the_registry_not_from_the_agent(corpus_dir):
-    """El agente ya no copia file_name ni file_url: se recuperan por el citation_id."""
     register()
     _, citation = ask(excerpt=EXCERPT_562)
     assert citation.file_name == "Codigo Procesal Civil"
@@ -124,7 +114,6 @@ def test_unknown_citation_id_has_no_document_either(corpus_dir):
 
 
 def test_multi_article_chunk_without_excerpt_returns_no_location(corpus_dir):
-    """Quedarse con el primer articulo seria adivinar cual sustenta la respuesta."""
     register()
     response, citation = ask()
     assert citation.locator == ""

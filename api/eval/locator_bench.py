@@ -1,24 +1,3 @@
-"""Banco del localizador con verdad de terreno construida desde el corpus.
-
-    python -m eval.locator_bench [--per-document 300] [--seed 7]
-
-La tasa de ubicacion correcta de `eval.score` depende de lo que el sistema recupero en una
-corrida y de un recalculo que no conoce el chunk. Aca la verdad se fabrica: se corta un
-chunk del markdown real, se corta un fragmento dentro de el, se sabe exactamente en que
-caracteres esta, y se le pide al localizador que lo ubique a partir del texto solamente.
-
-El texto se entrega como lo entrega Gemini (sin `**`, `#`, comentarios ni etiquetas) y el
-fragmento con las alteraciones que se ven en las citas reales: puntos suspensivos por el
-medio, palabras cortadas en los bordes, puntuacion cambiada, erratas.
-
-Tambien se miden los negativos: un fragmento que no salio del chunk tiene que quedar sin
-ubicacion. Un localizador que ubica todo no sirve.
-
-La verdad comparte con el localizador la deteccion de encabezados (que se revisa aparte
-con `python -m app.locator_coverage`), pero NO la ubicacion del pasaje ni el calculo de que
-articulos cubre: esta se recalcula aqui con un recorrido lineal independiente.
-"""
-
 import argparse
 import json
 import random
@@ -38,7 +17,6 @@ NEGATIVES = ("outside_chunk", "shuffled")
 
 
 def render(markdown: str) -> str:
-    """Lo que Gemini devuelve de un tramo de markdown: el texto, sin el marcado."""
     text = _TAG_RE.sub(" ", markdown)
     text = _LINE_MARKUP_RE.sub("", text)
     text = text.replace("*", "").replace("_", " ").replace("|", " ")
@@ -46,20 +24,12 @@ def render(markdown: str) -> str:
 
 
 def _snap(base: str, position: int) -> int:
-    """Lleva un corte al whitespace siguiente, como hace un chunker por palabras."""
     while position < len(base) and not base[position].isspace():
         position += 1
     return position
 
 
 def truth_articles(index: locator.DocumentIndex, start: int, end: int) -> set[str]:
-    """Articulos con al menos una letra o digito en `base[start:end]`, sin bisect ni esqueleto.
-
-    Recorrido lineal: cada articulo es duenio del texto desde su primer caracter real hasta
-    el primer caracter real del encabezado siguiente de nivel articulo o superior. La
-    distancia maxima de gobierno es la misma regla que aplica produccion.
-    """
-    # Lo que esta dentro de un comentario o etiqueta no es texto: Gemini no lo transmite.
     base = _TAG_RE.sub(lambda match: " " * len(match.group(0)), index.base)
 
     def real(char: str) -> bool:
@@ -94,9 +64,6 @@ def truth_articles(index: locator.DocumentIndex, start: int, end: int) -> set[st
 def perturb(text: str, mode: str, rng: random.Random) -> str:
     words = text.split(" ")
     if mode == "trimmed" and len(words) > 6:
-        # Palabra cortada a medias, pero sin quitarle todas sus letras: si del borde solo
-        # queda un ".", el articulo al que pertenecia ya no esta en el fragmento y la verdad
-        # calculada sobre el corte original dejaria de ser verdad.
         head = words[0][rng.randint(1, max(1, len(words[0]) - 1)) :]
         tail = words[-1][: rng.randint(1, max(1, len(words[-1]) - 1))]
         head = head if any(char.isalnum() for char in head) else words[0]
@@ -152,8 +119,6 @@ def run(per_document: int, seed: int, minimum_articles: int) -> dict:
             chunk_start = _snap(base, rng.randrange(0, max(1, len(base) - 3000)))
             chunk_end = _snap(base, min(len(base), chunk_start + rng.randint(900, 2600)))
             chunk_md = base[chunk_start:chunk_end]
-            # Los chunks reales de File Search llegan con el marcado (`**`, `_`) y el excerpt
-            # del agente sin el: se alternan las dos formas para cubrir ambas.
             chunk = render(chunk_md) if rng.random() < 0.5 else re.sub(r"\s+", " ", chunk_md).strip()
             if len(render(chunk_md)) < 300:
                 continue
@@ -178,7 +143,6 @@ def run(per_document: int, seed: int, minimum_articles: int) -> dict:
                         "excerpt": altered[:300], "base_offset": excerpt_start,
                     })
 
-            # Negativos: un fragmento del mismo documento que no esta en el chunk.
             other = _snap(base, rng.randrange(0, max(1, len(base) - 800)))
             if other + 600 < chunk_start or other > chunk_end:
                 outside = render(base[other : _snap(base, other + rng.randint(80, 400))])

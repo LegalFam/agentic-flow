@@ -1,10 +1,3 @@
-"""El registro es lo que impide que un LLM invente un numero de articulo.
-
-Los agentes solo transportan el `citation_id`; el locator sale de aca. La propiedad
-critica que fijan estos tests es la degradacion: un id desconocido o vencido devuelve
-vacio, nunca algo parecido ni algo inventado.
-"""
-
 import pytest
 
 from app import locator_registry
@@ -58,7 +51,6 @@ def test_evicts_when_over_capacity(monkeypatch):
     for index in range(40):
         locator_registry.register(f"id-{index}", FIELDS)
     assert locator_registry.size() <= 10
-    # Lo ultimo registrado debe sobrevivir: es lo que una busqueda en curso va a pedir.
     assert locator_registry.resolve("id-39") is not None
 
 

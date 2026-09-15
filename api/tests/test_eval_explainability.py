@@ -1,25 +1,18 @@
-"""Suficiencia, comprensibilidad, accionabilidad y fidelidad causal de la explicacion."""
-
 import pytest
 
 from eval import explainability
 
 
-# --------------------------------------------------------------------------------------
-# Legibilidad
-
-
 def test_syllable_count_handles_diphthongs_and_hiatus():
-    assert explainability._syllables("agua") == 2       # a-gua, diptongo
-    assert explainability._syllables("caos") == 2       # ca-os, hiato de fuertes
-    assert explainability._syllables("dia") == 1        # dia, diptongo
-    assert explainability._syllables("día") == 2        # di-a, hiato por tilde
+    assert explainability._syllables("agua") == 2
+    assert explainability._syllables("caos") == 2
+    assert explainability._syllables("dia") == 1
+    assert explainability._syllables("día") == 2
     assert explainability._syllables("pension") == 2
     assert explainability._syllables("alimentos") == 4
 
 
 def test_short_text_has_no_readability_score():
-    """Los indices no significan nada en una frase de ocho palabras."""
     assert explainability.readability("La pension se fija segun el caso.") is None
 
 
@@ -58,10 +51,6 @@ def test_readability_gap_is_none_without_usable_pairs():
     assert explainability.readability_gap([{"original_snippet": "corto", "summary_snippet": ""}]) is None
 
 
-# --------------------------------------------------------------------------------------
-# Suficiencia
-
-
 def test_normative_claim_needs_both_a_duty_marker_and_legal_vocabulary():
     claims = explainability.normative_claims(
         "El juez debe fijar la pension segun las posibilidades del obligado. "
@@ -72,7 +61,6 @@ def test_normative_claim_needs_both_a_duty_marker_and_legal_vocabulary():
 
 
 def test_practical_advice_alone_is_not_a_normative_claim():
-    """Sin esta condicion, un consejo practico inflaria el denominador de la densidad."""
     assert explainability.normative_claims(
         "Puedes reunir los documentos que tengas. Debes guardarlos en un lugar seguro."
     ) == []
@@ -107,14 +95,9 @@ def test_support_density_is_zero_when_the_citation_is_about_something_else():
 
 
 def test_support_density_is_none_without_normative_claims():
-    """Un saludo no tiene afirmaciones que respaldar: cero seria un juicio, no un dato."""
     result = explainability.support_density("Hola, buenos dias.", [], [])
     assert result["claims"] == 0
     assert result["density"] is None
-
-
-# --------------------------------------------------------------------------------------
-# Accionabilidad
 
 
 def test_steps_starting_with_an_action_verb_count_as_actionable():
@@ -143,7 +126,6 @@ def test_step_that_repeats_a_clarifying_question_is_flagged():
 
 
 def test_institutional_referral_without_an_emergency_is_flagged():
-    """Derivar toda consulta ordinaria a una comisaria vacia la senal para las urgentes."""
     result = explainability.actionability(
         ["Acude a la comisaria mas cercana"], [], expects_referral=False
     )
@@ -161,10 +143,6 @@ def test_no_steps_reports_none_instead_of_zero():
     assert explainability.actionability([], [], expects_referral=False)["actionable_rate"] is None
 
 
-# --------------------------------------------------------------------------------------
-# Fidelidad causal
-
-
 def _response(message: str, locators: list[str]) -> dict:
     return {
         "message": message,
@@ -180,8 +158,6 @@ def test_stable_answer_with_stable_citations_is_not_decorative():
 
 
 def test_stable_answer_with_shifting_citations_is_decorative():
-    """El sintoma de una cita que acompana en vez de sostener: la respuesta no cambia y
-    la cita si."""
     responses = [
         _response("La pension se fija en proporcion a las necesidades del menor.", ["Art. 481"]),
         _response("La pension se fija en proporcion a las necesidades del menor.", ["Art. 92"]),
@@ -194,7 +170,6 @@ def test_stable_answer_with_shifting_citations_is_decorative():
 
 
 def test_changing_answer_is_not_judged_decorative():
-    """Si la respuesta tambien cambia, que la cita cambie no dice nada."""
     responses = [
         _response("La pension se fija en proporcion a lo que necesita el menor.", ["Art. 481"]),
         _response("Para pedir tenencia hay que acudir al juzgado de familia del distrito.", ["Art. 81"]),
@@ -211,12 +186,7 @@ def test_single_response_cannot_be_compared():
     assert explainability.stability([_response("una sola", ["Art. 481"])]) is None
 
 
-# --------------------------------------------------------------------------------------
-# Coincidencia semantica
-
-
 def test_literal_match_needs_no_embedding():
-    """Si la palabra esta, el concepto esta: no se gasta una llamada a la API."""
     from eval import semantic
 
     assert semantic.mentions("Se fija en proporción a las necesidades", "proporción") is True
@@ -229,8 +199,6 @@ def test_literal_match_ignores_accents():
 
 
 def test_without_a_proposition_it_stays_literal():
-    """La comparacion semantica sobre el termino suelto separa mal (margen 0.03 medido),
-    asi que no se aplica: sin proposicion en el dataset, coincidencia literal."""
     from eval import semantic
 
     assert semantic.mentions("la obligación recae en los abuelos", "ascendientes") is False
@@ -244,11 +212,6 @@ def test_sentences_drops_fragments_too_short_to_compare():
 
 
 def test_both_indices_penalise_long_sentences():
-    """Cross-check real: los dos indices tienen que moverse en el mismo sentido.
-
-    Con `F` leido como "frases por 100 palabras", Fernandez-Huerta quedaba invertido y
-    premiaba la frase larga, que es justo el defecto que la metrica busca detectar.
-    """
     corto = (
         "El juez mira dos cosas. Primero mira lo que necesita el menor. Despues mira lo "
         "que puede pagar el padre. Con eso fija el monto de la pension."

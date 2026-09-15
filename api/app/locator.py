@@ -1,22 +1,3 @@
-"""Reancla un snippet recuperado por Gemini File Search contra el markdown original
-del documento, para saber en que parte del documento esta (articulo, capitulo, pagina).
-
-Gemini File Search no devuelve offset ni seccion del chunk recuperado: lo unico con
-informacion posicional es el texto del snippet. Este modulo lo busca dentro del markdown
-y camina hacia atras por la jerarquia de encabezados.
-
-Espacios de coordenadas (no mezclarlos):
-- `base`      : markdown con saltos normalizados y NFC aplicado. Todos los offsets de
-                `Heading.offset` estan en estas coordenadas.
-- `collapsed` : `base` con el whitespace colapsado igual que `clean_user_text`, que es el
-                tratamiento que ya recibe el snippet. `offset_map[i]` traduce un indice de
-                `collapsed` a su indice en `base`.
-- `folded`    : `collapsed` en minusculas, garantizado del mismo largo, solo para comparar.
-- `skeleton`  : solo letras y digitos de `base`, sin acentos, en minusculas y sin el
-                marcado markdown/HTML. `skeleton_map[i]` traduce a `base`. Es donde se
-                ubican los pasajes: ver `skeleton_with_map`.
-"""
-
 import re
 import unicodedata
 from array import array
@@ -43,25 +24,10 @@ LEVEL_NAMES = {
     LEVEL_ARTICULO: "Articulo",
 }
 
-# Los encabezados markdown viven fuera de la jerarquia juridica para no contaminar el
-# breadcrumb; solo se usan como ultimo recurso cuando no hay ningun encabezado legal.
 LEVEL_MARKDOWN = 100
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
-# "Articulo 333.-", "Articulo 12°", "Articulo 4-A:". Exige separador o fin de linea para no
-# capturar prosa como "conforme al articulo 333 del codigo".
-#
-# El prefijo admite dos decoraciones mas porque el corpus las usa en encabezados reales:
-# la vineta de lista ("- Articulo 93º", Codigo de los Ninos y Adolescentes) y la comilla de
-# apertura, recta o tipografica, con la que el texto unico ordenado transcribe los articulos
-# sustituidos por leyes posteriores ('**" Articulo 21.- Regulacion de la capacidad juridica**',
-# '## "Articulo 7. Sujetos de proteccion'). Sin ellas esos 631 encabezados se pierden y su
-# texto se atribuye al articulo anterior, que es peor que quedarse sin ubicacion.
-#
-# Lo que separa un encabezado de una referencia en prosa no es el prefijo sino el separador
-# exigido tras el numero: "Articulo 23 de este Codigo." y "articulo 8, de conformidad con la
-# ley" siguen fuera porque les sigue una palabra o una coma.
 _ARTICULO_RE = re.compile(
     r"^\s{0,8}(?:[-*+•]\s+)?(?:#{1,6}\s*)?[*_\"'“”‘’ ]{0,10}"
     r"art[ií]culo\s+(\d+(?:[\s\-–]?[a-z])?[°º]?)\s*(?:[.\-–—:)º°]|$)",
@@ -72,18 +38,12 @@ _PAGINA_RE = re.compile(r"^\s{0,8}#{1,6}\s*p[áa]gina\s+(\d+)\s*$", re.IGNORECAS
 
 _MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*$")
 
-# Encabezados de linea completa. El limite de largo evita capturar prosa que empieza con
-# la palabra clave ("Titulo que acredita la propiedad ...").
 _WHOLE_LINE_PATTERNS = (
     (LEVEL_LIBRO, "libro", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}libro\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
     (LEVEL_SECCION, "seccion", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}secci[óo]n\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
     (LEVEL_SUBCAPITULO, "subcapitulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}sub\s?-?\s?cap[ií]tulo\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
     (LEVEL_CAPITULO, "capitulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}cap[ií]tulo\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
     (LEVEL_TITULO, "titulo", re.compile(r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}t[ií]tulo\s+(.{1,60}?)[\s*_]*$", re.IGNORECASE)),
-    # Solo las disposiciones que son parte de la estructura. Con "disposicion" + cualquier
-    # cosa, el corte de linea de un parrafo ("disposición que lo instituye.") y la sumilla
-    # "Disposición de los bienes sociales" entraban como TITULO: cerraban el articulo en
-    # curso a media frase y ensuciaban el breadcrumb de los siguientes.
     (LEVEL_TITULO, "disposiciones", re.compile(
         r"^\s{0,8}(?:#{1,6}\s*)?[*_]{0,4}(disposici[óo]n(?:es)?\s+"
         r"(?:complementari|final|transitori|derogatori|modificatori|sustitutori|generales|especiales|preliminar)"
@@ -92,7 +52,6 @@ _WHOLE_LINE_PATTERNS = (
     )),
 )
 
-# Niveles estructurales cuyo nombre suele venir en la linea siguiente.
 _NAMED_KINDS = frozenset({"libro", "seccion", "titulo", "capitulo", "subcapitulo"})
 
 _ROMAN_RE = re.compile(r"^[IVXLCDM]+$")
@@ -104,38 +63,23 @@ _NUMERAL_RE = re.compile(
 _INCISO_RE = re.compile(r"\binciso\s+(\d+)", re.IGNORECASE)
 _SNIPPET_ARTICULO_RE = re.compile(r"\bart[ií]culo\s+(\d+[\-–]?[a-z]?)", re.IGNORECASE)
 
-# La sumilla que el Codigo Civil pone en negrita ENCIMA del articulo modificado
-# ("**Causales de exoneracion de alimentos**" y debajo '**"Articulo 483.-**') es parte de
-# ese articulo. Sin moverla, un fragmento que arranca en la sumilla se citaba tambien con el
-# articulo anterior.
 _SUMILLA_RE = re.compile(r"^\s{0,3}\*\*_?\s*([^*\n]{3,90}?)\s*_?\*\*\s*$")
 
-# Marcado que Gemini no transmite en el chunk: comentarios (`<!-- image -->`) y etiquetas
-# (`<br>`). Sus letras no pueden entrar al esqueleto o el pasaje dejaria de casar.
 _MARKUP_RE = re.compile(r"<!--.*?-->|</?[a-zA-Z][^<>\n]{0,40}>", re.DOTALL)
 
-# "..." / "…" / "[...]" / "(...)": el agente recorta el pasaje por el medio. Cada tramo se
-# ubica por separado y en orden.
 _ELLIPSIS_RE = re.compile(r"\[\s*(?:\.{3,}|…)\s*\]|\(\s*(?:\.{3,}|…)\s*\)|\.{3,}|…")
 
-# Ordinales: "76º" y "76°" son el mismo numero, y el grado ni siquiera es alfanumerico.
 _NOT_SKELETON = frozenset("ºª")
 _SKELETON_CHARS: dict[str, str] = {}
 
-# Holgura al buscar el excerpt alrededor del chunk, en caracteres del esqueleto.
 _WINDOW_SLACK = 200
 
-# Alineamiento difuso sobre el esqueleto.
 _KGRAM = 12
 _MAX_KGRAM_OCCURRENCES = 30
 _MAX_CANDIDATES = 40
 _MIN_ALIGNED_CHARS = 30
-# Un bloque comun mas corto que esto no fija el borde del pasaje: "dela" casa en cualquier
-# parte de la ventana y correria el inicio hacia el articulo anterior.
 _EDGE_BLOCK = 8
-# Tramos entre "..." mas cortos que esto no discriminan nada y se descartan.
 _MIN_SEGMENT = 12
-# Distancia maxima, en el esqueleto, entre dos tramos consecutivos separados por "...".
 _ELLIPSIS_GAP = 6000
 
 
@@ -146,9 +90,6 @@ class Heading:
     kind: str
     label: str
     page: int | None = None
-    # Indice en el esqueleto del primer caracter real del encabezado. Un articulo cubre un
-    # tramo solo si el tramo contiene texto suyo; con el offset de linea, un pasaje que
-    # terminaba justo antes de "**Articulo 473" arrastraba el 473 por los asteriscos.
     anchor: int = -1
 
 
@@ -157,8 +98,6 @@ class DocumentIndex:
     base: str
     collapsed: str
     folded: str
-    # array en vez de list: una list[int] cuesta ~36 bytes por caracter (un objeto int
-    # por posicion) y hacia que 6.5 MB de corpus ocuparan 225 MB de RAM. Con 'i' son 4.
     offset_map: array
     headings: list[Heading] = field(default_factory=list)
     skeleton: str = ""
@@ -184,13 +123,6 @@ EMPTY_LOCATOR = Locator()
 
 @dataclass(frozen=True)
 class Span:
-    """Un pasaje ubicado en el esqueleto.
-
-    `core_*` es lo que efectivamente coincidio; `start`/`end` lo extienden con la parte del
-    pasaje que no coincidio. En un match exacto son iguales. Cuando difieren y los dos
-    tramos no cubren los mismos articulos, la ubicacion depende de texto no verificado.
-    """
-
     start: int
     end: int
     core_start: int
@@ -199,7 +131,6 @@ class Span:
 
 
 def fold(text: str) -> str:
-    """Minusculas garantizando el mismo largo, para no invalidar `offset_map`."""
     out = []
     for char in text:
         lowered = char.lower()
@@ -208,24 +139,14 @@ def fold(text: str) -> str:
 
 
 def collapse_with_map(base: str) -> tuple[str, array]:
-    """Colapsa whitespace igual que `clean_user_text` y devuelve el mapa de offsets.
-
-    Sin este mapa el snippet nunca casa: Gemini lo entrega ya colapsado, mientras que el
-    markdown conserva saltos de linea e indentacion.
-    """
     chars: list[str] = []
-    # Se acumula en list (append rapido) y se convierte al final: array.append en
-    # bucle es ~5x mas lento, y array solo se necesita para el almacenamiento.
     offsets: list[int] = []
     pending_space = False
 
     for index, char in enumerate(base):
         if _CONTROL_CHARS.match(char):
             continue
-        # isspace() ya cubre el espacio duro U+00A0 que limpia clean_user_text.
         if char.isspace():
-            # El espacio se emite recien cuando aparece un caracter real, para que su
-            # offset apunte al inicio del texto y no al whitespace previo.
             if chars:
                 pending_space = True
             continue
@@ -250,15 +171,6 @@ def _skeleton_char(char: str) -> str:
 
 
 def skeleton_with_map(text: str) -> tuple[str, array]:
-    """Solo letras y digitos, sin acentos ni mayusculas, con su posicion en `text`.
-
-    Es el espacio donde se ubican los pasajes. El chunk que devuelve Gemini es el texto
-    ya renderizado: sin `**`, sin `#`, sin `<!-- image -->`. En el markdown todo eso
-    sigue ahi, y buscar el pasaje literal fallaba justo en los articulos con enfasis; el
-    respaldo por prefijo o difuso casaba entonces unos caracteres corrido, y ese desfase
-    era lo que mandaba la cita al articulo vecino. Sin puntuacion ni marcado, el chunk
-    casa exacto contra el markdown.
-    """
     masked = _MARKUP_RE.sub(lambda match: " " * len(match.group(0)), text)
     chars: list[str] = []
     offsets: list[int] = []
@@ -278,7 +190,6 @@ def skeletonize(text: str) -> str:
 
 
 def article_key(label: str) -> str:
-    """`"Art. 76°"`, `"Art. 76"` y `"Art. 4-A"`/`"Art. 4 A"` -> una sola forma."""
     cleaned = label.upper().replace("ARTS.", "").replace("ART.", "")
     return re.sub(r"[\s\-–—.°º]+", "", cleaned)
 
@@ -289,7 +200,6 @@ def _pretty_tail(raw: str) -> str:
     if not words:
         return ""
 
-    # "DERECHO DE FAMILIA" -> "Derecho de familia", pero "III" se queda como esta.
     lexical = [word for word in words if any(char.isalpha() for char in word) and not _ROMAN_RE.match(word)]
     all_caps = bool(lexical) and all(word.isupper() for word in lexical)
 
@@ -306,8 +216,6 @@ def _pretty_tail(raw: str) -> str:
 
 def _build_label(kind: str, level: int, raw: str) -> str:
     if kind == "articulo":
-        # Sin _pretty_tail: bajaria a minuscula el sufijo de "Art. 659 F". Sin ordinal: el
-        # corpus mezcla "76°" y "77º", y la cita combinada salia "Arts. 76° y 77º".
         number = raw.strip("*_# ").replace("°", "").replace("º", "")
         return "Art. " + " ".join(number.split()).upper()
     tail = _pretty_tail(raw)
@@ -368,7 +276,6 @@ def build_index(markdown: str) -> DocumentIndex:
 
 
 def _sumilla_above(lines: list[str], position: int, consumed: set[int]) -> int:
-    """Linea de la sumilla en negrita justo encima del articulo, o -1."""
     for index in range(position - 1, max(-1, position - 4), -1):
         line = lines[index]
         if not line.strip():
@@ -386,11 +293,6 @@ def _sumilla_above(lines: list[str], position: int, consumed: set[int]) -> int:
 
 
 def _lookahead_name(lines: list[str], position: int) -> tuple[int, str]:
-    """Los codigos parten el encabezado en dos lineas: "TITULO IV" y su nombre debajo.
-
-    Sin consumir la segunda linea, un nombre como "DISPOSICIONES GENERALES" se clasifica
-    como encabezado propio del mismo nivel y pisa al numero en el breadcrumb.
-    """
     for offset in (1, 2):
         index = position + offset
         if index >= len(lines):
@@ -400,9 +302,6 @@ def _lookahead_name(lines: list[str], position: int) -> tuple[int, str]:
             continue
         if len(candidate) > 80 or candidate.endswith((".", ";", ",")):
             break
-        # Una nota "- (*) Articulo modificado por..." o el encabezado del articulo siguiente no
-        # son el nombre del capitulo. Tomados como nombre, el mismo CAPITULO II quedaba con
-        # dos breadcrumbs distintos y un fragmento de dos articulos suyos salia sin ubicacion.
         name = candidate.lstrip("-•+ ").strip("\"'“”‘’ ")
         if not name or not name[0].isalpha() or re.search(r"\bart[ií]culo\b", name, re.IGNORECASE):
             break
@@ -415,9 +314,6 @@ def _lookahead_name(lines: list[str], position: int) -> tuple[int, str]:
 
 
 def _is_bare_name(candidate: str) -> bool:
-    """Un nombre suelto como "DISPOSICIONES GENERALES" no lleva numeracion propia."""
-    # Cualquier digito cuenta: con `\b\d+\b`, "Articulo 25º" pasaba por nombre suelto porque
-    # el ordinal es un caracter de palabra y no deja limite tras el 5.
     return not re.search(r"\b[IVXLCDM]+\b|\d", candidate)
 
 
@@ -430,7 +326,6 @@ def _classify_line(line: str, offset: int) -> Heading | None:
         number = int(page_match.group(1))
         return Heading(offset=offset, level=LEVEL_MARKDOWN, kind="pagina", label=f"Pagina {number}", page=number)
 
-    # El articulo va primero: es el unico patron que admite texto despues en la misma linea.
     articulo_match = _ARTICULO_RE.match(line)
     if articulo_match:
         return Heading(
@@ -440,17 +335,11 @@ def _classify_line(line: str, offset: int) -> Heading | None:
             label=_build_label("articulo", LEVEL_ARTICULO, articulo_match.group(1)),
         )
 
-    # Un encabezado estructural no termina en punto: "Titulo II de la SECCION SEGUNDA de este
-    # Código." es el corte de linea de un parrafo, y tomado por TITULO cerraba a media frase
-    # el articulo que lo contiene.
     if line.rstrip(" *_").endswith((".", ",", ";")):
         return _markdown_heading(line, offset)
 
     for level, kind, pattern in _WHOLE_LINE_PATTERNS:
         match = pattern.match(line)
-        # "Titulo que da mérito a la inscripción" es un titulo en sentido de documento, no
-        # un TITULO del codigo. De 954 encabezados estructurales del corpus, 952 llevan
-        # numeral u ordinal; los 2 que no, son justo esos, y cerraban el articulo en curso.
         if match and kind in _NAMED_KINDS and not _NUMERAL_RE.match(match.group(1).lstrip(" :-.*_")):
             continue
         if match:
@@ -471,13 +360,7 @@ def _markdown_heading(line: str, offset: int) -> Heading | None:
     return None
 
 
-# --------------------------------------------------------------------------------------
-# Busqueda literal sobre el texto plegado. Se conserva para la metrica de literalidad del
-# evaluador; la ubicacion ya no depende de ella.
-
-
 def find_offset(index: DocumentIndex, snippet: str) -> tuple[int | None, str]:
-    """Devuelve `(offset en coordenadas base, estrategia)`."""
     query = clean_user_text(snippet)
     if not query or not index.folded:
         return None, "none"
@@ -489,10 +372,6 @@ def find_offset(index: DocumentIndex, snippet: str) -> tuple[int | None, str]:
 
 
 def find_in_folded(haystack: str, query: str) -> tuple[int | None, str]:
-    """Busca `query` (ya colapsado) en un texto folded: `(posicion, estrategia)`.
-
-    La posicion esta en las coordenadas del haystack, no en `base`.
-    """
     if not haystack or not query:
         return None, "none"
 
@@ -523,9 +402,6 @@ def _fuzzy_offset(haystack: str, folded_query: str) -> int | None:
     if window < 40:
         return None
 
-    # Anclas: los tokens del inicio del snippet que menos aparecen en el documento, que son
-    # los que de verdad discriminan. Frecuencia, largo y texto dejan un orden total, que no
-    # depende de PYTHONHASHSEED.
     tokens = {token for token in folded_query[: window // 2].split(" ") if len(token) >= 7}
     ranked = sorted(tokens, key=lambda token: (haystack.count(token), -len(token), token))
     anchors = [token for token in ranked if token in haystack][:5]
@@ -563,18 +439,7 @@ def _fuzzy_offset(haystack: str, folded_query: str) -> int | None:
     return best_position
 
 
-# --------------------------------------------------------------------------------------
-# Ubicacion de pasajes sobre el esqueleto
-
-
 def find_spans(haystack: str, query: str, lo: int = 0, hi: int | None = None) -> list[Span]:
-    """Todas las apariciones de `query` (un esqueleto) dentro de `haystack[lo:hi]`.
-
-    Devuelve todas y no la primera: el Codigo Civil repite el texto original de un articulo
-    junto a su version modificada, y la Ley 30364 repite articulos enteros. Quedarse con la
-    primera aparicion es elegir a ciegas; con todas, quien llama puede comprobar si las
-    lecturas coinciden.
-    """
     hi = len(haystack) if hi is None else max(lo, min(hi, len(haystack)))
     lo = max(0, lo)
     if not query or hi <= lo:
@@ -592,13 +457,6 @@ def find_spans(haystack: str, query: str, lo: int = 0, hi: int | None = None) ->
 
 
 def _aligned_spans(haystack: str, query: str, lo: int, hi: int) -> list[Span]:
-    """Alineamiento tolerante: el agente cambia una letra, omite una palabra o corta a medias.
-
-    Las ventanas candidatas salen de los k-gramas mas raros del pasaje. Dentro de cada
-    ventana, los bloques comunes de `SequenceMatcher` dan la posicion exacta de lo que
-    coincidio, asi que el borde del pasaje no se corre aunque el texto difiera: el desfase
-    del difuso anterior, que media ventana contra ventana, era lo que cruzaba de articulo.
-    """
     length = len(query)
     if length < _MIN_ALIGNED_CHARS:
         return []
@@ -628,7 +486,6 @@ def _aligned_spans(haystack: str, query: str, lo: int, hi: int) -> list[Span]:
             clusters[-1].append(start)
         else:
             clusters.append([start])
-    # Primero las ventanas con mas votos; a igual voto, la primera en el documento.
     clusters.sort(key=lambda cluster: (-len(cluster), cluster[0]))
 
     matcher = SequenceMatcher(autojunk=False)
@@ -640,8 +497,6 @@ def _aligned_spans(haystack: str, query: str, lo: int, hi: int) -> list[Span]:
         window_start = max(lo, anchor - slack)
         window_end = min(hi, anchor + length + slack)
         matcher.set_seq1(haystack[window_start:window_end])
-        # Solo bloques largos cuentan como coincidencia: con bloques de 4 letras, un pasaje
-        # con las palabras barajadas cubria el 80% y se daba por verificado.
         blocks = [block for block in matcher.get_matching_blocks() if block.size >= _EDGE_BLOCK]
         if not blocks or sum(block.size for block in blocks) < minimum:
             continue
@@ -664,12 +519,6 @@ def _aligned_spans(haystack: str, query: str, lo: int, hi: int) -> list[Span]:
 
 
 def _digits_covered(query: str, blocks: list) -> bool:
-    """Los numeros no admiten parecido: "articulo 58" y "articulo 387" son otra norma.
-
-    En texto juridico los digitos son justo lo que distingue un pasaje de su gemelo (las
-    concordancias del Codigo Procesal Civil repiten la misma frase con otro numero de
-    casacion), asi que un alineamiento con algun digito sin casar no se acepta.
-    """
     covered = bytearray(len(query))
     for block in blocks:
         covered[block.b : block.b + block.size] = b"\x01" * block.size
@@ -677,7 +526,6 @@ def _digits_covered(query: str, blocks: list) -> bool:
 
 
 def passage_segments(text: str) -> list[str]:
-    """Esqueletos de los tramos del pasaje, partido por los "..." que puso el agente."""
     parts = [skeleton_with_map(part)[0] for part in _ELLIPSIS_RE.split(clean_user_text(text))]
     parts = [part for part in parts if part]
     if len(parts) > 1:
@@ -686,7 +534,6 @@ def passage_segments(text: str) -> list[str]:
 
 
 def locate_segments(haystack: str, segments: list[str], lo: int = 0, hi: int | None = None) -> list[Span]:
-    """Ubica los tramos en orden; cada aparicion del primero es una lectura posible."""
     if not segments:
         return []
     hi = len(haystack) if hi is None else min(hi, len(haystack))
@@ -716,12 +563,6 @@ def locate_segments(haystack: str, segments: list[str], lo: int = 0, hi: int | N
 
 
 def skeleton_articles(index: DocumentIndex, start: int, end: int) -> list[Heading]:
-    """Articulos con texto dentro del tramo `[start, end)` del esqueleto.
-
-    El articulo que gobierna el inicio cuenta salvo que un encabezado de nivel superior
-    (un TITULO nuevo) lo haya cerrado antes, o que quede tan lejos que ya no lo gobierne.
-    Los demas cuentan si su primer caracter real cae dentro del tramo.
-    """
     anchors = index.article_anchors
     spanned: list[Heading] = []
 
@@ -739,8 +580,6 @@ def skeleton_articles(index: DocumentIndex, start: int, end: int) -> list[Headin
         spanned.append(index.articles[position])
         position += 1
 
-    # Un articulo modificado aparece dos veces seguidas en el corpus: el texto original y,
-    # tras la nota "Articulo modificado por ...", el vigente. Son el mismo articulo.
     seen: set[str] = set()
     unique: list[Heading] = []
     for heading in spanned:
@@ -768,11 +607,6 @@ class Reading:
 
 
 def readings_of(index: DocumentIndex, spans: list[Span]) -> tuple[list[Reading], bool]:
-    """Lecturas distintas (por conjunto de articulos) y si todas son seguras.
-
-    Una lectura es insegura cuando la parte que coincidio y la extension con el texto no
-    verificado cubren articulos distintos: el borde lo decidiria texto que no casa.
-    """
     readings: dict[tuple[str, ...], Reading] = {}
     certain = True
     for span in spans:
@@ -786,22 +620,12 @@ def readings_of(index: DocumentIndex, spans: list[Span]) -> tuple[list[Reading],
 
 
 def passage_readings(index: DocumentIndex, text: str) -> list[list[str]]:
-    """Conjuntos de articulos que podria cubrir `text` segun donde aparece en el documento.
-
-    Sin chunk que acote la busqueda: es lo que puede recalcular un evaluador externo. Una
-    lista vacia significa que el pasaje no aparece.
-    """
     spans = locate_segments(index.skeleton, passage_segments(text))
     readings, _ = readings_of(index, spans)
     return [[heading.label for heading in reading.articles] for reading in readings]
 
 
-# --------------------------------------------------------------------------------------
-# Construccion del locator
-
-
 def build_locator(index: DocumentIndex, offset: int, source: str) -> Locator:
-    """Camina hacia atras tomando el encabezado mas cercano de cada nivel juridico."""
     nearest: dict[int, Heading] = {}
     page: int | None = None
     nearest_markdown: Heading | None = None
@@ -816,23 +640,16 @@ def build_locator(index: DocumentIndex, offset: int, source: str) -> Locator:
             nearest_markdown = heading
             continue
         nearest[heading.level] = heading
-        # Un encabezado de nivel superior invalida los inferiores ya vistos:
-        # un TITULO nuevo cierra el articulo anterior.
         for level in list(nearest):
             if level > heading.level:
                 del nearest[level]
 
-    # Nada "cierra" un articulo, asi que un texto lejano heredaria el ultimo articulo visto.
-    # En un codigo eso es correcto; en una resolucion con OCR produce una cita falsa.
     articulo = nearest.get(LEVEL_ARTICULO)
     if articulo is not None and offset - articulo.offset > settings.locator_max_article_span:
         del nearest[LEVEL_ARTICULO]
 
     chain = [nearest[level].label for level in sorted(nearest)]
 
-    # Sin jerarquia juridica solo queda el encabezado markdown, que en resoluciones y
-    # casaciones es el asunto del caso o ruido del OCR, no una ubicacion. Se conserva,
-    # pero etiquetado aparte para que quien consuma la cita pueda descartarlo.
     if not chain and nearest_markdown is not None:
         chain = [nearest_markdown.label]
         source = "markdown_heading"
@@ -849,11 +666,6 @@ def build_locator(index: DocumentIndex, offset: int, source: str) -> Locator:
 
 
 def locator_from_snippet(snippet: str) -> Locator:
-    """Fallback sin corpus: los chunks suelen arrastrar su propio encabezado.
-
-    Da valor antes de que existan los markdowns y degrada con gracia cuando falta un
-    archivo en el corpus.
-    """
     text = clean_user_text(snippet)
     if not text:
         return EMPTY_LOCATOR
@@ -862,16 +674,11 @@ def locator_from_snippet(snippet: str) -> Locator:
     if not numbers:
         return EMPTY_LOCATOR
 
-    # Sin indice no hay forma de saber donde termina un articulo y empieza el siguiente,
-    # asi que un texto que nombra varios no se puede repartir: elegir el primero seria
-    # adivinar, y una atribucion falsa es peor que una cita sin ubicacion.
     if len({number.upper() for number in numbers}) > 1:
         return EMPTY_LOCATOR
 
     label = f"Art. {numbers[0]}"
 
-    # Solo se adjunta el inciso cuando es inequivoco: si el snippet cita varios, elegir
-    # uno seria enganoso.
     incisos = {found.group(1) for found in _INCISO_RE.finditer(text)}
     if len(incisos) == 1:
         label = f"{label}, inc. {incisos.pop()}"
@@ -880,25 +687,16 @@ def locator_from_snippet(snippet: str) -> Locator:
 
 
 def headings_in_span(index: DocumentIndex, start: int, end: int) -> list[Heading]:
-    """Encabezados de articulo que cubren el tramo `[start, end)` en coordenadas base."""
     return skeleton_articles(
         index, bisect_left(index.skeleton_map, start), bisect_left(index.skeleton_map, end)
     )
 
 
 def articles_in_span(index: DocumentIndex, start: int, end: int) -> list[str]:
-    """Articulos que cubre el tramo `[start, end)` en coordenadas base.
-
-    Un chunk de File Search no respeta el articulado: puede arrancar a media frase del
-    Art. 561 y terminar dentro del 563. Saber cuantos articulos abarca es lo que permite
-    distinguir un tramo cuya ubicacion es inequivoca de uno donde quedarse con el primero
-    seria adivinar.
-    """
     return [heading.label for heading in headings_in_span(index, start, end)]
 
 
 def _parent_chain(breadcrumb: str, label: str) -> str:
-    """El breadcrumb sin su ultimo eslabon, que es el articulo."""
     if breadcrumb == label:
         return ""
     suffix = f" > {label}"
@@ -906,7 +704,6 @@ def _parent_chain(breadcrumb: str, label: str) -> str:
 
 
 def _combined_label(labels: list[str]) -> str:
-    """`["Art. 562", "Art. 563"]` -> `"Arts. 562 y 563"`."""
     numbers = [label[len("Art. ") :] if label.startswith("Art. ") else label for label in labels]
     if len(numbers) == 1:
         return f"Art. {numbers[0]}"
@@ -914,14 +711,6 @@ def _combined_label(labels: list[str]) -> str:
 
 
 def combine_locator(index: DocumentIndex, headings: list[Heading], source: str) -> Locator:
-    """Un tramo que cruza articulos se ubica con todos ellos, nunca con el primero.
-
-    Atribuirlo al primero es lo que producia citas bien redactadas y mal ubicadas. Si los
-    articulos cuelgan de padres distintos (el tramo cruza de un capitulo a otro), la
-    etiqueta sigue siendo exacta —nombra cada articulo que el tramo toca— y el breadcrumb
-    se queda en el ancestro comun. Antes esa cita salia sin ubicacion aunque no hubiera
-    nada que adivinar: en ablacion-v1, "Arts. 326 a 329" y "Arts. 817 y 818".
-    """
     if not headings or len(headings) > max(1, settings.locator_max_combined_articles):
         return EMPTY_LOCATOR
 
@@ -953,7 +742,6 @@ def combine_locator(index: DocumentIndex, headings: list[Heading], source: str) 
 
 
 def _labels(readings: list[Reading]) -> list[str]:
-    """Union de los articulos de todas las lecturas, en orden de documento."""
     seen: dict[str, Heading] = {}
     for reading in readings:
         for heading in reading.articles:
@@ -964,18 +752,10 @@ def _labels(readings: list[Reading]) -> list[str]:
 def _locator_for(index: DocumentIndex, reading: Reading) -> Locator:
     if reading.articles:
         return combine_locator(index, reading.articles, reading.span.strategy)
-    # Sin articulado (preambulo, resoluciones): la jerarquia o el encabezado markdown.
     return build_locator(index, _base_offset(index, reading.span.start), reading.span.strategy)
 
 
 def resolve_chunk(index: DocumentIndex | None, snippet: str) -> tuple[Locator, list[str]]:
-    """Ubica el chunk recuperado y reporta que articulos abarca.
-
-    El locator del chunk es el de su primer articulo: quien lo consume solo lo usa cuando
-    el chunk abarca uno solo. Si el chunk aparece en varios sitios con articulos distintos
-    no hay locator, y la lista devuelta es la union para que el caller lo trate como
-    ambiguo.
-    """
     if index is None:
         return locator_from_snippet(snippet), []
 
@@ -999,36 +779,17 @@ def resolve_chunk(index: DocumentIndex | None, snippet: str) -> tuple[Locator, l
 
 
 def resolve_excerpt(index: DocumentIndex | None, chunk: str, excerpt: str) -> Locator:
-    """Ubicacion del fragmento citado, sin el detalle de que articulos abarca."""
     return resolve_excerpt_span(index, chunk, excerpt)[0]
 
 
 def resolve_excerpt_span(
     index: DocumentIndex | None, chunk: str, excerpt: str
 ) -> tuple[Locator, list[str]]:
-    """Ubica el fragmento que el agente dice haber usado, exigiendo que salga del chunk.
-
-    El locator del chunk se queda con el primer articulo que aparece, que no tiene por que
-    ser el que sustenta la respuesta cuando el chunk abarca varios. Reanclando sobre el
-    texto citado, la ubicacion corresponde a lo que el agente realmente uso.
-
-    Tres garantias, en este orden:
-    1. El excerpt tiene que salir del chunk (exacto o casi) o no se ubica: pudo inventarlo.
-    2. Se busca en el documento todas las veces que aparece dentro de la zona del chunk. Si
-       las apariciones no coinciden en los articulos, o el borde del pasaje depende de
-       texto que no casa, no hay ubicacion.
-    3. Un fragmento que cruza articulos se cita con todos o con ninguno.
-
-    Devuelve `(EMPTY_LOCATOR, articulos)` cuando la ubicacion no es segura: el caller
-    decide como degradar, pero nunca se elige un articulo a ciegas.
-    """
     chunk_text = clean_user_text(chunk)
     excerpt_text = clean_user_text(excerpt)
     if not chunk_text or not excerpt_text:
         return EMPTY_LOCATOR, []
 
-    # Un excerpt muy corto ("El demandante") casa en cualquier parte y no discrimina un
-    # articulo de otro, que es justo lo que se quiere resolver.
     if len(excerpt_text) < settings.locator_min_excerpt_chars:
         return EMPTY_LOCATOR, []
 
@@ -1042,7 +803,6 @@ def resolve_excerpt_span(
 
     chunk_spans = locate_segments(index.skeleton, passage_segments(chunk_text))
     if not chunk_spans:
-        # Corpus desincronizado: el chunk no esta en este markdown.
         return locator_from_snippet(excerpt_text), []
 
     spans: list[Span] = []
@@ -1065,5 +825,4 @@ def resolve_excerpt_span(
 
 
 def resolve(index: DocumentIndex | None, snippet: str) -> Locator:
-    """Punto de entrada: indice si hay documento, regex sobre el snippet si no."""
     return resolve_chunk(index, snippet)[0]

@@ -1,14 +1,3 @@
-"""Corre el dataset contra los cuatro webhooks de la ablacion y guarda las respuestas crudas.
-
-    python -m eval.run_ablation --limit 1                 # humo: una pregunta por brazo
-    python -m eval.run_ablation                           # corrida completa
-    python -m eval.run_ablation --repeat 3 --repeat-sample 10
-
-Aca no se calcula ninguna metrica. Lo unico que hace es guardar lo que devolvio cada
-brazo, entero y sin tocar, en `runs/<timestamp>/<brazo>.jsonl`. El scoring va despues y
-sobre esos ficheros: reprocesar una metrica no puede costar otras 250 llamadas al modelo.
-"""
-
 import argparse
 import json
 import os
@@ -37,13 +26,6 @@ def load_dataset(path: Path) -> list[dict]:
 
 
 def call_webhook(url: str, token: str | None, header: str, message: str, timeout: int) -> dict:
-    """Mismo contrato que `N8nWebhookClient.sendMessage` del backend.
-
-    `session_id` es nuevo en cada llamada a proposito: el flujo cambia de registro cuando
-    detecta mensajes previos —el XAI Agent deja de saludar, el Parser Agent hereda hechos—
-    y reutilizar la sesion haria que la respuesta a una pregunta dependiera del orden del
-    dataset.
-    """
     payload = {
         "message": message,
         "session_id": str(uuid.uuid4()),
@@ -65,7 +47,7 @@ def call_webhook(url: str, token: str | None, header: str, message: str, timeout
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         status = exc.code
-    except Exception as exc:  # timeout, conexion rechazada, DNS
+    except Exception as exc:
         return {
             "ok": False,
             "status": None,
@@ -83,11 +65,6 @@ def call_webhook(url: str, token: str | None, header: str, message: str, timeout
 
 
 def already_done(path: Path) -> set[tuple[str, int]]:
-    """Que (pregunta, repeticion) ya se contestaron, para poder reanudar.
-
-    Una corrida completa son varios cientos de llamadas al modelo; si se corta a mitad,
-    volver a empezar cuesta dinero y no aporta nada.
-    """
     if not path.exists():
         return set()
     done = set()
@@ -104,12 +81,6 @@ def already_done(path: Path) -> set[tuple[str, int]]:
 
 
 def write_manifest(run_dir: Path, run_id: str, args, questions: int) -> None:
-    """Registra la fase que se acaba de lanzar, sin borrar las anteriores.
-
-    Una corrida completa son horas, asi que se hace por fases sobre el mismo `--run-id`.
-    Si el manifiesto se sobrescribiera, al final diria "16 preguntas" —el tamano de la
-    ultima fase— y no lo que de verdad se corrio.
-    """
     path = run_dir / "manifest.json"
     manifest = {"run_id": run_id, "dataset": str(args.dataset), "phases": []}
     if path.exists():
@@ -187,10 +158,6 @@ def main(argv: list[str] | None = None) -> int:
     failures = 0
     completed: list[str] = []
     try:
-        # Pregunta por fuera, brazo por dentro: una corrida que se corta a mitad —cuota
-        # agotada, contenedor caido— deja preguntas con los cuatro brazos hechos en vez de
-        # un brazo entero y los otros a cero. Lo primero sigue siendo un experimento
-        # pareado valido sobre menos preguntas; lo segundo no sirve para comparar nada.
         for position, item in enumerate(items):
             repeats = args.repeat if position < args.repeat_sample else 1
             answered = 0

@@ -1,10 +1,3 @@
-"""Identidad y deduplicacion de citas.
-
-El `citation_id` es lo unico que los agentes LLM transportan: el locator nunca viaja por
-el prompt. Estos tests fijan las dos propiedades de las que depende ese diseno — que el id
-sea estable y que la unidad de deduplicacion sea el articulo.
-"""
-
 from types import SimpleNamespace as NS
 
 import pytest
@@ -16,10 +9,8 @@ from app.gemini_client import _extract_grounding_citations, citation_id, citatio
 CC = "https://spij.gob.pe/codigo-civil"
 
 
-# --- identidad -------------------------------------------------------------------
 
 def test_same_article_is_one_identity_regardless_of_fragment():
-    # Dos fragmentos distintos del mismo articulo: una sola cita.
     assert citation_identity(CC, "Art. 333", "El adulterio.") == citation_identity(
         CC, "Art. 333", "La violencia fisica o psicologica."
     )
@@ -36,7 +27,6 @@ def test_same_article_in_different_documents_is_distinct():
 
 
 def test_without_locator_the_fragment_is_the_identity():
-    # Las resoluciones no tienen articulado: ahi la unidad vuelve a ser el fragmento.
     assert citation_identity(CC, "", "primer fragmento") != citation_identity(
         CC, "", "segundo fragmento"
     )
@@ -48,11 +38,8 @@ def test_identity_ignores_text_beyond_the_prefix():
     assert citation_identity(CC, "", long_a) == citation_identity(CC, "", long_b)
 
 
-# --- id opaco --------------------------------------------------------------------
 
 def test_id_is_deterministic():
-    """Derivado y no aleatorio: el RAG Agent reintenta con consultas mas amplias y el
-    mismo articulo debe volver con el mismo id."""
     identity = citation_identity(CC, "Art. 333", "El adulterio.")
     assert citation_id(identity) == citation_id(identity)
 
@@ -72,11 +59,9 @@ def test_id_differs_per_identity():
 
 
 def test_id_handles_non_ascii():
-    # Los titulos y locators reales llevan acentos; encode('utf-8') no debe reventar.
     assert citation_id(citation_identity(CC, "Art. 333 Ñ", "sección")) != ""
 
 
-# --- deduplicacion en la extraccion ----------------------------------------------
 
 DOC = """LIBRO III
 DERECHO DE FAMILIA
@@ -91,7 +76,6 @@ necesidades de quien los pide.
 
 
 def _response(*snippets: str):
-    """Respuesta de Gemini con un grounding chunk por snippet, todos del mismo archivo."""
     def chunk(text):
         meta = [
             NS(key="titulo", string_value="Codigo Civil"),
@@ -132,7 +116,6 @@ def test_two_articles_of_one_document_stay_separate(corpus_dir):
     )
     assert len(citations) == 2
     assert {c["locator"] for c in citations} == {"Art. 333", "Art. 481"}
-    # Ids distintos: es lo que permite volver a unirlos despues de los dos saltos de LLM.
     assert len({c["citation_id"] for c in citations}) == 2
 
 
@@ -144,7 +127,6 @@ def test_every_citation_carries_an_id(corpus_dir):
 
 
 def test_unlocated_fragments_are_not_collapsed(corpus_dir, monkeypatch):
-    # Sin locator la unidad es el fragmento, asi que dos textos distintos son dos citas.
     monkeypatch.setattr(settings, "enable_citation_locator", False)
     citations = _extract_grounding_citations(
         _response("Un texto sin referencia normativa.", "Otro texto distinto sin referencia.")
@@ -152,7 +134,6 @@ def test_unlocated_fragments_are_not_collapsed(corpus_dir, monkeypatch):
     assert len(citations) == 2
 
 
-# --- registro autoritativo --------------------------------------------------------
 
 def test_extraction_registers_every_locator(corpus_dir):
     from app import locator_registry
@@ -165,8 +146,6 @@ def test_extraction_registers_every_locator(corpus_dir):
         )
     )
 
-    # Cada cita debe poder resolverse despues por su id, que es lo unico que los
-    # agentes transportan.
     for citation in citations:
         stored = locator_registry.resolve(citation["citation_id"])
         assert stored is not None

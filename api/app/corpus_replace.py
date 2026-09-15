@@ -1,22 +1,3 @@
-"""Reemplaza un documento del File Search Store por una revision nueva.
-
-Complemento de `corpus_diff`, que solo mira: este si escribe. El caso tipico es un PDF
-actualizado, ya convertido a markdown y con su metadata extraida:
-
-    python -m app.corpus_replace --store "FamilyLaw" --list
-    python -m app.corpus_replace --store "FamilyLaw" --plan codigo-civil-<hash>.md
-    python -m app.corpus_replace --store "FamilyLaw" \
-        --markdown /work/nuevo/codigo-civil-<hash>.md \
-        --metadata /work/nuevo/codigo-civil-<hash>.metadata.json
-
-Sin `--apply` no toca nada: imprime que se subiria y que se borraria. El borrado en File
-Search no se deshace y no hay version anterior a la que volver, asi que el dry-run es el
-default y no una opcion.
-
-Codigos de salida: 0 hecho (o dry-run limpio), 2 hace falta una decision (nada que
-reemplazar, o varios candidatos), 3 se aplico pero algo quedo a medias, 1 error.
-"""
-
 import argparse
 import json
 import sys
@@ -50,7 +31,6 @@ def print_plan(plan: dict) -> None:
 
 def load_metadata(path: Path) -> LegalMetadata:
     data = json.loads(path.read_text(encoding="utf-8"))
-    # El workflow de conversion guarda el JSON envuelto: {"filename": ..., "metadata": {...}}
     if isinstance(data, dict) and "metadata" in data and isinstance(data["metadata"], dict):
         data = data["metadata"]
     return LegalMetadata.model_validate(data)
@@ -92,8 +72,6 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.delete:
-            # Mismo criterio que el reemplazo: el borrado no se deshace, asi que sin
-            # --apply solo se dice que documento se iria.
             if not args.apply:
                 listed = store_documents.list_store_documents(args.store)
                 matches = [

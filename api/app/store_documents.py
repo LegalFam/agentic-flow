@@ -1,22 +1,3 @@
-"""Reemplazar un documento ya indexado en un Gemini File Search Store.
-
-File Search no tiene update in-place: un documento solo se puede borrar y volver a
-subir. Si la version nueva entra sin sacar la vieja, el store queda con las dos y el RAG
-recupera texto contradictorio del mismo cuerpo legal sin forma de saber cual rige.
-
-El caso que motiva este modulo es el PDF actualizado. `build_document_id` en
-`converter.py` nombra los documentos como `<stem>-<sha256(pdf)[:12]>.md`, asi que un PDF
-nuevo produce un `display_name` distinto: la version vieja no se encuentra por igualdad
-de nombre. Se encuentra por la misma llave que usa el locator para casar corpus y store,
-el stem normalizado sin el hash (`corpus.normalize_key` sobre
-`corpus.strip_document_id_hash`).
-
-Esa llave puede casar con mas de un documento, o con ninguno. En ambos casos el modulo
-se niega y levanta `ReplaceRefused` en vez de elegir: borrar el documento equivocado no
-se deshace, y la lista de documentos del store es lo unico que se tiene para decidir.
-Quien llama resuelve la ambiguedad pasando `supersedes` explicito.
-"""
-
 from pathlib import Path
 from typing import Any
 
@@ -24,8 +5,6 @@ from app import corpus
 from app.config import settings
 from app.models import LegalMetadata
 
-# Mismo patron que `corpus_diff`: los helpers de store viven en `gemini_client`, que es
-# quien construye el cliente del SDK y arma el custom_metadata.
 from app.gemini_client import (
     _resolve_file_search_store_name,
     build_client,
@@ -34,19 +13,10 @@ from app.gemini_client import (
 
 
 class ReplaceRefused(RuntimeError):
-    """El reemplazo necesita una decision humana, no un reintento.
-
-    Se distingue de un fallo de Gemini porque la respuesta HTTP es distinta: 409 y no
-    503. Un 503 invita a reintentar; aca reintentar da exactamente el mismo resultado.
-    """
+    pass
 
 
 def replacement_key(display_name: str) -> str:
-    """Llave que identifica al documento a traves de versiones.
-
-    Ignora el hash del `document_id` (se calcula sobre los bytes del PDF, cambia con cada
-    revision) y los acentos y separadores, igual que `corpus.resolve_document_path`.
-    """
     return corpus.normalize_key(corpus.strip_document_id_hash(Path(display_name).stem))
 
 
@@ -72,8 +42,6 @@ def _resolve_store(client, types, requested: str | None) -> str:
     name = requested or settings.gemini_file_search_store
     if not name:
         raise RuntimeError("file_search_store_name o GEMINI_FILE_SEARCH_STORE no esta configurado")
-    # Nunca se crea: reemplazar dentro de un store recien creado y vacio significaria que
-    # el store pedido estaba mal escrito, y el documento terminaria donde nadie lo busca.
     return _resolve_file_search_store_name(
         client=client,
         types=types,
@@ -83,13 +51,6 @@ def _resolve_store(client, types, requested: str | None) -> str:
 
 
 def _delete_document(client, types, name: str) -> None:
-    """Borra un documento del store, con sus chunks.
-
-    `force` no es opcional en la practica: un documento indexado siempre tiene chunks, y
-    sin `force` la API responde 400 FAILED_PRECONDITION "Cannot delete non-empty
-    Document". Un borrado sin chunks solo pasaria con un documento que nunca termino de
-    procesarse, o sea el caso raro y no el normal.
-    """
     client.file_search_stores.documents.delete(
         name=name,
         config=types.DeleteDocumentConfig(force=True),
@@ -97,13 +58,6 @@ def _delete_document(client, types, name: str) -> None:
 
 
 def delete_store_document(document: str, file_search_store_name: str | None) -> dict[str, Any]:
-    """Borra un documento por `name` completo o por `display_name`.
-
-    Existe para limpiar lo que un reemplazo dejo a medias: si la subida entro y el borrado
-    fallo, el store queda con las dos versiones y hace falta sacar la vieja sin volver a
-    subir nada. Se resuelve contra la lista del store para no borrar a ciegas un nombre
-    mal escrito, y para poder devolver que documento se borro.
-    """
     client, types = build_client()
     store = _resolve_store(client, types, file_search_store_name)
     documents = [
@@ -145,7 +99,6 @@ def list_store_documents(file_search_store_name: str | None) -> dict[str, Any]:
 
 
 def plan_replacement(filename: str, file_search_store_name: str | None) -> dict[str, Any]:
-    """Que se borraria si se subiera `filename`. No toca el store."""
     listed = list_store_documents(file_search_store_name)
     return _plan_from_documents(listed["file_search_store"], filename, listed["documents"])
 
@@ -156,8 +109,6 @@ def _plan_from_documents(store: str, filename: str, documents: list[dict[str, An
     identical = [item for item in superseded if item["display_name"] == filename]
 
     if identical:
-        # Mismo display_name = mismo sha256 del PDF = mismo archivo. No hay texto que
-        # actualizar; lo que cambie aca seria la metadata, no el documento.
         verdict = "identical"
         message = (
             f"'{filename}' ya esta indexado con ese mismo nombre, o sea el mismo PDF byte a byte. "
@@ -205,12 +156,6 @@ def replace_document(
     wait_until_done: bool,
     max_wait_seconds: int,
 ) -> dict[str, Any]:
-    """Sube la version nueva y despues borra la vieja.
-
-    Ese orden no es casual. Si falla la subida, el store queda como estaba. Si en cambio
-    se borrara primero y fallara la subida, el corpus perderia el documento entero, que
-    es peor que tenerlo duplicado unos segundos.
-    """
     client, types = build_client()
     store = _resolve_store(client, types, file_search_store_name)
     documents = [
@@ -244,8 +189,6 @@ def replace_document(
 
     warnings: list[str] = []
     if delete_failed:
-        # No se revierte la subida: dejar el store sin ninguna version por un borrado a
-        # medias seria peor. Pero el estado si tiene que salir dicho.
         warnings.append(
             "El store quedo con la version nueva Y con "
             f"{len(delete_failed)} version(es) vieja(s) que no se pudieron borrar. "
@@ -287,7 +230,6 @@ def _decide_targets(
     allow_new: bool,
     allow_multiple: bool,
 ) -> list[dict[str, Any]]:
-    """Que documentos se borran. Explicito manda; si no, el plan; nunca se adivina."""
     if supersedes:
         by_name = {item["name"]: item for item in documents}
         by_display = {item["display_name"]: item for item in documents}
