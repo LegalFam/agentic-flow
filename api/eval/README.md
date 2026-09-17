@@ -166,6 +166,15 @@ original del encabezado con un lector propio del banco. Si la etiqueta del local
 coincide con esa lectura, el banco lo lista al final y sale con código 1. Sin esto, un
 `Artículo 167-A (*)` etiquetado `Art. 167` puntuaba como correcto. Que el localizador no
 detecte un encabezado es otro fallo, y ese lo lista `python -m app.locator_coverage`.
+
+En los fragmentos con puntos suspensivos la verdad es solo el texto visible: los artículos
+que el recorte se salta no cuentan, así que un pasaje que omite el artículo del medio no
+da un `partial` falso. El banco tampoco corta dentro de comentarios `<!-- -->`.
+
+Lo que el banco **no** detecta es un encabezado falso: toma la posición de los encabezados
+del índice, así que una línea tomada por encabezado sin serlo (por ejemplo, una referencia
+«…dispuesto en el / artículo 707.» partida en dos líneas) no le aparece como error. Eso se
+audita aparte sobre todo el corpus.
 - `traceable` — la respuesta tiene al menos una cita literal y bien ubicada: lo mínimo
   para que el usuario pueda ir a comprobarla. En una resolución o casación sin articulado
   y de menos de 100 000 caracteres basta con el pasaje literal: el documento es tan corto
