@@ -205,3 +205,47 @@ def test_article_span_limit_still_applies(monkeypatch):
     )
     assert articles == []
     assert "Art." not in found.label
+
+
+ALIMENTOS_PROCESS = """## Artículo 168º (*)
+
+## Traslado de la demanda
+
+Admitida la demanda, el Juez dará por ofrecidos los  medios  probatorios  y  correrá  traslado  de  ella al  demandado,  con  conocimiento  del  Fiscal,  por el término perentorio de cinco (5) días para que el demandado la conteste.
+
+En el  proceso  de  alimentos,  el  Juez  no  admite  la contestación  de  la  demanda  si  el  demandado  no cumple lo establecido en el literal b) del artículo 167-A  y  ejecuta  el  apercibimiento,  continuando con el proceso.
+
+## Artículo 169º
+
+## Tachas u oposiciones
+
+Las  tachas  u  oposiciones  que  se  formulen  deben acreditarse con medios probatorios y actuarse durante la audiencia única.
+
+## CAPÍTULO II PROCESO ÚNICO
+
+## Artículo 170º
+
+## Audiencia (*)
+
+Contestada la  demanda o transcurrido el término para su contestación, el Juez fijará una fecha inaplazable  para  la  audiencia.
+
+## Artículo 170-A
+
+## Audiencia única (*)
+
+En los procesos de alimentos, la audiencia única se rige por las siguientes reglas:
+
+a) El Juez puede realizar la audiencia única de manera presencial o virtual, privilegiando en todos los casos la vigencia de los principios de oralidad.
+"""
+
+
+def test_ellipsis_does_not_take_the_articles_skipped_between_segments():
+    excerpt = (
+        "alimentos, el Juez no admite la contestación de la demanda si el demandado no cumple lo "
+        "establecido en el literal b) del artículo 167-A y ejecuta el apercibimiento, continuando "
+        "con el proceso. [...] Artículo 170-A Audiencia única (*) En los procesos de alimentos, la "
+        "audiencia única se rige por las siguientes reglas: a) El Juez puede realizar la audiencia "
+        "única de manera presencial o virtual"
+    )
+    _, articles = L.resolve_excerpt_span(L.build_index(ALIMENTOS_PROCESS), " ".join(ALIMENTOS_PROCESS.split()), excerpt)
+    assert articles == ["Art. 168", "Art. 170-A"]

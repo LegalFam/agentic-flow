@@ -128,6 +128,7 @@ class Span:
     core_start: int
     core_end: int
     strategy: str
+    pieces: tuple["Span", ...] = ()
 
 
 def fold(text: str) -> str:
@@ -544,6 +545,7 @@ def locate_segments(haystack: str, segments: list[str], lo: int = 0, hi: int | N
     readings: list[Span] = []
     for span in first:
         current = span
+        pieces = [span]
         exact = span.strategy == "exact"
         for segment in segments[1:]:
             following = find_spans(
@@ -553,13 +555,33 @@ def locate_segments(haystack: str, segments: list[str], lo: int = 0, hi: int | N
                 current = None
                 break
             current = following[0]
+            pieces.append(current)
             exact = exact and current.strategy == "exact"
         if current is None:
             continue
         readings.append(
-            Span(span.start, current.end, span.core_start, current.core_end, "exact" if exact else "fuzzy")
+            Span(
+                span.start,
+                current.end,
+                span.core_start,
+                current.core_end,
+                "exact" if exact else "fuzzy",
+                tuple(pieces),
+            )
         )
     return readings
+
+
+def span_articles(index: DocumentIndex, span: Span, core: bool = False) -> list[Heading]:
+    ranges = [
+        (piece.core_start, piece.core_end) if core else (piece.start, piece.end)
+        for piece in (span.pieces or (span,))
+    ]
+    seen: dict[str, Heading] = {}
+    for start, end in ranges:
+        for heading in skeleton_articles(index, start, end):
+            seen.setdefault(article_key(heading.label), heading)
+    return sorted(seen.values(), key=lambda heading: heading.anchor)
 
 
 def skeleton_articles(index: DocumentIndex, start: int, end: int) -> list[Heading]:
@@ -610,10 +632,10 @@ def readings_of(index: DocumentIndex, spans: list[Span]) -> tuple[list[Reading],
     readings: dict[tuple[str, ...], Reading] = {}
     certain = True
     for span in spans:
-        articles = skeleton_articles(index, span.start, span.end)
-        if (span.core_start, span.core_end) != (span.start, span.end):
-            core = skeleton_articles(index, span.core_start, span.core_end)
-            if _keys(core) != _keys(articles):
+        articles = span_articles(index, span)
+        pieces = span.pieces or (span,)
+        if any((piece.core_start, piece.core_end) != (piece.start, piece.end) for piece in pieces):
+            if _keys(span_articles(index, span, core=True)) != _keys(articles):
                 certain = False
         readings.setdefault(_keys(articles), Reading(span, articles))
     return list(readings.values()), certain
