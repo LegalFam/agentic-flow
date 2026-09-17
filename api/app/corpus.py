@@ -5,7 +5,7 @@ import unicodedata
 from pathlib import Path
 
 from app.config import settings
-from app.locator import DocumentIndex, build_index
+from app.locator import DocumentIndex, build_index, has_articulado, without_articles
 
 _CACHE: dict[str, tuple[tuple[int, int], DocumentIndex]] = {}
 _LOCK = threading.Lock()
@@ -115,6 +115,8 @@ def load_index(path: Path) -> DocumentIndex | None:
         return None
 
     index = build_index(markdown)
+    if not has_articulado(index):
+        index = without_articles(index)
     with _LOCK:
         _CACHE[key] = (stamp, index)
     return index

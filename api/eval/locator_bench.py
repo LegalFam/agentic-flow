@@ -3,6 +3,7 @@ import json
 import random
 import re
 import sys
+from bisect import bisect_left
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -11,6 +12,13 @@ from app.config import settings
 
 _TAG_RE = re.compile(r"<!--.*?-->|</?[a-zA-Z][^<>\n]{0,40}>", re.DOTALL)
 _LINE_MARKUP_RE = re.compile(r"^\s{0,3}#{1,6}\s*", re.MULTILINE)
+
+_HEADING_NUMBER_RE = re.compile(
+    r"^[\s*_#>\-–—•\"'“”‘’]{0,12}art[ií]culo\s+(\d+)\s*[°º]?\s*"
+    r"(?:[-–]\s*([a-z])(?![a-záéíóúüñ])|([a-z])(?![a-záéíóúüñ])(?=\s*(?:[.\-–:(]|$)))?",
+    re.IGNORECASE | re.MULTILINE,
+)
+_HEADING_WINDOW = 400
 
 MODES = ("clean", "trimmed", "ellipsis", "punctuation", "typos")
 NEGATIVES = ("outside_chunk", "shuffled")
@@ -24,12 +32,41 @@ def render(markdown: str) -> str:
 
 
 def _snap(base: str, position: int) -> int:
+    for tag in _TAG_RE.finditer(base, max(0, position - 60), position + 60):
+        if tag.start() < position < tag.end():
+            position = tag.end()
     while position < len(base) and not base[position].isspace():
         position += 1
     return position
 
 
-def truth_articles(index: locator.DocumentIndex, start: int, end: int) -> set[str]:
+def read_heading_number(index: locator.DocumentIndex, heading: locator.Heading) -> str | None:
+    match = _HEADING_NUMBER_RE.search(index.base, heading.offset, heading.offset + _HEADING_WINDOW)
+    if match is None:
+        return None
+    return match.group(1) + (match.group(2) or match.group(3) or "").upper()
+
+
+def heading_numbers(index: locator.DocumentIndex) -> tuple[dict[int, str], list[dict]]:
+    numbers: dict[int, str] = {}
+    disagreements: list[dict] = []
+    for heading in index.articles:
+        read = read_heading_number(index, heading)
+        numbers[heading.offset] = read or ""
+        if read != locator.article_key(heading.label):
+            line_end = index.base.find("\n", heading.offset)
+            disagreements.append({
+                "offset": heading.offset,
+                "label": heading.label,
+                "read": read,
+                "line": index.base[heading.offset : line_end if line_end >= 0 else None][:120],
+            })
+    return numbers, disagreements
+
+
+def truth_articles(
+    index: locator.DocumentIndex, start: int, end: int, numbers: dict[int, str]
+) -> set[str]:
     base = _TAG_RE.sub(lambda match: " " * len(match.group(0)), index.base)
 
     def real(char: str) -> bool:
@@ -57,7 +94,29 @@ def truth_articles(index: locator.DocumentIndex, start: int, end: int) -> set[st
             continue
         if real <= first and first - heading.offset > settings.locator_max_article_span:
             continue
-        covered.add(locator.article_key(heading.label))
+        covered.add(numbers.get(heading.offset) or f"?{heading.offset}")
+    return covered
+
+
+def visible_truth(
+    index: locator.DocumentIndex, start: int, end: int, text: str, numbers: dict[int, str]
+) -> set[str]:
+    pieces = text.split(" ... ")
+    if len(pieces) == 1:
+        return truth_articles(index, start, end, numbers)
+
+    covered: set[str] = set()
+    position = bisect_left(index.skeleton_map, start)
+    limit = bisect_left(index.skeleton_map, end)
+    for piece in pieces:
+        skeleton = locator.skeletonize(piece)
+        found = index.skeleton.find(skeleton, position, limit)
+        if not skeleton or found < 0:
+            return truth_articles(index, start, end, numbers)
+        position = found + len(skeleton)
+        covered |= truth_articles(
+            index, index.skeleton_map[found], index.skeleton_map[position - 1] + 1, numbers
+        )
     return covered
 
 
@@ -112,9 +171,15 @@ def run(per_document: int, seed: int, minimum_articles: int) -> dict:
     rng = random.Random(seed)
     outcomes: dict[str, Counter] = defaultdict(Counter)
     failures: list[dict] = []
+    headings = Counter()
+    disagreements: list[dict] = []
 
     for path, index in articulated_documents(minimum_articles):
         base = index.base
+        numbers, disagreeing = heading_numbers(index)
+        headings["total"] += len(index.articles)
+        headings["disagree"] += len(disagreeing)
+        disagreements.extend({"document": path.name, **item} for item in disagreeing)
         for _ in range(per_document):
             chunk_start = _snap(base, rng.randrange(0, max(1, len(base) - 3000)))
             chunk_end = _snap(base, min(len(base), chunk_start + rng.randint(900, 2600)))
@@ -129,17 +194,18 @@ def run(per_document: int, seed: int, minimum_articles: int) -> dict:
             excerpt = render(excerpt_md)
             if len(excerpt) < 40:
                 continue
-            truth = truth_articles(index, excerpt_start, excerpt_end)
+            truth = truth_articles(index, excerpt_start, excerpt_end, numbers)
 
             for mode in MODES:
                 altered = perturb(excerpt, mode, rng)
                 found, _ = locator.resolve_excerpt_span(index, chunk, altered)
-                verdict = classify(found, truth)
+                verdict = classify(found, visible_truth(index, excerpt_start, excerpt_end, altered, numbers))
                 outcomes[mode][verdict] += 1
                 if verdict in ("wrong", "partial"):
                     failures.append({
                         "document": path.name, "mode": mode, "verdict": verdict,
-                        "declared": found.label, "truth": sorted(truth),
+                        "declared": found.label,
+                        "truth": sorted(visible_truth(index, excerpt_start, excerpt_end, altered, numbers)),
                         "excerpt": altered[:300], "base_offset": excerpt_start,
                     })
 
@@ -166,7 +232,12 @@ def run(per_document: int, seed: int, minimum_articles: int) -> dict:
                         "declared": found.label, "excerpt": " ".join(shuffled)[:300],
                     })
 
-    return {"outcomes": {mode: dict(counter) for mode, counter in outcomes.items()}, "failures": failures}
+    return {
+        "outcomes": {mode: dict(counter) for mode, counter in outcomes.items()},
+        "failures": failures,
+        "headings": dict(headings),
+        "disagreements": disagreements,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -186,10 +257,17 @@ def main(argv: list[str] | None = None) -> int:
             f"{counter.get('partial', 0):>8} {counter.get('wrong', 0):>6} "
             f"{counter.get('abstained', 0):>8} {counter.get('false_accept', 0):>9}"
         )
+    headings = result["headings"]
+    print(
+        f"\nencabezados de articulo: {headings.get('total', 0)}, "
+        f"etiqueta distinta a la linea original: {headings.get('disagree', 0)}"
+    )
+    for item in result["disagreements"]:
+        print(f"  {item['document'][:40]:<40} {item['label']!r:>14} vs {item['read']!r:>8}  {item['line']!r}")
     if args.failures:
         args.failures.write_text(json.dumps(result["failures"], ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"fallos: {len(result['failures'])} -> {args.failures}")
-    return 0
+    return 1 if result["disagreements"] else 0
 
 
 if __name__ == "__main__":

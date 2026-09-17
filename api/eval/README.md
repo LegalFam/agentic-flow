@@ -160,6 +160,12 @@ python -m eval.locator_bench --per-document 150 --failures fallos.json
 
 La meta es `partial = wrong = false_acc = 0`. `abstain` no es un fallo: es el localizador
 negándose a adivinar.
+
+La verdad no usa las etiquetas del índice: el número de cada artículo se relee de la línea
+original del encabezado con un lector propio del banco. Si la etiqueta del localizador no
+coincide con esa lectura, el banco lo lista al final y sale con código 1. Sin esto, un
+`Artículo 167-A (*)` etiquetado `Art. 167` puntuaba como correcto. Que el localizador no
+detecte un encabezado es otro fallo, y ese lo lista `python -m app.locator_coverage`.
 - `traceable` — la respuesta tiene al menos una cita literal y bien ubicada: lo mínimo
   para que el usuario pueda ir a comprobarla. En una resolución o casación sin articulado
   y de menos de 100 000 caracteres basta con el pasaje literal: el documento es tan corto

@@ -203,3 +203,29 @@ def test_snippet_regex_fallback_refuses_a_multi_article_excerpt():
         "de parte el Juez puede prohibir al demandado ausentarse del pais."
     )
     assert L.resolve_excerpt(None, chunk, chunk).is_empty()
+
+
+NEAR_DUPLICATES = """Artículo 17.- Notificación de la invitación
+
+c) En caso no pueda realizarse la notificación conforme a los literales a) y b) se dejará aviso del día y hora en que se regresará para realizar la diligencia.
+
+Los plazos se computan en días hábiles desde el día siguiente de recibida la solicitud por el centro de conciliación, y el conciliador deja constancia de cada actuación en el expediente del procedimiento, bajo responsabilidad del director del centro.
+
+Artículo 30.- Notificación en el procedimiento
+
+c. En caso no pueda realizarse la notificación conforme a los literales a) y b) se deja aviso del día y hora en que se regresa para realizar la diligencia.
+"""
+
+
+def test_passage_copied_from_another_article_is_not_placed_in_its_near_duplicate():
+    index = L.build_index(NEAR_DUPLICATES)
+    chunk = NEAR_DUPLICATES[NEAR_DUPLICATES.index("Artículo 30") :]
+    excerpt = "se dejará aviso del día y hora en que se regresará para realizar la diligencia"
+    assert L.resolve_excerpt(index, chunk, excerpt).is_empty()
+
+
+def test_passage_with_a_typo_is_still_placed_when_no_verbatim_copy_exists():
+    index = L.build_index(NEAR_DUPLICATES)
+    chunk = NEAR_DUPLICATES[NEAR_DUPLICATES.index("Artículo 30") :]
+    excerpt = "se deja aviso del día y hxra en que se regresa para realizar la diligencia"
+    assert L.resolve_excerpt(index, chunk, excerpt).label == "Art. 30"

@@ -30,9 +30,14 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 _ARTICULO_RE = re.compile(
     r"^\s{0,8}(?:[-*+•]\s+)?(?:#{1,6}\s*)?[*_\"'“”‘’ ]{0,10}"
-    r"art[ií]culo\s+(\d+(?:[\s\-–]?[a-z])?[°º]?)\s*(?:[.\-–—:)]|[º°](?!\s*[,a-záéíóúüñ])|$)",
+    r"art[ií]culo\s+(?:"
+    r"(\d+[°º]?\s?[\-–]\s?[a-z])(?![a-záéíóúüñ])\s*(?:[.\-–—:)(]|(?-i:[A-ZÁÉÍÓÚÑ])|$)"
+    r"|(\d+(?:[\s\-–]?[a-z])?[°º]?)\s*(?:[.:)(]|[\-–—](?!\s?[a-z](?![a-záéíóúüñ]))|[º°](?!\s*[,a-záéíóúüñ])|$)"
+    r")",
     re.IGNORECASE,
 )
+
+_ARTICULO_WORD_RE = re.compile(r"art[ií]culo", re.IGNORECASE)
 
 _PAGINA_RE = re.compile(r"^\s{0,8}#{1,6}\s*p[áa]gina\s+(\d+)\s*$", re.IGNORECASE)
 
@@ -63,7 +68,10 @@ _NUMERAL_RE = re.compile(
 _INCISO_RE = re.compile(r"\binciso\s+(\d+)", re.IGNORECASE)
 _SNIPPET_ARTICULO_RE = re.compile(r"\bart[ií]culo\s+(\d+[\-–]?[a-z]?)", re.IGNORECASE)
 
-_SUMILLA_RE = re.compile(r"^\s{0,3}\*\*_?\s*([^*\n]{3,90}?)\s*_?\*\*\s*$")
+_BARE_REFERENCE_RE = re.compile(r"^[\s*_\"“”]*art[ií]culo\s+\d+[a-z]?\.[\s*_\"“”]*$", re.IGNORECASE)
+_REFERENCE_LEAD_RE = re.compile(r"\b(?:el|del|al|la|los|las|en|de|por|con|según)[\s_]*$")
+
+_SUMILLA_RE =re.compile(r"^\s{0,3}\*\*_?\s*([^*\n]{3,90}?)\s*_?\*\*\s*$")
 
 _MARKUP_RE = re.compile(r"<!--.*?-->|</?[a-zA-Z][^<>\n]{0,40}>", re.DOTALL)
 
@@ -105,6 +113,7 @@ class DocumentIndex:
     articles: list[Heading] = field(default_factory=list)
     article_anchors: list[int] = field(default_factory=list)
     structural_anchors: list[int] = field(default_factory=list)
+    articulated: bool = True
 
 
 @dataclass(frozen=True)
@@ -218,6 +227,7 @@ def _pretty_tail(raw: str) -> str:
 def _build_label(kind: str, level: int, raw: str) -> str:
     if kind == "articulo":
         number = raw.strip("*_# ").replace("°", "").replace("º", "")
+        number = re.sub(r"\s*[\-–]\s*", "-", number)
         return "Art. " + " ".join(number.split()).upper()
     tail = _pretty_tail(raw)
     if kind == "disposiciones":
@@ -243,7 +253,7 @@ def build_index(markdown: str) -> DocumentIndex:
         if position in consumed:
             continue
         heading = _classify_line(line, offsets[position])
-        if heading is None:
+        if heading is None or (heading.kind == "articulo" and _continues_reference(lines, position)):
             continue
         if heading.kind in _NAMED_KINDS:
             name_position, name = _lookahead_name(lines, position)
@@ -273,6 +283,30 @@ def build_index(markdown: str) -> DocumentIndex:
         articles=articles,
         article_anchors=[heading.anchor for heading in articles],
         structural_anchors=[heading.anchor for heading in structural],
+    )
+
+
+def _continues_reference(lines: list[str], position: int) -> bool:
+    if not _BARE_REFERENCE_RE.match(lines[position]):
+        return False
+    previous = next((line for line in reversed(lines[:position]) if line.strip()), "")
+    return bool(_REFERENCE_LEAD_RE.search(previous))
+
+
+def has_articulado(index: DocumentIndex) -> bool:
+    keys = list(dict.fromkeys(article_key(heading.label) for heading in index.articles))
+    if len(keys) >= settings.locator_min_articulado_articles:
+        return True
+    return len(keys) >= 2 and keys == [str(number) for number in range(1, len(keys) + 1)]
+
+
+def without_articles(index: DocumentIndex) -> DocumentIndex:
+    return replace(
+        index,
+        headings=[heading for heading in index.headings if heading.kind != "articulo"],
+        articles=[],
+        article_anchors=[],
+        articulated=False,
     )
 
 
@@ -328,12 +362,12 @@ def _classify_line(line: str, offset: int) -> Heading | None:
         return Heading(offset=offset, level=LEVEL_MARKDOWN, kind="pagina", label=f"Pagina {number}", page=number)
 
     articulo_match = _ARTICULO_RE.match(line)
-    if articulo_match:
+    if articulo_match and _ARTICULO_WORD_RE.search(articulo_match.group(0)).group(0)[0].isupper():
         return Heading(
             offset=offset,
             level=LEVEL_ARTICULO,
             kind="articulo",
-            label=_build_label("articulo", LEVEL_ARTICULO, articulo_match.group(1)),
+            label=_build_label("articulo", LEVEL_ARTICULO, articulo_match.group(1) or articulo_match.group(2)),
         )
 
     if line.rstrip(" *_").endswith((".", ",", ";")):
@@ -708,6 +742,10 @@ def locator_from_snippet(snippet: str) -> Locator:
     return Locator(label=label, breadcrumb=label, page=None, source="snippet_regex")
 
 
+def _snippet_fallback(index: DocumentIndex, snippet: str) -> Locator:
+    return locator_from_snippet(snippet) if index.articulated else EMPTY_LOCATOR
+
+
 def headings_in_span(index: DocumentIndex, start: int, end: int) -> list[Heading]:
     return skeleton_articles(
         index, bisect_left(index.skeleton_map, start), bisect_left(index.skeleton_map, end)
@@ -783,7 +821,7 @@ def resolve_chunk(index: DocumentIndex | None, snippet: str) -> tuple[Locator, l
 
     spans = locate_segments(index.skeleton, passage_segments(snippet))
     if not spans:
-        return locator_from_snippet(snippet), []
+        return _snippet_fallback(index, snippet), []
 
     readings, certain = readings_of(index, spans)
     if len(readings) > 1 or not certain:
@@ -796,7 +834,7 @@ def resolve_chunk(index: DocumentIndex | None, snippet: str) -> tuple[Locator, l
     else:
         found = _locator_for(index, reading)
     if found.is_empty():
-        return locator_from_snippet(snippet) if not articles else EMPTY_LOCATOR, articles
+        return _snippet_fallback(index, snippet) if not articles else EMPTY_LOCATOR, articles
     return found, articles
 
 
@@ -825,7 +863,7 @@ def resolve_excerpt_span(
 
     chunk_spans = locate_segments(index.skeleton, passage_segments(chunk_text))
     if not chunk_spans:
-        return locator_from_snippet(excerpt_text), []
+        return _snippet_fallback(index, excerpt_text), []
 
     spans: list[Span] = []
     for chunk_span in chunk_spans:
@@ -836,6 +874,8 @@ def resolve_excerpt_span(
                 spans.append(span)
     if not spans:
         return EMPTY_LOCATOR, []
+    if not any(span.strategy == "exact" for span in spans) and _verbatim_elsewhere(index, segments):
+        return EMPTY_LOCATOR, []
 
     readings, certain = readings_of(index, spans)
     if len(readings) > 1 or not certain:
@@ -844,6 +884,10 @@ def resolve_excerpt_span(
     reading = readings[0]
     articles = [heading.label for heading in reading.articles]
     return _locator_for(index, reading), articles
+
+
+def _verbatim_elsewhere(index: DocumentIndex, segments: list[str]) -> bool:
+    return all(index.skeleton.find(segment) >= 0 for segment in segments)
 
 
 def resolve(index: DocumentIndex | None, snippet: str) -> Locator:

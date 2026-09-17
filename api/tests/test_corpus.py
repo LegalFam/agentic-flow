@@ -117,3 +117,66 @@ def test_ignores_hash_suffix_in_the_other_direction(corpus_dir):
 def test_does_not_strip_a_non_hash_suffix(corpus_dir):
     (corpus_dir / "resolucion-224.md").write_text(DOC, encoding="utf-8")
     assert corpus.resolve_document_path("resolucion-224-2016.md", None) is None
+
+
+RULING_QUOTING_ARTICLES = """## CASACIÓN 2067-2010
+
+## Tenencia y custodia de menor
+
+Artículo 82. Variación de la Tenencia. Si resulta necesaria la variación de la Tenencia, el Juez ordenará que se efectúe en forma progresiva.
+
+La Sala considera que la variación de la tenencia no debe producir daño ni trastorno al niño, por mandato legal.
+
+- Artículo 85. Opinión. El juez especializado debe escuchar la opinión del niño.
+
+Por tales razones declararon infundado el recurso de casación interpuesto por la demandante.
+"""
+
+RESOLUCION_MINISTERIAL = """## Resolución Ministerial N° 100-2021-MIMP
+
+Artículo 1.- Aprobar el protocolo de actuación.
+
+Artículo 2.- Disponer la publicación del protocolo en el portal institucional.
+
+Artículo 3.- Encargar el cumplimiento de la presente resolución a la Dirección General.
+"""
+
+
+@pytest.fixture
+def real_articulado_threshold(monkeypatch):
+    monkeypatch.setattr(settings, "locator_min_articulado_articles", 20)
+
+
+def test_ruling_that_quotes_articles_gets_no_article_locator(corpus_dir, real_articulado_threshold):
+    from app import locator
+
+    (corpus_dir / "cas-2067-2010.md").write_text(RULING_QUOTING_ARTICLES, encoding="utf-8")
+    index = corpus.get_index("cas-2067-2010.md", None)
+    assert index.articulated is False
+    assert index.articles == []
+    for passage in (
+        "Si resulta necesaria la variación de la Tenencia",
+        "no debe producir daño ni trastorno al niño",
+        "declararon infundado el recurso de casación",
+    ):
+        found, articles = locator.resolve_chunk(index, passage)
+        assert not found.label.startswith("Art"), passage
+        assert articles == []
+        assert not locator.resolve_excerpt(index, passage, passage).label.startswith("Art")
+
+
+def test_ruling_does_not_fall_back_to_article_numbers_in_the_snippet(corpus_dir, real_articulado_threshold):
+    from app import locator
+
+    (corpus_dir / "cas-2067-2010.md").write_text(RULING_QUOTING_ARTICLES, encoding="utf-8")
+    index = corpus.get_index("cas-2067-2010.md", None)
+    assert locator.resolve_chunk(index, "texto ajeno al documento según el artículo 82")[0].is_empty()
+
+
+def test_short_norm_numbered_from_one_keeps_its_articles(corpus_dir, real_articulado_threshold):
+    from app import locator
+
+    (corpus_dir / "rm-100-2021.md").write_text(RESOLUCION_MINISTERIAL, encoding="utf-8")
+    index = corpus.get_index("rm-100-2021.md", None)
+    assert index.articulated is True
+    assert locator.resolve(index, "Disponer la publicación del protocolo").label == "Art. 2"

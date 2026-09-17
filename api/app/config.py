@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     locator_registry_max_entries: int = 5000
     locator_fuzzy_threshold: float = 0.82
     locator_max_article_span: int = 20000
+    locator_min_articulado_articles: int = 20
     locator_min_excerpt_chars: int = 25
     locator_require_excerpt_when_ambiguous: bool = True
     locator_max_combined_articles: int = 5

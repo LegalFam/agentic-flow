@@ -330,3 +330,85 @@ def test_numbered_sections_and_cited_articles_of_a_ruling_are_not_article_headin
 @pytest.mark.parametrize("heading", ("## Artículo 168º (*)", "## Artículo 231º - A", "Artículo 5°", "Artículo 5°.- Concubinato"))
 def test_article_headings_ending_in_a_degree_sign_are_still_detected(heading):
     assert L._ARTICULO_RE.match(heading) is not None
+
+
+@pytest.mark.parametrize(
+    ("heading", "label"),
+    (
+        ("## Artículo 167-A (*)", "Art. 167-A"),
+        ("## Artículo 112-A(*)", "Art. 112-A"),
+        ("## Artículo 3- A", "Art. 3-A"),
+        ("## Artículo 231 -B", "Art. 231-B"),
+        ("## Artículo 231 -C.", "Art. 231-C"),
+        ("## Artículo 231º - A", "Art. 231-A"),
+        ("- Artículo 194º-A", "Art. 194-A"),
+        ('## "Artículo 5-D Conciliadores que laboran en los Centros', "Art. 5-D"),
+        ("## 'Artículo 89 - A.- Formas de realizar la supervisión", "Art. 89-A"),
+        ('**"Artículo 690 - F.- Denegación de la ejecución**', "Art. 690-F"),
+        ("## Artículo 170-A", "Art. 170-A"),
+        ("Artículo 659 F.- Pérdida de la calidad de heredero", "Art. 659 F"),
+    ),
+)
+def test_article_letter_suffix_survives_whatever_follows_it(heading, label):
+    assert L._classify_line(heading, 0).label == label
+
+
+def test_text_of_a_lettered_article_is_not_attributed_to_the_base_article():
+    doc = (
+        "## Artículo 167º\n\n## Requisitos de la demanda\n\n"
+        "La demanda se presenta por escrito y contendrá los requisitos del Código Procesal Civil.\n\n"
+        "## Artículo 167-A (*)\n\n## Contenido del auto admisorio\n\n"
+        "El auto admisorio debe contener el apercibimiento de declararse la rebeldía del demandado.\n"
+    )
+    index = L.build_index(doc)
+    assert L.resolve(index, "apercibimiento de declararse la rebeldía del demandado").label == "Art. 167-A"
+
+
+@pytest.mark.parametrize(
+    "prose",
+    (
+        "artículo 3-A de la Ley de Conciliación, que regula la materia.",
+        "Artículo 5 - a los efectos de la presente ley.",
+    ),
+)
+def test_prose_reference_to_a_lettered_article_is_not_a_heading(prose):
+    assert L._ARTICULO_RE.match(prose) is None
+
+
+WRAPPED_REFERENCES = """**Artículo 706.- Presentación del testamento**
+
+Toda persona que tenga en su poder un testamento ológrafo está obligada a presentarlo, bajo
+responsabilidad por el perjuicio que ocasione con su dilación, y no obstante lo dispuesto en la parte final del
+
+artículo 707.
+
+**Artículo 708.- Comprobación judicial**
+
+Presentado el testamento ológrafo con la partida de defunción, el juez procede a su comprobación.
+
+**Artículo 490.-** Es improcedente la reconvención en los casos de curaduría procesal, según lo dispuesto por el
+
+Artículo 108.
+
+Concluye la actuación del curador procesal si la parte o su representante comparece al proceso.
+"""
+
+
+def test_article_reference_wrapped_onto_its_own_line_is_not_a_heading():
+    index = L.build_index(WRAPPED_REFERENCES)
+    assert [heading.label for heading in index.articles] == ["Art. 706", "Art. 708", "Art. 490"]
+    assert L.resolve(index, "ocasione con su dilación, y no obstante lo dispuesto").label == "Art. 706"
+    assert L.resolve(index, "Concluye la actuación del curador procesal").label == "Art. 490"
+
+
+@pytest.mark.parametrize(
+    ("previous", "heading"),
+    (
+        ("de su publicación en el diario oficial 'El Peruano", "Artículo 97º"),
+        ("**Plazos.-**", "Artículo 491."),
+        ("Tres días para interponer tachas.", "Artículo 19."),
+    ),
+)
+def test_bare_heading_after_a_complete_line_is_still_a_heading(previous, heading):
+    index = L.build_index(f"{previous}\n\n{heading}\n\nTexto del artículo.\n")
+    assert len(index.articles) == 1
