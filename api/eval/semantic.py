@@ -212,7 +212,7 @@ def calibrate(run: Path, dataset: Path, limit: int | None = None) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Coincidencia semantica de terminos")
     parser.add_argument("--calibrate", action="store_true")
-    parser.add_argument("--run", type=Path, default=Path("eval/runs/ablacion-v1"))
+    parser.add_argument("--run", type=Path, default=Path("eval/runs/ablation"))
     parser.add_argument(
         "--dataset", type=Path, default=Path("eval/dataset/family_law_v1.jsonl")
     )

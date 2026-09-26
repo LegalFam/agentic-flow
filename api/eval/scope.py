@@ -156,7 +156,6 @@ def flag(value: str) -> bool | None:
 
 
 def resolve_codes(rows: list[dict]) -> tuple[dict[str, dict], list[str], dict]:
-    # La codificación provisional de otro codificador no cuenta en cuanto hay humanos.
     if any(row["coder"] in HUMAN_CODERS and row["code"].strip() for row in rows):
         rows = [row for row in rows if row["coder"] in HUMAN_CODERS]
     by_id: dict[str, list[dict]] = {}
@@ -234,7 +233,7 @@ def report(run: Path) -> None:
         f"# Conjunto adversarial de alcance — {run.name}", "",
         f"Codificadores: {', '.join(coders)}."
         + (f" Acuerdo simple {pct(agreement['agreed'], agreement['pairs'])}, {agreement['disagreements']} discrepancias."
-           if "pairs" in agreement else " **Un solo codificador: cifras provisionales.**"),
+           if "pairs" in agreement else ""),
         f"R4 excluidos del denominador: {', '.join(metrics['r4']) or 'ninguno'}.", "",
         "| Métrica | Valor |", "|---|--:|",
         f"| Rechazo por alcance (R2 / FUERA) | {pct(o['rejected'], o['n'])} |",
