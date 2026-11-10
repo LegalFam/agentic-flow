@@ -472,5 +472,6 @@ El `Webhook` responde en modo `streaming`. La respuesta es una secuencia de obje
 El backend tiene que entender este formato **antes** de publicar este workflow: un backend
 anterior lee solo el primer objeto (`begin`) y da la respuesta por vacia.
 
-En pruebas en vivo (10 consultas con RAG) el flujo completo tardo 18-25 s con la busqueda
-todavia sin el cambio de `/rag-search`, y el texto empezo a llegar a los 15-23 s.
+En pruebas en vivo (13 consultas con RAG, con esta configuracion de modelos) el flujo completo
+tardo 17-25 s con la busqueda todavia sin el cambio de `/rag-search`, y el texto empezo a
+llegar a los 15-23 s. Ese cambio, medido aparte sobre el mismo store, le quita ~4 s mas.
