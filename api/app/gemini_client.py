@@ -315,6 +315,7 @@ def search_legal_rag(
     metadata_hints: list[str],
     search_terms: list[str],
     file_search_store_name: str | None,
+    answer_style: str = "full",
 ) -> dict[str, Any]:
     if not settings.gemini_api_key:
         raise RuntimeError("GEMINI_API_KEY no esta configurado")
@@ -335,6 +336,7 @@ def search_legal_rag(
         canonical_subcategories=canonical_subcategories,
         metadata_hints=metadata_hints,
         search_terms=search_terms,
+        answer_style=answer_style,
     )
     response = client.models.generate_content(
         model=settings.gemini_model,
@@ -342,6 +344,7 @@ def search_legal_rag(
         config=types.GenerateContentConfig(
             temperature=0,
             tools=[types.Tool(file_search=types.FileSearch(file_search_store_names=[store_name]))],
+            thinking_config=rag_thinking_config(types, settings.gemini_model),
         ),
     )
 
@@ -367,6 +370,30 @@ def search_legal_rag(
     }
 
 
+def rag_thinking_config(types: Any, model: str) -> Any:
+    """Razonamiento de la busqueda segun la familia del modelo; None deja el del modelo.
+
+    thinking_budget solo existe en 2.5 y thinking_level desde Gemini 3: mandar el que no
+    corresponde hace fallar la llamada entera, no solo el ajuste.
+    """
+    name = (model or "").lower().removeprefix("models/")
+    if name.startswith("gemini-2.5"):
+        budget = settings.gemini_rag_thinking_budget
+        return None if budget < 0 else types.ThinkingConfig(thinking_budget=budget)
+    if re.match(r"gemini-([3-9]|\d{2,})", name):
+        level = (settings.gemini_rag_thinking_level or "").strip().upper()
+        return types.ThinkingConfig(thinking_level=level) if level else None
+    return None
+
+
+RAG_BRIEF_INSTRUCTIONS = """
+Responde con una sintesis breve, de 150 palabras como maximo: que establecen los fragmentos
+recuperados sobre la consulta (normas, requisitos, plazos o criterios) y que parte de la
+consulta no cubren. Sin saludos, sin titulos y sin desarrollar la orientacion completa: otro
+agente redacta la respuesta final a partir de tu sintesis y de los fragmentos.
+""".strip()
+
+
 def build_rag_search_prompt(
     query: str,
     original_message: str | None,
@@ -375,8 +402,9 @@ def build_rag_search_prompt(
     canonical_subcategories: list[str],
     metadata_hints: list[str],
     search_terms: list[str],
+    answer_style: str = "full",
 ) -> str:
-    return f"""
+    prompt = f"""
 Consulta del usuario: {original_message or query}
 Consulta de busqueda: {query}
 Categoria legal: {legal_category or ""}
@@ -390,6 +418,9 @@ Responde solo con informacion sustentada por el contexto recuperado.
 Si el contexto recuperado es debil o incompleto, responde la pregunta de Derecho de Familia con la mejor orientacion general prudente que puedas dar, aclarando los limites sin solicitar mas detalles solo por falta de respaldo.
 No inventes articulos, fuentes ni enlaces.
 """.strip()
+    if answer_style == "brief":
+        prompt = f"{prompt}\n{RAG_BRIEF_INSTRUCTIONS}"
+    return prompt
 
 
 def _extract_response_text(response: Any) -> str:

@@ -74,6 +74,10 @@ def apply_common(workflow: dict, arm: str) -> None:
 
     webhook = node(workflow, "Webhook")
     webhook["parameters"]["path"] = f"chat-process-eval-{arm}"
+    # Produccion responde por streaming (el XAI Agent transmite al chat). El runner de la
+    # ablacion lee un solo JSON y mide la respuesta completa, asi que los brazos responden
+    # con Respond to Webhook como antes; el contenido es el mismo.
+    webhook["parameters"]["responseMode"] = "responseNode"
     webhook["webhookId"] = stable_id(arm, "webhook")
     webhook["parameters"].pop("authentication", None)
     webhook.pop("credentials", None)
@@ -119,22 +123,22 @@ def apply_no_rag(workflow: dict) -> None:
     message = replace_once(
         message,
         "- Usa GOOD si hay citas utiles y directas; WEAK si hay citas debiles o indirectas"
-        " y debes devolverlas; NONE si no hay citas utiles y citations debe ser [].",
+        " y debes devolverlas; NONE si no hay citas utiles y citation_ids debe ser [].",
         "- citationSupportStatus debe ser siempre NONE.",
         "RAG Agent / estado de respaldo",
     )
     message = replace_once(
         message,
-        "- citations debe ser el arreglo de citas validas devuelto por SearchStore; si"
-        " citationSupportStatus es WEAK devuelve las citas debiles disponibles; si es"
-        " NONE usa [].",
-        "- citations debe ser siempre [].",
+        "- citation_ids: los citation_id de SearchStore que sustentan la orientacion,"
+        " copiados EXACTAMENTE. No copies los fragmentos ni los demas campos de la cita: el"
+        " sistema los recupera a partir del citation_id.",
+        "- citation_ids debe ser siempre [].",
         "RAG Agent / arreglo de citas",
     )
     message = replace_once(
         message,
-        "- Si SearchStore devuelve texto plano, extrae su respuesta a answer, usa"
-        " citations: [] y citationSupportStatus: NONE.\n",
+        "- Si SearchStore devuelve texto plano, resume su respuesta en answer, usa"
+        " citation_ids: [] y citationSupportStatus: NONE.\n",
         "",
         "RAG Agent / texto plano",
     )
@@ -145,7 +149,7 @@ def apply_no_rag(workflow: dict) -> None:
 
 
 _XAI_SECTIONS_TO_DROP = (
-    "Contrato de salida obligatorio para el parser:",
+    "Formato de salida obligatorio (el usuario lee answer en vivo mientras la escribes):",
     "Campos estructurados obligatorios:",
     "Preguntas para afinar la orientacion:",
 )
@@ -154,29 +158,18 @@ _XAI_BULLETS_TO_DROP = (
     "- Si no puedes copiar un pasaje literal de la cita, no la incluyas.",
 )
 
-_XAI_REDUCED_CONTRACT = """Contrato de salida obligatorio para el parser:
-- Devuelve exclusivamente el objeto JSON final en la raiz.
-- No incluyas una propiedad "output".
-- No uses Markdown, bloque ```json, ni texto antes o despues del JSON.
-- La unica clave permitida en la raiz es answer.
-- answer es el texto en espanol, en Markdown seguro, con la orientacion para el usuario.
+_XAI_REDUCED_CONTRACT = """Formato de salida obligatorio:
+- Escribe solo answer: el texto en espanol, en Markdown seguro, con la orientacion para el usuario.
+- No agregues JSON, separadores ni texto despues de answer.
 """
 
-_XAI_REDUCED_SCHEMA = """{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "PlainAnswer",
-  "type": "object",
-  "properties": {
-    "answer": {
-      "type": "string",
-      "description": "Final user-facing Spanish Markdown answer with personalized orientation and prudent caveats."
-    }
-  },
-  "required": [
-    "answer"
-  ],
-  "additionalProperties": false
-}"""
+# El recordatorio del prompt de usuario pide el separador y el JSON final; en el brazo sin
+# explicabilidad se reduce a la regla del saludo.
+_XAI_TEXT_REMINDER = (
+    "Recuerda: si \"Conversacion en curso\" es SI, answer no empieza con un saludo."
+    " Escribe answer, luego <<<LEGALFAM_META>>> y luego el JSON."
+)
+_XAI_REDUCED_REMINDER = "Recuerda: si \"Conversacion en curso\" es SI, answer no empieza con un saludo."
 
 _XAI_REDUCED_BUILDER = """const output = $json.output || {};
 // Brazo de ablacion sin capa de explicabilidad: la respuesta viaja sin citas, sin
@@ -265,12 +258,14 @@ def apply_no_xai(workflow: dict) -> None:
     agent = node(workflow, "XAI Agent")
     reduced = _strip_xai_sections(agent["parameters"]["options"]["systemMessage"])
     agent["parameters"]["options"]["systemMessage"] = f"{reduced}\n\n{_XAI_REDUCED_CONTRACT}"
+    agent["parameters"]["text"] = replace_once(
+        agent["parameters"]["text"], _XAI_TEXT_REMINDER, _XAI_REDUCED_REMINDER, "XAI Agent / recordatorio"
+    )
 
-    node(workflow, "XAI Output Parser")["parameters"]["inputSchema"] = _XAI_REDUCED_SCHEMA
-
+    # Parse XAI Output se queda: sin separador toma todo el texto como answer.
     drop_node(workflow, "Resolve Locators")
     drop_node(workflow, "Attach Locators")
-    connect(workflow, "XAI Agent", "Build Response XAI")
+    connect(workflow, "Parse XAI Output", "Build Response XAI")
 
     node(workflow, "Build Response XAI")["parameters"]["jsCode"] = _XAI_REDUCED_BUILDER
 
@@ -351,7 +346,7 @@ def _tools_of(workflow: dict, agent: str) -> list[str]:
     ]
 
 
-XAI_NODES = ("XAI Agent", "XAI Output Parser")
+XAI_NODES = ("XAI Agent",)
 
 
 def _prompt_text(workflow: dict) -> str:

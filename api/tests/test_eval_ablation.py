@@ -67,12 +67,20 @@ def test_no_rag_keeps_the_explainability_layer(workflow):
 
 def test_no_xai_reduces_the_contract_to_the_answer(workflow):
     built = arms.build(workflow, "no_xai")
-    schema = json.loads(arms.node(built, "XAI Output Parser")["parameters"]["inputSchema"])
-    assert list(schema["properties"]) == ["answer"]
-    assert schema["additionalProperties"] is False
-
-    message = arms.node(built, "XAI Agent")["parameters"]["options"]["systemMessage"]
+    agent = arms.node(built, "XAI Agent")
+    message = agent["parameters"]["options"]["systemMessage"]
     assert not any(token in message for token in arms.XAI_FORBIDDEN)
+    assert "<<<LEGALFAM_META>>>" not in message
+    assert "<<<LEGALFAM_META>>>" not in agent["parameters"]["text"]
+    assert "Escribe solo answer" in message
+
+
+def test_arms_answer_with_a_single_json_not_a_stream(workflow):
+    # El runner lee un JSON; produccion transmite por streaming.
+    assert arms.node(workflow, "Webhook")["parameters"]["responseMode"] == "streaming"
+    for arm in arms.ARMS:
+        built = arms.build(copy.deepcopy(workflow), arm)
+        assert arms.node(built, "Webhook")["parameters"]["responseMode"] == "responseNode"
 
 
 def test_no_xai_keeps_the_writer(workflow):
@@ -91,7 +99,7 @@ def test_no_xai_keeps_retrieval(workflow):
 def test_no_xai_rewires_the_response_builder(workflow):
     built = arms.build(workflow, "no_xai")
     assert not any(item["name"] == "Resolve Locators" for item in built["nodes"])
-    assert built["connections"]["XAI Agent"]["main"][0] == [
+    assert built["connections"]["Parse XAI Output"]["main"][0] == [
         {"node": "Build Response XAI", "type": "main", "index": 0}
     ]
 

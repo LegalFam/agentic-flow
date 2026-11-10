@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -309,6 +309,10 @@ class RagSearchRequest(BaseModel):
     metadata_hints: list[str] = Field(default_factory=list)
     search_terms: list[str] = Field(default_factory=list)
     file_search_store_name: str | None = None
+    # "brief" pide una sintesis corta en vez de una respuesta desarrollada: quien llama (el
+    # RAG Agent del chat) no la muestra, solo la usa para decidir y resumir. Generar menos
+    # texto es la mayor parte de lo que tarda la busqueda.
+    answer_style: Literal["full", "brief"] = "full"
 
 
 class RagCitation(BaseModel):

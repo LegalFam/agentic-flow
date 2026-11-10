@@ -7,6 +7,13 @@ class Settings(BaseSettings):
 
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
+    # Razonamiento de la busqueda con grounding (/rag-search). Lo que razona ahi no lo ve
+    # nadie: el RAG Agent y el XAI Agent rehacen la orientacion. Medido en vivo, el thinking
+    # dinamico le sumaba varios segundos por turno sin cambiar que fragmentos se recuperan.
+    # En modelos 2.5 se aplica como presupuesto de tokens (0 lo apaga, -1 lo deja dinamico);
+    # en Gemini 3 o superior, como nivel (minimal, low, medium, high; vacio = el del modelo).
+    gemini_rag_thinking_budget: int = 0
+    gemini_rag_thinking_level: str = "minimal"
     gemini_file_search_store: str | None = None
     enable_gemini_file_search_upload: bool = False
 

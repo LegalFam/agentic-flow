@@ -224,8 +224,11 @@ async def replace_store_document(payload: FileSearchReplaceRequest) -> FileSearc
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
+# Sin async a proposito: la llamada a Gemini es bloqueante. Dentro de un `async def`
+# congelaba el event loop durante toda la busqueda y las consultas simultaneas de distintos
+# usuarios se atendian de a una. Con `def`, FastAPI la corre en su pool de hilos.
 @app.post("/rag-search", response_model=RagSearchResponse)
-async def rag_search(payload: RagSearchRequest) -> RagSearchResponse:
+def rag_search(payload: RagSearchRequest) -> RagSearchResponse:
     try:
         return RagSearchResponse.model_validate(
             search_legal_rag(
@@ -237,6 +240,7 @@ async def rag_search(payload: RagSearchRequest) -> RagSearchResponse:
                 metadata_hints=payload.metadata_hints,
                 search_terms=payload.search_terms,
                 file_search_store_name=payload.file_search_store_name,
+                answer_style=payload.answer_style,
             )
         )
     except Exception as exc:

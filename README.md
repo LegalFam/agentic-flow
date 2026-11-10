@@ -437,3 +437,40 @@ Terminos de busqueda: pension de alimentos, alimentos, obligacion alimentaria
 ```
 
 Esto reduce ruido en el RAG porque la busqueda no depende solo de la pregunta literal del usuario: tambien incluye la clasificacion legal y los mismos codigos compactos usados al indexar documentos.
+
+### Tiempo de respuesta y streaming
+
+Medido sobre 32 consultas reales con RAG (29 oct - 5 nov 2026), el flujo tardaba ~60 s. La
+misma respuesta se redactaba tres veces seguidas: File Search, el RAG Agent en Pro (que
+ademas copiaba los fragmentos completos, ~2.300 tokens) y el XAI Agent. Ahora:
+
+- `SearchStore` pide `answer_style: 'brief'` y `/rag-search` corre sin thinking
+  (`GEMINI_RAG_THINKING_BUDGET=0`): la busqueda baja de ~7 s a ~3 s y recupera los mismos
+  fragmentos.
+- El `RAG Agent` corre en `gemini-2.5-flash` y devuelve solo una sintesis breve y los
+  `citation_ids` que eligio. `Hydrate RAG Citations` recupera los fragmentos de lo que
+  `SearchStore` devolvio de verdad (los pasos intermedios del agente), asi que el agente no
+  los copia ni los puede alterar.
+- El `XAI Agent` corre en `gemini-3.5-flash-lite` y escribe en texto plano: primero
+  `answer` en Markdown, luego una linea `<<<LEGALFAM_META>>>` y al final un JSON con
+  `citations`, `citationSupportStatus`, `confidenceStatus`, `confidenceReason`,
+  `specialistSupportRecommended`, `nextSteps` y `clarifyingQuestions`. `Parse XAI Output`
+  lo separa y entrega la misma forma que dejaba el output parser, asi que el resto del
+  flujo no cambia. Un output parser estructurado no sirve aca: n8n entrega esa respuesta
+  como llamada a herramienta y no transmite nada.
+
+El `Webhook` responde en modo `streaming`. La respuesta es una secuencia de objetos JSON
+`{type, content, metadata: {nodeName, runIndex, ...}}`:
+
+- `begin`/`item`/`end` del nodo `XAI Agent`: el texto de la respuesta a medida que se
+  escribe. Lo que sigue al separador es el JSON final y no se muestra. Un `begin` nuevo del
+  mismo nodo significa que se reintento: lo transmitido antes se descarta.
+- `item` del nodo `Respond to Webhook`: el payload final de siempre (`message`, `citations`,
+  ...) como texto JSON. Es lo unico que se persiste.
+- `error`: un nodo fallo y no habra payload final.
+
+El backend tiene que entender este formato **antes** de publicar este workflow: un backend
+anterior lee solo el primer objeto (`begin`) y da la respuesta por vacia.
+
+En pruebas en vivo (10 consultas con RAG) el flujo completo tardo 18-25 s con la busqueda
+todavia sin el cambio de `/rag-search`, y el texto empezo a llegar a los 15-23 s.
