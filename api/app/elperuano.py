@@ -58,7 +58,7 @@ def dispositivo_url(norma_id: str) -> str:
     return f"{BASE_URL}/dispositivo/NL/{norma_id}"
 
 
-def _fetch(url: str, timeout: int = 60, retries: int = 3) -> str:
+def _fetch(url: str, timeout: int = 60, retries: int = 5) -> str:
     last_error: Exception | None = None
     for attempt in range(retries):
         try:
@@ -67,7 +67,9 @@ def _fetch(url: str, timeout: int = 60, retries: int = 3) -> str:
                 return response.read().decode("utf-8", errors="replace")
         except Exception as exc:  # red, timeout, 5xx
             last_error = exc
-            time.sleep(1.5 * (attempt + 1))
+            # El Peruano corta la conexion por unos segundos tras muchas paginas seguidas.
+            if attempt < retries - 1:
+                time.sleep(2 ** (attempt + 1))
     raise ElPeruanoError(f"No se pudo leer {url}: {last_error}")
 
 
