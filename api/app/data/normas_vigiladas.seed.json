@@ -5,7 +5,7 @@
       "identificador": "Decreto Legislativo N° 295",
       "aliases": ["Código Civil"],
       "version_hasta": "2025-01-23",
-      "spij_url": null,
+      "spij_url": "https://spij.minjus.gob.pe/spij-ext-web/#/detallenorma/H682684",
       "notas": "version_hasta = ultima nota (*) del markdown indexado."
     },
     {
@@ -21,7 +21,7 @@
       "identificador": "Ley N° 27337",
       "aliases": ["Código de los Niños y Adolescentes"],
       "version_hasta": "2024-12-13",
-      "spij_url": null,
+      "spij_url": "https://spij.minjus.gob.pe/spij-ext-web/#/detallenorma/H682689",
       "notas": "4a edicion feb. 2026; ultima nota (*) del 13/12/2024."
     },
     {
@@ -29,7 +29,7 @@
       "identificador": "Ley N° 26872",
       "aliases": ["Ley de Conciliación"],
       "version_hasta": "2021-05-22",
-      "spij_url": null,
+      "spij_url": "https://spij.minjus.gob.pe/spij-ext-web/#/detallenorma/H776930",
       "notas": "version_hasta = ultima nota (*) del markdown indexado."
     },
     {
@@ -37,7 +37,7 @@
       "identificador": "Ley N° 30364",
       "aliases": ["Ley para prevenir, sancionar y erradicar la violencia contra las mujeres y los integrantes del grupo familiar"],
       "version_hasta": "2018-10-25",
-      "spij_url": null,
+      "spij_url": "https://spij.minjus.gob.pe/spij-ext-web/#/detallenorma/H1141065",
       "notas": "Copia de la Defensoria (2019). Ultima nota (*) del 25/10/2018."
     },
     {
@@ -45,7 +45,7 @@
       "identificador": "Decreto Legislativo N° 1297",
       "aliases": ["Decreto Legislativo para la protección de niñas, niños y adolescentes sin cuidados parentales"],
       "version_hasta": "2016-12-30",
-      "spij_url": null,
+      "spij_url": "https://spij.minjus.gob.pe/spij-ext-web/#/detallenorma/H1170899",
       "notas": "Texto original publicado en El Peruano el 30/12/2016, sin modificaciones posteriores."
     },
     {
@@ -53,7 +53,7 @@
       "identificador": "Resolución Ministerial N° 100-2021-MIMP",
       "aliases": [],
       "version_hasta": "2021-03-29",
-      "spij_url": null,
+      "spij_url": "https://spij.minjus.gob.pe/spij-ext-web/#/detallenorma/H1279561",
       "notas": "Aprueba el Protocolo de Atencion del CEM."
     },
     {
@@ -61,16 +61,16 @@
       "identificador": "Resolución Ministerial N° 100-2021-MIMP",
       "aliases": ["Protocolo de Atención del Centro Emergencia Mujer"],
       "version_hasta": "2021-03-26",
-      "spij_url": null,
+      "spij_url": "https://spij.minjus.gob.pe/spij-ext-web/#/detallenorma/H1279561",
       "notas": "Aprobado por R.M. 100-2021-MIMP: un cambio al protocolo llega como modificacion de esa R.M."
     },
     {
       "document": "5213269-protocolo-base-de-actuacion-conjunta-pbac-version-amigable-d19e6348a548.md",
-      "identificador": "Protocolo Base de Actuación Conjunta",
+      "identificador": "Decreto Supremo N° 012-2019-MIMP",
       "aliases": ["Protocolo Base de Actuación Conjunta"],
       "version_hasta": "2025-04-04",
-      "spij_url": null,
-      "notas": "Version amigable del MIMP, sin numero propio: se vigila por nombre. Completar el decreto que lo aprueba."
+      "spij_url": "https://spij.minjus.gob.pe/spij-ext-web/#/detallenorma/H1235241",
+      "notas": "Version amigable del MIMP. Aprobado por D.S. 012-2019-MIMP: un cambio al protocolo llega como modificacion de ese decreto o por su nombre."
     }
   ]
 }
