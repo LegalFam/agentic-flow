@@ -523,6 +523,8 @@ def pretty_norma(nombre: str) -> str:
 
 
 def build_note_block(alcance: str, tipo: str, disposicion: str, norma: str, fecha: str, texto_nuevo: str) -> list[str]:
+    # "SEGUNDA. Modificacion de la Ley ..." -> "Segunda": el nombre, sin el titulo que le sigue.
+    disposicion = disposicion.split(". ")[0].rstrip(".").strip()
     if disposicion.isupper():
         disposicion = disposicion.title()
     disposicion = disposicion[0].upper() + disposicion[1:] if disposicion else disposicion

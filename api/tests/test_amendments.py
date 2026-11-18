@@ -511,6 +511,8 @@ def test_find_article_spans_quoted_versions_under_notes():
 def test_note_agrees_with_the_publishing_norm():
     decreto = amendments.build_note_block("Párrafo", "modifica", "SEGUNDA", "Decreto Legislativo N° 1703", "24/01/2026", "x")[1]
     assert "por la Segunda del Decreto Legislativo N° 1703, publicado el" in decreto
+    titled = amendments.build_note_block("Párrafo", "modifica", "SEGUNDA. Modificación de la Ley N.° 30364, Ley para prevenir", "Decreto Legislativo N° 1703", "24/01/2026", "x")[1]
+    assert "por la Segunda del Decreto Legislativo N° 1703," in titled
     ley = amendments.build_note_block("Artículo", "modifica", "Artículo único", "Ley N° 32351", "27/05/2025", "x")[1]
     assert "por el Artículo único de la Ley N° 32351, publicada el" in ley
 
