@@ -541,3 +541,12 @@ def test_same_heading_in_two_notes_is_not_a_duplicate():
     assert amendments.verify_proposal(old, new, sources) == []
     doubled = old + "\n- (*) nota\nuno\nuno"
     assert any("dos veces" in p for p in amendments.verify_proposal(old, doubled, ["uno"]))
+
+
+def test_plan_wrapped_in_a_list_is_accepted():
+    markdown = "## Artículo 5. Plazo\n\nEl plazo es de diez días."
+    dispositiva = "Artículo 1.- Modifícase el artículo 5: \"El plazo es de cinco días.\""
+    effect = amendments.Effect(tipo="modifica", articulos=["5"], disposicion="Artículo 1", evidencia="Modifícase el artículo 5")
+    plan = [{"alcance": "Artículo", "ancla_linea": 0, "texto_nuevo": "El plazo es de cinco días."}]
+    new, status, _ = amendments.apply_effect_to_article(markdown, "5", effect, "Ley N° 1", "01/01/2026", dispositiva, generate=lambda _: plan)
+    assert status == "aplicado" and "cinco días" in new

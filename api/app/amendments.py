@@ -596,6 +596,8 @@ def apply_effect_to_article(
             seccion=numbered[:40000] or "(el articulo no existe todavia)",
         )
     )
+    if isinstance(plan, list):
+        plan = next((item for item in plan if isinstance(item, dict)), {})
     alcance = str(plan.get("alcance", "Artículo")).strip()
     if alcance not in SCOPES:
         alcance = "Artículo"
