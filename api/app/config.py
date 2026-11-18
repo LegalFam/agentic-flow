@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     locator_max_combined_articles: int = 5
     locator_align_min_coverage: float = 0.8
 
+    # Actualizacion de normas desde El Peruano: registro de normas vigiladas, propuestas,
+    # copias de seguridad e historial. Van junto al corpus porque se mueven con el.
+    amendments_dir: str = "/work/amendments"
+    amendments_registry_path: str = "/work/normas_vigiladas.json"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

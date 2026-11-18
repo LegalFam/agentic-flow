@@ -393,3 +393,29 @@ class LocatorProbeResponse(BaseModel):
     breadcrumb: str = ""
     page: int | None = None
     locator_source: str = ""
+
+
+class AmendmentScanRequest(BaseModel):
+    # Fechas en ISO (AAAA-MM-DD). Sin fechas: ayer y hoy, que es la corrida diaria.
+    fecha_ini: str | None = None
+    fecha_fin: str | None = None
+    documents: list[str] | None = None
+
+
+class AmendmentDecisionRequest(BaseModel):
+    proposal_id: str
+    decision: str = Field(pattern="^(apply|skip)$")
+    decided_by: str = ""
+    file_search_store_name: str | None = None
+
+
+class AmendmentRollbackRequest(BaseModel):
+    backup_id: str
+    decided_by: str = ""
+    file_search_store_name: str | None = None
+
+
+class AmendmentSnapshotRequest(BaseModel):
+    documents: list[str] | None = None
+    reason: str = "copia a pedido"
+    file_search_store_name: str | None = None

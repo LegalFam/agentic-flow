@@ -52,6 +52,7 @@ docker compose up --build
 - `GET /corpus/status`: cuantos markdowns ve el locator y si hay manifest.
 - `POST /corpus/reload`: limpia el cache de indices sin reiniciar el contenedor.
 - `POST /locator/probe`: diagnostico. Recibe `{title, snippet}` y devuelve la ubicacion resuelta y la estrategia usada.
+- `POST /amendments/scan`, `GET /amendments/proposals`, `POST /amendments/decide`, `POST /amendments/rollback`, `GET|POST /amendments/backups`, `GET /amendments/history`, `GET /amendments/registry`: actualizacion de normas desde El Peruano, con revision humana, copia de seguridad y rollback. Ver [docs/actualizacion-normas-el-peruano.md](docs/actualizacion-normas-el-peruano.md).
 - `POST /resolve-locators`: cambia los `citation_id` que traen los agentes por el locator autoritativo. Acepta ademas el `original_snippet` que declara el agente XAI.
 
 ## Actualizar un documento ya indexado
@@ -195,6 +196,18 @@ medias (tipicamente el borrado o la sincronizacion del corpus), 1 error.
 - **El `citation_id` de una respuesta en vuelo.** El registro del locator apunta al texto
   viejo hasta que expira (`LOCATOR_REGISTRY_TTL_SECONDS`, 15 minutos por defecto). Una
   cita emitida justo antes del reemplazo puede resolver a una ubicacion que ya no existe.
+
+## Actualizar normas desde El Peruano
+
+Las normas del corpus (codigos, leyes, protocolos) se mantienen al dia con lo que publica el
+Diario Oficial: un escaneo diario detecta modificaciones, derogaciones y declaraciones de
+inconstitucionalidad, propone notas `(*)` al estilo SPIJ sobre nuestro markdown, y nada llega
+al store sin revision humana y sin una copia de seguridad que coincida byte a byte con lo
+indexado. Todo cambio tiene rollback.
+
+Workflows: `Scan El Peruano For Norm Updates` (diario), `Review Norm Updates` y
+`Rollback Norm Update`. El detalle completo, las garantias y la operacion estan en
+[docs/actualizacion-normas-el-peruano.md](docs/actualizacion-normas-el-peruano.md).
 
 ## Ubicacion de las citas (citation locator)
 

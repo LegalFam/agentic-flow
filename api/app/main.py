@@ -1,9 +1,10 @@
+from datetime import date, timedelta
 from json import JSONDecodeError
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 
-from app import corpus, locator, locator_registry, store_documents
+from app import amendments, corpus, elperuano, locator, locator_registry, store_documents
 from app.config import settings
 from app.converter import convert_pdf_to_markdown
 from app.conversion_jobs import get_conversion_job, start_conversion_job
@@ -14,6 +15,10 @@ from app.gemini_client import (
     upload_to_file_search_store,
 )
 from app.models import (
+    AmendmentDecisionRequest,
+    AmendmentRollbackRequest,
+    AmendmentScanRequest,
+    AmendmentSnapshotRequest,
     ConversionJobResponse,
     ConversionResponse,
     CorpusReloadResponse,
@@ -363,3 +368,95 @@ async def metadata_from_form(
 ) -> MetadataResponse:
     payload = MetadataRequest(filename=filename, markdown=markdown, fuente=fuente)
     return await extract_metadata(payload)
+
+
+# ----------------------------------------------------------------------------- amendments
+# Actualizacion de normas desde El Peruano. Los endpoints son `def` (no async) a proposito:
+# un escaneo hace decenas de llamadas bloqueantes a El Peruano y a Gemini, y asi FastAPI
+# los corre en su threadpool sin frenar el resto de la API.
+
+
+def _amendment_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, amendments.BackupError):
+        return HTTPException(status_code=409, detail=error_detail("BACKUP_FAILED", str(exc)))
+    if isinstance(exc, (amendments.AmendmentError, store_documents.ReplaceRefused)):
+        return HTTPException(status_code=409, detail=error_detail("AMENDMENT_REFUSED", str(exc)))
+    if isinstance(exc, elperuano.ElPeruanoFormatError):
+        return HTTPException(status_code=502, detail=error_detail("SOURCE_FORMAT_CHANGED", str(exc)))
+    if isinstance(exc, elperuano.ElPeruanoError):
+        return HTTPException(status_code=502, detail=error_detail("SOURCE_UNAVAILABLE", str(exc)))
+    status_code, detail = classify_processing_error(exc)
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+@app.get("/amendments/registry")
+def amendments_registry() -> dict:
+    return {"normas": [vars(norm) for norm in amendments.load_registry()]}
+
+
+@app.post("/amendments/scan")
+def amendments_scan(payload: AmendmentScanRequest) -> dict:
+    today = date.today()
+    try:
+        fecha_fin = date.fromisoformat(payload.fecha_fin) if payload.fecha_fin else today
+        fecha_ini = date.fromisoformat(payload.fecha_ini) if payload.fecha_ini else fecha_fin - timedelta(days=1)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=error_detail("INVALID_DATE", str(exc))) from exc
+    if fecha_ini > fecha_fin:
+        raise HTTPException(status_code=400, detail=error_detail("INVALID_DATE", "fecha_ini es posterior a fecha_fin"))
+    try:
+        return amendments.scan(fecha_ini, fecha_fin, payload.documents)
+    except Exception as exc:
+        raise _amendment_error(exc) from exc
+
+
+@app.get("/amendments/proposals")
+def amendments_proposals(status: str | None = "pending") -> dict:
+    return {"proposals": amendments.list_proposals(status or None)}
+
+
+@app.get("/amendments/proposals/{proposal_id}")
+def amendments_proposal(proposal_id: str) -> dict:
+    try:
+        return amendments.load_proposal(proposal_id)
+    except Exception as exc:
+        raise _amendment_error(exc) from exc
+
+
+@app.post("/amendments/decide")
+def amendments_decide(payload: AmendmentDecisionRequest) -> dict:
+    try:
+        return amendments.decide(
+            payload.proposal_id, payload.decision, payload.file_search_store_name, payload.decided_by
+        )
+    except Exception as exc:
+        raise _amendment_error(exc) from exc
+
+
+@app.get("/amendments/backups")
+def amendments_backups(document: str | None = None) -> dict:
+    return {"backups": amendments.list_backups(document)}
+
+
+@app.post("/amendments/backups")
+def amendments_snapshot(payload: AmendmentSnapshotRequest) -> dict:
+    try:
+        return amendments.snapshot(payload.documents, payload.file_search_store_name, payload.reason)
+    except Exception as exc:
+        raise _amendment_error(exc) from exc
+
+
+@app.post("/amendments/rollback")
+def amendments_rollback(payload: AmendmentRollbackRequest) -> dict:
+    try:
+        return amendments.rollback(payload.backup_id, payload.file_search_store_name, payload.decided_by)
+    except Exception as exc:
+        raise _amendment_error(exc) from exc
+
+
+@app.get("/amendments/history")
+def amendments_history(document: str | None = None) -> dict:
+    entries = amendments.load_history()
+    if document:
+        entries = [entry for entry in entries if document in (entry.get("document"), entry.get("new_document"))]
+    return {"history": entries}

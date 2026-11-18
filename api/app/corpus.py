@@ -19,11 +19,38 @@ def manifest_path() -> Path:
     return corpus_path() / settings.corpus_manifest_filename
 
 
+def _excluded_dirs(root: Path) -> list[Path]:
+    """Carpetas dentro del corpus que no son corpus.
+
+    En Cloud Run el unico almacenamiento persistente es el bucket montado como corpus, asi
+    que las copias de seguridad y propuestas de amendments viven ahi adentro. Son markdowns
+    con el mismo nombre que los documentos indexados: si el locator los viera, resolveria
+    citas contra una version vieja o propuesta.
+    """
+    excluded = []
+    amendments = Path(settings.amendments_dir)
+    try:
+        amendments.resolve().relative_to(root.resolve())
+        excluded.append(amendments.resolve())
+    except ValueError:
+        pass
+    return excluded
+
+
 def iter_corpus_files() -> list[Path]:
     root = corpus_path()
     if not root.is_dir():
         return []
-    return sorted(path for path in root.glob("**/*.md") if path.is_file())
+    excluded = _excluded_dirs(root)
+    files = []
+    for path in root.glob("**/*.md"):
+        if not path.is_file():
+            continue
+        resolved = path.resolve()
+        if any(resolved.is_relative_to(folder) for folder in excluded):
+            continue
+        files.append(path)
+    return sorted(files)
 
 
 def load_manifest() -> dict[str, str]:
@@ -171,6 +198,39 @@ def sync_replacement(filename: str, markdown: str, removed_display_names: list[s
     return {
         "synced": True,
         "written": target.name,
+        "removed": removed,
+        "remove_failed": failed,
+        "manifest_pruned": manifest_pruned,
+    }
+
+
+def remove_documents(removed_display_names: list[str]) -> dict:
+    """Saca del corpus los markdowns de documentos que se borraron del store sin reemplazo.
+
+    Es el caso de una derogacion total. Dejar el archivo haria que el locator siguiera
+    ubicando citas en un texto que el store ya no tiene.
+    """
+    root = corpus_path()
+    if not root.is_dir():
+        return {"synced": False, "reason": f"{root} no existe"}
+
+    removed: list[str] = []
+    failed: list[str] = []
+    for display_name in removed_display_names:
+        path = resolve_document_path(display_name, None)
+        if path is None:
+            continue
+        try:
+            path.unlink()
+            removed.append(path.name)
+        except OSError as exc:
+            failed.append(f"{path.name}: {exc}")
+
+    manifest_pruned = _prune_manifest(removed_display_names, removed)
+    clear_cache()
+    return {
+        "synced": not failed,
+        "reason": "; ".join(failed) if failed else "",
         "removed": removed,
         "remove_failed": failed,
         "manifest_pruned": manifest_pruned,

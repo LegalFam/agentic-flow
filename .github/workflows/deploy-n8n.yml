@@ -112,6 +112,11 @@ jobs:
             CORPUS_MOUNT_FLAGS+=(--add-volume-mount "volume=corpus,mount-path=/corpus")
             # Los --set-env-vars repetidos se acumulan (UpdateAction), no se reemplazan.
             CORPUS_MOUNT_FLAGS+=(--set-env-vars "CORPUS_DIR=/corpus")
+            # Copias de seguridad, propuestas e historial de las actualizaciones desde El
+            # Peruano. Tienen que sobrevivir al contenedor (de eso depende el rollback), y el
+            # bucket es el unico almacenamiento persistente. El corpus excluye esta carpeta.
+            CORPUS_MOUNT_FLAGS+=(--set-env-vars "AMENDMENTS_DIR=/corpus/_amendments")
+            CORPUS_MOUNT_FLAGS+=(--set-env-vars "AMENDMENTS_REGISTRY_PATH=/corpus/_amendments/normas_vigiladas.json")
           fi
 
           # A proposito NO se le pasa CORPUS_BUCKET al contenedor de n8n: ese valor es lo

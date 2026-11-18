@@ -1,0 +1,186 @@
+{
+  "name": "Scan El Peruano For Norm Updates",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "40 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0001-4000-8000-000000000001",
+      "name": "Schedule - Daily 07:40 Lima",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -900,
+        -100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b2c3d4e5-0001-4000-8000-000000000002",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "store-display-name",
+              "name": "fileSearchStoreDisplayName",
+              "value": "FamilyLaw",
+              "type": "string"
+            },
+            {
+              "id": "api-base-url",
+              "name": "processingApiBaseUrl",
+              "value": "={{ $env.PROCESSING_API_BASE_URL || 'http://processing-api:8000' }}",
+              "type": "string"
+            },
+            {
+              "id": "fecha-ini",
+              "name": "fechaIni",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "fecha-fin",
+              "name": "fechaFin",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0001-4000-8000-000000000003",
+      "name": "Edit Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.processingApiBaseUrl + '/amendments/scan' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { fecha_ini: $json.fechaIni || null, fecha_fin: $json.fechaFin || null } }}",
+        "options": {
+          "timeout": 3600000
+        }
+      },
+      "id": "b2c3d4e5-0001-4000-8000-000000000004",
+      "name": "API - Scan El Peruano",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -460,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deja en la ejecucion un resumen legible. Las propuestas quedan guardadas en la API y\n// se revisan con el workflow 'Review Norm Updates': un formulario dentro de una corrida\n// programada no tendria a nadie esperando su URL.\nconst scan = $json;\nconst proposals = scan.proposals || [];\nconst pending = proposals.filter((p) => p.action !== 'none');\nreturn [{ json: {\n  rango: scan.rango,\n  normasRevisadas: scan.normas_revisadas,\n  propuestas: proposals.length,\n  requierenRevision: pending.length,\n  documentos: pending.map((p) => `${p.document}: ${p.action} (${(p.changes || []).filter((c) => c.status === 'aplicado').length} cambios)`),\n  avisos: scan.warnings || [],\n  siguientePaso: pending.length ? 'Ejecutar Review Norm Updates' : 'Nada que revisar',\n} }];"
+      },
+      "id": "b2c3d4e5-0001-4000-8000-000000000005",
+      "name": "Summarize Scan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{ 'El escaneo de El Peruano fallo: ' + JSON.stringify($json.error || $json) + '. Si el codigo es SOURCE_FORMAT_CHANGED, el sitio cambio y el parser necesita ajuste: NO asumir que no hubo normas.' }}"
+      },
+      "id": "b2c3d4e5-0001-4000-8000-000000000006",
+      "name": "Stop - Scan Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        120
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule - Daily 07:40 Lima": {
+      "main": [
+        [
+          {
+            "node": "Edit Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Edit Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Config": {
+      "main": [
+        [
+          {
+            "node": "API - Scan El Peruano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API - Scan El Peruano": {
+      "main": [
+        [
+          {
+            "node": "Summarize Scan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop - Scan Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ScanElPeruanoNrm1-v1",
+  "meta": {},
+  "id": "ScanElPeruanoNrm1",
+  "tags": []
+}
