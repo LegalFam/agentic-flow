@@ -1128,6 +1128,15 @@ def _advance_registry(document: str, new_document: str | None, proposal: dict[st
     save_registry(norms)
 
 
+def _registered_version_of(document: str) -> str | None:
+    stem = corpus.strip_document_id_hash(Path(document).stem)
+    return next(
+        (norm.document for norm in load_registry()
+         if corpus.strip_document_id_hash(Path(norm.document).stem) == stem),
+        None,
+    )
+
+
 def rollback(backup_id: str, file_search_store_name: str | None, decided_by: str = "") -> dict[str, Any]:
     """Vuelve a poner en el store la version guardada en `backup_id`.
 
@@ -1139,7 +1148,14 @@ def rollback(backup_id: str, file_search_store_name: str | None, decided_by: str
     if hashlib.sha256(markdown.encode("utf-8")).hexdigest() != backup["sha256"]:
         raise BackupError(f"la copia {backup_id} esta alterada: su sha256 no coincide")
 
-    current = backup.get("replaced_by")
+    # Las copias preventivas y las previas a un rollback no saben que version las reemplazo:
+    # la vigente es la que tiene el registro para esa misma norma.
+    current = backup.get("replaced_by") or _registered_version_of(document)
+    if current == document:
+        # Tras una derogacion total el registro conserva el nombre pero el documento ya no esta.
+        if (corpus.corpus_path() / document).is_file():
+            raise AmendmentError(f"{document} ya es la version vigente; no hay nada que revertir")
+        current = None
     to_delete: list[str] = []
     pre_backup = None
     if current:
@@ -1149,6 +1165,10 @@ def rollback(backup_id: str, file_search_store_name: str | None, decided_by: str
     result = store_documents.swap_document(
         document, markdown, backup["custom_metadata"], to_delete, file_search_store_name
     )
+    if pre_backup:
+        record = load_backup(pre_backup["backup_id"])
+        record["replaced_by"] = document
+        _write_json(_backups_dir() / pre_backup["backup_id"] / "backup.json", record)
     _append_history({"event": "rollback", "document": current or document, "restored": document,
                      "backup_id": backup_id, "pre_rollback_backup_id": pre_backup and pre_backup["backup_id"],
                      "decided_by": decided_by, "store_result": result})

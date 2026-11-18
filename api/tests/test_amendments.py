@@ -339,6 +339,33 @@ def test_apply_backs_up_first_and_rollback_restores_exactly(workspace, fake_stor
     assert events == ["applied", "rollback"]
 
 
+def test_rollback_of_a_rollback_swaps_back_without_leaving_both(workspace, fake_store):
+    proposal = scan_with(fake_for_both_laws(), [LEY_32351, LEY_32298], workspace)["proposals"][0]
+    new_document = amendments.decide(proposal["id"], "apply", None)["new_document"]
+    applied_text = (workspace / "corpus" / new_document).read_text(encoding="utf-8")
+
+    undo = amendments.rollback(amendments.load_history()[0]["backup_id"], None)
+    redo = amendments.rollback(undo["pre_rollback_backup_id"], None)
+
+    assert redo["restored"] == new_document and redo["removed"] == [DOC]
+    assert set(fake_store.documents) == {new_document}
+    assert not (workspace / "corpus" / DOC).exists()
+    assert (workspace / "corpus" / new_document).read_text(encoding="utf-8") == applied_text
+    assert amendments.load_registry()[0].document == new_document
+
+
+def test_preventive_backup_rolls_back_the_registered_version(workspace, fake_store):
+    snapshot = amendments.snapshot([DOC], None, "copia preventiva")["backups"][0]
+    with pytest.raises(amendments.AmendmentError):
+        amendments.rollback(snapshot, None)  # sigue siendo la vigente
+    proposal = scan_with(fake_for_both_laws(), [LEY_32351], workspace)["proposals"][0]
+    new_document = amendments.decide(proposal["id"], "apply", None)["new_document"]
+
+    amendments.rollback(snapshot, None)
+    assert set(fake_store.documents) == {DOC}
+    assert amendments.load_registry()[0].document == DOC
+
+
 def test_no_change_without_a_verified_backup(workspace, fake_store):
     fake_store.documents[DOC]["size"] += 1  # la copia local ya no es lo indexado
     proposal = scan_with(fake_for_both_laws(), [LEY_32351], workspace)["proposals"][0]
