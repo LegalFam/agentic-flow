@@ -288,31 +288,65 @@ garantizada), `502 SOURCE_FORMAT_CHANGED` (El Peruano cambió), `502 SOURCE_UNAV
   encabezado, sufijo de sector perdido (`100-2021-MIMP`), y 23 normas que solo citaban la ley
   y pasaban a Gemini.
 
-## Estado del corpus (revisión real del 18/11/2026)
+## Estado del corpus (revisión completa del 18/11/2026)
 
-Escaneo real de El Peruano + Gemini desde el `version_hasta` de cada norma hasta el
-18/11/2026, sobre una copia byte a byte de FamilyLaw. **No se escribió nada en el store**: los
-hallazgos son propuestas para aplicar con el flujo de revisión.
+Escaneo de El Peruano + Gemini desde el `version_hasta` de cada norma hasta el 18/11/2026,
+corrido en producción sobre el corpus del bucket (copia byte a byte de FamilyLaw). **No se
+escribió nada en el store**: los hallazgos son propuestas pendientes en
+`/corpus/_amendments/proposals`, para el flujo de revisión.
 
 | Norma | Al día desde | Resultado |
 |---|---|---|
-| Código Civil | 23/01/2025 | Al día. 90 normas candidatas, ninguna lo modifica. Se verificó aparte con búsquedas dirigidas ("modifica el Código Civil", "Decreto Legislativo 295"): nada omitido. |
+| Código Civil | 23/01/2025 | Al día (90 candidatas, ninguna lo modifica). |
 | Código Procesal Civil | 12/07/2025 | Al día (25 candidatas). |
-| **Código de los Niños y Adolescentes** | 13/12/2024 | **Desactualizado.** Ley N° 32191 (13/12/2024) modifica el art. 111; Ley N° 32617 (29/05/2026) modifica los arts. 9 y 23. La propuesta pasa la verificación (3 cambios). |
-| Ley 26872 (Conciliación) | 22/05/2021 | Al día (10 candidatas). |
-| **Ley 30364** | 25/10/2018 | **Desactualizada.** Confirmado: Ley N° 32298 (11/04/2025, incorpora párrafo al art. 10) y Ley N° 32351 (27/05/2025, modifica el art. 46). El rango completo 2018–2026 quedó sin terminar de revisar: probablemente hay más. |
-| D.L. 1297, R.M. 100-2021-MIMP, Protocolo CEM, PBAC | — | Sin revisar. |
+| **Código de los Niños y Adolescentes** | 13/12/2024 | **Desactualizado.** Ley N° 32191 (art. 111) y Ley N° 32617 (arts. 9 y 23). Propuesta verificada, 3 cambios. |
+| Ley 26872 (Conciliación) | 22/05/2021 | Al día (10 candidatas). La nota de SPIJ sobre el D.S. 025-2025-JUS es un calendario de vigencia, no cambia el texto. |
+| **Ley 30364** | 25/10/2018 | **Desactualizada, muy por detrás.** Leyes 31156 (art. 15), 31439 (arts. 37–39, incorpora 39-A y 39-B), 31715 (arts. 15, 16, 22, 23-A, 45), 32298 (art. 10), 32351 (art. 46) y D.L. 1551 (art. 29) y 1703 (arts. 10 y 15-A). La propuesta aplica la mayoría; quedan avisos para revisión manual (ver abajo). |
+| **D.L. 1297** | 30/12/2016 | **Desactualizado, muy por detrás.** D.L. 1377 (2018), Leyes 31420 (2022), 31716 (2023, ~30 artículos), 31906 (2023), 31994 y 32017 (2024). Propuesta verificada con 38 cambios; 9 avisos para revisión manual. |
+| R.M. 100-2021-MIMP y Protocolo CEM | 26–29/03/2021 | Al día. |
+| PBAC | 04/04/2025 | Al día (vigilado como D.S. 012-2019-MIMP y por nombre). |
+
+Falsos positivos descartados al revisar: la Ley 31664 modifica otra ley (la definición de
+violencia "para efectos de la Ley 30364"), no la 30364; la Ley 31696 solo delega facultades
+(las usaron los D.L. 1551 y 1703, que sí están).
+
+### A aplicar a mano
+
+El escaneo no los puede aplicar solo; quien revisa los agrega con la misma convención `(*)`:
+
+- **D.L. 1297:** Ley N° 30690 (05/12/2017, arts. 96, 123, 124 y 140) y D.U. N° 001-2020
+  (07/01/2020). Sus fichas en El Peruano son solo PDF.
+- **D.L. 1297, arts. 3, 29, 36 y 55:** el markdown trae también páginas de otras normas que
+  venían en el PDF, con artículos del mismo número; el código no adivina cuál es.
+- **Ley 30364:** los cambios marcados `aviso` en la propuesta (texto que Gemini no copió literal
+  de El Peruano y disposiciones complementarias, que no son artículos numerados).
+
+## Despliegue en producción (18/11/2026)
+
+- Desplegado a mano desde `experiment/response-speed-optimization` (revisión
+  `legalfam-n8n-00012-vcv`; la anterior al flujo es `legalfam-n8n-00007-fhz`). El contenedor
+  `processing-api` tiene `AMENDMENTS_DIR=/corpus/_amendments` y
+  `AMENDMENTS_REGISTRY_PATH=/corpus/_amendments/normas_vigiladas.json`. Un deploy que solo
+  cambia la imagen las conserva; uno nuevo desde cero las toma de `deploy-n8n.yml`.
+- `ScanElPeruanoNrm1` está en `N8N_PUBLISH_WORKFLOW_IDS` (job de sync y variable de GitHub). El
+  servicio corre con `--no-cpu-throttling`, así que el escaneo programado no se frena sin
+  peticiones entrantes.
+- Copia preventiva de las 9 normas hecha dentro del contenedor real, en el bucket, verificada
+  byte a byte contra FamilyLaw.
+- Registro vivo en el bucket con los `spij_url` de las 9 normas y el PBAC vigilado como
+  `Decreto Supremo N° 012-2019-MIMP` (el que lo aprueba).
+- La puesta al día se corrió con un Cloud Run Job (`legalfam-amendments-catchup`) con la misma
+  imagen y el mismo bucket, porque el workflow de escaneo no filtra por documento y las
+  llamadas largas no caben en una petición HTTP.
+- El Peruano corta la conexión unos segundos tras muchas páginas seguidas: `_fetch` reintenta
+  con espera exponencial (2+4+8+16 s).
 
 ## Próximos pasos
 
-1. Configurar `GEMINI_API_KEY`, desplegar y agregar `ScanElPeruanoNrm1` a
-   `N8N_PUBLISH_WORKFLOW_IDS` para que el escaneo diario corra solo.
-2. Copia preventiva de todo: `POST /amendments/backups` con `{}`.
-3. Puesta al día: `POST /amendments/scan` por norma, con `fecha_ini` = su `version_hasta` y
-   `documents` = `[su display_name]`, empezando por el Código de los Niños y la Ley 30364;
-   luego D.L. 1297 (desde 2016-12-30), R.M. 100-2021-MIMP, Protocolo CEM y PBAC.
-4. Revisar y aplicar con `Review Norm Updates`, contrastando con SPIJ desde el Perú.
-5. Completar en el registro el decreto que aprueba el PBAC y los `spij_url` que falten.
+1. Revisar y aplicar con `Review Norm Updates`, contrastando con SPIJ desde el Perú.
+2. Probar en el n8n real los formularios de `Review Norm Updates` y `Rollback Norm Update`
+   (requieren iniciar sesión en el editor) y un rollback de punta a punta sobre la primera
+   propuesta aplicada.
 
 ## Limitaciones conocidas
 
@@ -326,5 +360,10 @@ hallazgos son propuestas para aplicar con el flujo de revisión.
 - **Nuevo TUO:** se detecta como `aviso`; reemplazar el documento por el TUO es manual (flujo
   `Replace Document In Gemini File Search`).
 - **Normas antes de ~2010:** el buscador de El Peruano no las devuelve.
+- **Fichas de 2017–2020 solo en PDF:** no traen `#visor-html`; el escaneo las reporta como aviso
+  y no las lee. Hay que mirar su sumilla: dos modificaban el D.L. 1297.
+- **Gemini no es determinista:** la misma norma puede salir clasificada distinto entre corridas
+  (la Ley 31664 salió una vez como modificación). Las verificaciones deterministas frenan texto
+  inventado, no una omisión: por eso la revisión humana contra SPIJ es obligatoria.
 - **El texto anterior queda en el documento** (como en SPIJ, con la nota debajo). El RAG puede
   recuperar el párrafo viejo; la nota inmediatamente posterior indica que fue modificado.
