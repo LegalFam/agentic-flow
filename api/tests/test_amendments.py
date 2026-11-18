@@ -577,3 +577,13 @@ def test_plan_wrapped_in_a_list_is_accepted():
     plan = [{"alcance": "Artículo", "ancla_linea": 0, "texto_nuevo": "El plazo es de cinco días."}]
     new, status, _ = amendments.apply_effect_to_article(markdown, "5", effect, "Ley N° 1", "01/01/2026", dispositiva, generate=lambda _: plan)
     assert status == "aplicado" and "cinco días" in new
+
+
+def test_daily_scan_closes_no_change_proposals_and_lists_the_rest(workspace, fake_store):
+    from app import daily_scan
+    proposal = scan_with(fake_for_both_laws(), [LEY_32351], workspace)["proposals"][0]
+    assert [p["id"] for p in daily_scan.pending_for_review()] == [proposal["id"]]
+    amendments._set_proposal_status(proposal["id"], "pending", action="none")
+    daily_scan.close_no_change_proposals()
+    assert daily_scan.pending_for_review() == []
+    assert amendments.load_proposal(proposal["id"])["status"] == "applied"
