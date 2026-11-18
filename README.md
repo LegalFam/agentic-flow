@@ -52,7 +52,7 @@ docker compose up --build
 - `GET /corpus/status`: cuantos markdowns ve el locator y si hay manifest.
 - `POST /corpus/reload`: limpia el cache de indices sin reiniciar el contenedor.
 - `POST /locator/probe`: diagnostico. Recibe `{title, snippet}` y devuelve la ubicacion resuelta y la estrategia usada.
-- `POST /amendments/scan`, `GET /amendments/proposals`, `POST /amendments/decide`, `POST /amendments/rollback`, `GET|POST /amendments/backups`, `GET /amendments/history`, `GET /amendments/registry`: actualizacion de normas desde El Peruano, con revision humana, copia de seguridad y rollback. Ver [docs/actualizacion-normas-el-peruano.md](docs/actualizacion-normas-el-peruano.md).
+- `POST /amendments/scan`, `GET /amendments/proposals`, `POST /amendments/decide`, `POST /amendments/rollback`, `GET|POST /amendments/backups`, `GET /amendments/history`, `GET /amendments/registry`: actualizacion de normas desde El Peruano, con revision humana, copia de seguridad y rollback.
 - `POST /resolve-locators`: cambia los `citation_id` que traen los agentes por el locator autoritativo. Acepta ademas el `original_snippet` que declara el agente XAI.
 
 ## Actualizar un documento ya indexado
@@ -205,9 +205,10 @@ inconstitucionalidad, propone notas `(*)` al estilo SPIJ sobre nuestro markdown,
 al store sin revision humana y sin una copia de seguridad que coincida byte a byte con lo
 indexado. Todo cambio tiene rollback.
 
-Workflows: `Scan El Peruano For Norm Updates` (diario), `Review Norm Updates` y
-`Rollback Norm Update`. El detalle completo, las garantias y la operacion estan en
-[docs/actualizacion-normas-el-peruano.md](docs/actualizacion-normas-el-peruano.md).
+El escaneo diario lo dispara Cloud Scheduler (07:40, America/Lima) sobre el Cloud Run Job
+`legalfam-amendments-daily` (`python -m app.daily_scan`). La revision y el rollback se hacen
+con los workflows `Review Norm Updates` y `Rollback Norm Update`; `Scan El Peruano For Norm
+Updates` queda para escaneos a mano.
 
 ## Ubicacion de las citas (citation locator)
 
