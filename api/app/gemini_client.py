@@ -201,16 +201,34 @@ def upload_document(
     store_name: str,
     filename: str,
     markdown: str,
-    metadata: LegalMetadata,
+    metadata: LegalMetadata | None,
     wait_until_done: bool,
     max_wait_seconds: int,
+    raw_custom_metadata: list[dict[str, str]] | None = None,
 ):
+    """Sube un markdown al store.
+
+    `raw_custom_metadata` copia tal cual la metadata de un documento ya indexado (pares
+    key/string_value). Lo usan las actualizaciones por normas modificatorias y los rollbacks:
+    reconstruir un LegalMetadata desde el store perderia lo que el administrador cargo a mano
+    (la `fuente` con el link original, por ejemplo) y los codigos de categoria no se pueden
+    invertir sin perdida.
+    """
     import tempfile
+
+    if metadata is None and raw_custom_metadata is None:
+        raise ValueError("upload_document necesita metadata o raw_custom_metadata")
 
     with tempfile.TemporaryDirectory() as temp_dir:
         path = Path(temp_dir) / filename
         path.write_text(markdown, encoding="utf-8")
-        custom_metadata = _build_custom_metadata(types, metadata)
+        if raw_custom_metadata is not None:
+            custom_metadata = [
+                types.CustomMetadata(key=item["key"], string_value=item["string_value"])
+                for item in raw_custom_metadata
+            ]
+        else:
+            custom_metadata = _build_custom_metadata(types, metadata)
         _validate_custom_metadata_lengths(custom_metadata)
         try:
             operation = client.file_search_stores.upload_to_file_search_store(

@@ -253,3 +253,130 @@ def _decide_targets(
     if verdict == "ambiguous" and not allow_multiple:
         raise ReplaceRefused(plan["message"])
     return plan["superseded"]
+
+
+def _raw_custom_metadata(document: Any) -> list[dict[str, str]]:
+    """La metadata de un documento indexado, en la forma que acepta upload_document.
+
+    Todo lo que este proyecto sube va como string_value. Si aparece otro tipo, alguien lo
+    subio por otra via, y copiarlo como texto le cambiaria el tipo en silencio: se rechaza.
+    """
+    raw: list[dict[str, str]] = []
+    for item in getattr(document, "custom_metadata", None) or []:
+        key = getattr(item, "key", None)
+        value = getattr(item, "string_value", None)
+        if key is None:
+            continue
+        if value is None:
+            raise ReplaceRefused(
+                f"El documento {getattr(document, 'display_name', '?')} tiene metadata '{key}' "
+                "que no es texto; no se puede copiar sin perderla."
+            )
+        raw.append({"key": str(key), "string_value": str(value)})
+    return raw
+
+
+def get_store_document(display_name: str, file_search_store_name: str | None) -> dict[str, Any]:
+    """Un documento del store con su metadata cruda. Exige que el nombre sea unico."""
+    client, types = build_client()
+    store = _resolve_store(client, types, file_search_store_name)
+    matches = [
+        item
+        for item in client.file_search_stores.documents.list(parent=store)
+        if (getattr(item, "display_name", "") or "") == display_name
+    ]
+    if not matches:
+        raise ReplaceRefused(f"'{display_name}' no esta en el store {store}.")
+    if len(matches) > 1:
+        raise ReplaceRefused(f"'{display_name}' aparece {len(matches)} veces en el store {store}.")
+    document = matches[0]
+    return {
+        "file_search_store": store,
+        **_document_summary(document),
+        "custom_metadata": _raw_custom_metadata(document),
+    }
+
+
+def swap_document(
+    upload_filename: str | None,
+    markdown: str | None,
+    raw_custom_metadata: list[dict[str, str]] | None,
+    delete_display_names: list[str],
+    file_search_store_name: str | None,
+    sync_corpus: bool = True,
+    wait_until_done: bool = True,
+    max_wait_seconds: int = 900,
+) -> dict[str, Any]:
+    """Sube una version (opcional) y borra otras, en ese orden, con el corpus detras.
+
+    Es la pieza comun de las actualizaciones por normas modificatorias, las derogaciones
+    totales y los rollbacks. Respeta el mismo orden que replace_document: primero se sube lo
+    nuevo y recien despues se borra lo viejo, porque un store sin ninguna version es peor que
+    uno con dos durante unos segundos.
+    """
+    client, types = build_client()
+    store = _resolve_store(client, types, file_search_store_name)
+    documents = list(client.file_search_stores.documents.list(parent=store))
+    by_display: dict[str, list[Any]] = {}
+    for item in documents:
+        by_display.setdefault(getattr(item, "display_name", "") or "", []).append(item)
+
+    targets: list[Any] = []
+    for display_name in delete_display_names:
+        found = by_display.get(display_name, [])
+        if len(found) != 1:
+            raise ReplaceRefused(
+                f"'{display_name}' aparece {len(found)} veces en el store {store}; "
+                "se esperaba exactamente una. No se toco nada."
+            )
+        targets.append(found[0])
+
+    if upload_filename is not None:
+        if upload_filename in by_display and upload_filename not in delete_display_names:
+            raise ReplaceRefused(f"'{upload_filename}' ya esta indexado en {store}. No se toco nada.")
+        upload_document(
+            client=client,
+            types=types,
+            store_name=store,
+            filename=upload_filename,
+            markdown=markdown or "",
+            metadata=None,
+            wait_until_done=wait_until_done,
+            max_wait_seconds=max_wait_seconds,
+            raw_custom_metadata=raw_custom_metadata or [],
+        )
+
+    deleted: list[str] = []
+    delete_failed: list[dict[str, str]] = []
+    for target in targets:
+        display_name = getattr(target, "display_name", "")
+        try:
+            _delete_document(client, types, target.name)
+            deleted.append(display_name)
+        except Exception as exc:
+            delete_failed.append({"document": display_name, "name": target.name, "error": str(exc)})
+
+    warnings: list[str] = []
+    if delete_failed:
+        warnings.append(
+            f"Quedaron {len(delete_failed)} version(es) que no se pudieron borrar; "
+            "el RAG puede recuperar texto desactualizado hasta borrarlas a mano."
+        )
+
+    corpus_result: dict[str, Any] = {"synced": False, "reason": "sync_corpus=false"}
+    if sync_corpus:
+        if upload_filename is not None:
+            corpus_result = corpus.sync_replacement(upload_filename, markdown or "", deleted)
+        else:
+            corpus_result = corpus.remove_documents(deleted)
+        if not corpus_result.get("synced"):
+            warnings.append(f"El corpus local no se sincronizo ({corpus_result.get('reason')}).")
+
+    return {
+        "file_search_store": store,
+        "uploaded": upload_filename,
+        "deleted": deleted,
+        "delete_failed": delete_failed,
+        "corpus": corpus_result,
+        "warnings": warnings,
+    }
