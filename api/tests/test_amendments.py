@@ -475,3 +475,19 @@ def test_backfill_skips_cards_that_cannot_carry_a_change():
     assert amendments.worth_fetching(elperuano.NormaRef(id="1-1", tipo="LEY", sumilla="Ley de presupuesto"))
     assert amendments.worth_fetching(elperuano.NormaRef(id="1-1", tipo="RESOLUCIÓN MINISTERIAL", sumilla="Modifican el Protocolo"))
     assert not amendments.worth_fetching(elperuano.NormaRef(id="1-1", tipo="RESOLUCIÓN ADMINISTRATIVA", sumilla="Designan jueces"))
+
+
+def test_article_headers_in_the_forms_real_markdowns_use():
+    lines = [
+        "## Artículo 9º", "## A la libertad de opinión", "texto 9", "",
+        "## Artículo 90º", "texto 90", "",
+        "## Artículo 3- A", "## Derecho al buen trato", "texto 3-A", "",
+        "## Artículo 46. Obligaciones generales", "texto 46", "",
+        "## ' Artículo 46-E. Circunstancia agravante", "texto 46-E",
+    ]
+    assert amendments.find_article(lines, "9") == (0, 3)
+    assert amendments.find_article(lines, "90") == (4, 6)
+    assert amendments.find_article(lines, "3-A") == (7, 10)
+    assert amendments.find_article(lines, "46") == (11, 13)
+    assert amendments.find_article(lines, "46-E") == (14, 16)
+    assert amendments.find_article(lines, "3") is None

@@ -287,8 +287,17 @@ def dispositive_part(texto: str) -> tuple[str, bool]:
 
 
 def _article_header(numero: str) -> re.Pattern:
+    """Encabezado del articulo `numero` en cualquiera de las formas que traen los markdowns.
+
+    Formas reales: "## Articulo 46. Titulo", "## Articulo 9º" (sin nada despues: el titulo va en
+    otra linea), "## Articulo 3- A" (articulo 3-A con espacio). "9" no debe casar con "90",
+    "9-A" ni "9- A". Ojo: Python considera "º" una letra, asi que no sirve un (?!\\w).
+    """
+    parts = [re.escape(part) for part in re.split(r"\s*-\s*", numero.strip())]
+    number = r"\s*-\s*".join(parts)
     return re.compile(
-        rf"^\s*(?:#+\s*)?(?:-\s*)?'?\s*Art[ií]culo\s+{re.escape(numero)}(?![\w\-])\s*[\.°º:\-]",
+        rf"^\s*(?:#+\s*)?(?:-\s*)?'?\s*Art[ií]culo\s+{number}"
+        r"(?!\d)(?!\s*-\s*[A-Za-z]\b)\s*(?:[°º]|\.|:|-|\s|$)",
         re.IGNORECASE,
     )
 
