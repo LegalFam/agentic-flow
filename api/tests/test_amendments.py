@@ -491,3 +491,51 @@ def test_article_headers_in_the_forms_real_markdowns_use():
     assert amendments.find_article(lines, "46") == (11, 13)
     assert amendments.find_article(lines, "46-E") == (14, 16)
     assert amendments.find_article(lines, "3") is None
+
+
+def test_find_article_spans_quoted_versions_under_notes():
+    lines = [
+        "## Artículo 15. Denuncia",
+        "texto original",
+        "- (*) Artículo modificado por el Artículo 2 del Decreto Legislativo N° 1386, publicado el 04 septiembre 2018, cuyo texto es el siguiente:",
+        "## 'Artículo 15. Denuncia",
+        "texto nuevo",
+        "## Artículo 16. Plazo",
+        "## DISPOSICIONES COMPLEMENTARIAS MODIFICATORIAS",
+        "## ' Artículo 15. Del Código Penal citado",
+    ]
+    assert amendments.find_article(lines, "15") == (0, 5)
+    assert amendments._insertion_point_for_new_article(lines, "Sexta Disposición Complementaria Final") is None
+
+
+def test_note_agrees_with_the_publishing_norm():
+    decreto = amendments.build_note_block("Párrafo", "modifica", "SEGUNDA", "Decreto Legislativo N° 1703", "24/01/2026", "x")[1]
+    assert "por la Segunda del Decreto Legislativo N° 1703, publicado el" in decreto
+    ley = amendments.build_note_block("Artículo", "modifica", "Artículo único", "Ley N° 32351", "27/05/2025", "x")[1]
+    assert "por el Artículo único de la Ley N° 32351, publicada el" in ley
+
+
+def test_find_article_leaves_the_note_introducing_the_next_article():
+    lines = [
+        "## Artículo 17. Flagrancia",
+        "texto 17",
+        "",
+        "- (*) Artículo incorporado por el Artículo 3 del Decreto Legislativo N° 1386, publicado el 04 septiembre 2018, cuyo texto es el siguiente:",
+        "",
+        "## ' Artículo 17-A. Medidas",
+    ]
+    assert amendments.find_article(lines, "17") == (0, 2)
+
+
+def test_same_heading_in_two_notes_is_not_a_duplicate():
+    old = "## Artículo 79. Acreditación\ntexto"
+    new = (
+        old + "\n- (*) Artículo modificado por el Artículo 19 de la Ley N° 31716, publicada el 22 marzo 2023, cuyo texto es el siguiente:"
+        "\nArtículo 79. Acreditación\nuno"
+        "\n- (*) Párrafo modificado por el Artículo 1 de la Ley N° 31994, publicada el 2 abril 2024, cuyo texto es el siguiente:"
+        "\nArtículo 79. Acreditación\ndos"
+    )
+    sources = ["Artículo 79. Acreditación\nuno", "Artículo 79. Acreditación\ndos"]
+    assert amendments.verify_proposal(old, new, sources) == []
+    doubled = old + "\n- (*) nota\nuno\nuno"
+    assert any("dos veces" in p for p in amendments.verify_proposal(old, doubled, ["uno"]))

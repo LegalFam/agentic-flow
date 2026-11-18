@@ -303,34 +303,57 @@ def _article_header(numero: str) -> re.Pattern:
 
 
 _ANY_ARTICLE = re.compile(r"^\s*(?:#+\s*)?(?:-\s*)?'?\s*Art[ií]culo\s+(\d+)(-?[A-Z])?\b", re.IGNORECASE)
+# Un encabezado entre comillas ("## 'Articulo 15.") es texto citado: la version nueva de ese
+# mismo articulo bajo una nota (*), un articulo incorporado (46-E) o uno de otra norma citado
+# en una disposicion modificatoria. Solo un articulo distinto cierra el actual.
+_QUOTED_HEADER = re.compile(r"^\s*#+\s*(?:-\s*)?['\"“]")
 _SECTION_STOP = re.compile(
     r"^\s*#+\s*'?\s*(Art[ií]culo\s+\d|CAP[IÍ]TULO|T[IÍ]TULO|DISPOSICI|SUBCAP)", re.IGNORECASE
 )
 
 
 def find_article(lines: list[str], numero: str) -> tuple[int, int] | None:
-    """Rango [inicio, fin) del articulo `numero`. Prefiere encabezados markdown."""
+    """Rango [inicio, fin) del articulo `numero`, con sus versiones citadas bajo notas (*)."""
     header = _article_header(numero)
     candidates = [index for index, line in enumerate(lines) if header.match(line)]
     if not candidates:
         return None
-    headed = [index for index in candidates if lines[index].lstrip().startswith("#")]
+    headed = [
+        index for index in candidates
+        if lines[index].lstrip().startswith("#") and not _QUOTED_HEADER.match(lines[index])
+    ]
     pool = headed or candidates
     if len(pool) > 1:
         raise AmendmentError(f"el articulo {numero} aparece {len(pool)} veces como encabezado")
     start = pool[0]
     end = next(
-        (index for index in range(start + 1, len(lines)) if _SECTION_STOP.match(lines[index])),
+        (
+            index for index in range(start + 1, len(lines))
+            if _SECTION_STOP.match(lines[index])
+            and not (_QUOTED_HEADER.match(lines[index]) and header.match(lines[index]))
+        ),
         len(lines),
     )
     while end > start + 1 and not lines[end - 1].strip():
         end -= 1
+    # La nota que presenta al articulo siguiente ("Articulo incorporado ..., cuyo texto es el
+    # siguiente:") va con ese articulo, no con este.
+    if end < start + 1 or end >= len(lines):
+        return start, end
+    last = lines[end - 1]
+    if end - 1 > start and "(*)" in last and last.rstrip().endswith("siguiente:"):
+        end -= 1
+        while end > start + 1 and not lines[end - 1].strip():
+            end -= 1
     return start, end
 
 
 def _insertion_point_for_new_article(lines: list[str], numero: str) -> int | None:
     """Donde va un articulo incorporado que todavia no existe (p. ej. 46-F)."""
-    base = int(re.match(r"\d+", numero).group(0))
+    digits = re.match(r"\d+", numero)
+    if not digits:
+        return None
+    base = int(digits.group(0))
     best: int | None = None
     for index, line in enumerate(lines):
         match = _ANY_ARTICLE.match(line)
@@ -366,7 +389,7 @@ Tipos de efecto:
 Reglas:
 - "afecta_a" es "norma" solo si el efecto recae sobre nuestra norma misma; "reglamento", "tuo" u "otra" en cualquier otro caso.
 - "articulos": numeros tal como aparecen ("10", "46-F"). Vacio para deroga_total, nuevo_tuo o ninguno.
-- "disposicion": el articulo o disposicion de la norma publicada que produce el efecto, tal como se nombra ("Artículo 1", "Artículo único", "Única Disposición Complementaria Derogatoria").
+- "disposicion": el articulo o disposicion de la norma publicada que produce el efecto, con su nombre completo ("Artículo 1", "Artículo único", "Segunda Disposición Complementaria Modificatoria"), nunca solo el ordinal ("SEGUNDA").
 - "evidencia": copia LITERAL y continua, de 5 a 40 palabras, del texto que produce el efecto.
 - No inventes efectos. Una mencion en la base legal es "ninguno".
 
@@ -500,8 +523,13 @@ def pretty_norma(nombre: str) -> str:
 
 
 def build_note_block(alcance: str, tipo: str, disposicion: str, norma: str, fecha: str, texto_nuevo: str) -> list[str]:
+    if disposicion.isupper():
+        disposicion = disposicion.title()
     disposicion = disposicion[0].upper() + disposicion[1:] if disposicion else disposicion
-    note = f"- (*) {alcance} {VERBS[tipo]} por el {disposicion} de la {norma}, publicada el {fecha_larga(fecha)}"
+    por = "el" if fold(disposicion).startswith("ART") else "la"
+    masculine = fold(norma).startswith("DECRETO")
+    de, publicada = ("del", "publicado") if masculine else ("de la", "publicada")
+    note = f"- (*) {alcance} {VERBS[tipo]} por {por} {disposicion} {de} {norma}, {publicada} el {fecha_larga(fecha)}"
     if not texto_nuevo.strip():
         return ["", note + "."]
     body = texto_nuevo.strip().strip('"“”').strip()
@@ -644,6 +672,9 @@ def verify_proposal(old: str, new: str, sources: list[str]) -> list[str]:
     seen: set[str] = set()
     for line in added:
         if line.lstrip().startswith("- (*)"):
+            # Dos normas pueden repetir el mismo encabezado al reescribir un articulo dos veces;
+            # la duplicacion que importa es dentro de una misma nota.
+            seen = set()
             continue
         text = line.strip().strip('"').strip()
         if not literal_in(text, source):
